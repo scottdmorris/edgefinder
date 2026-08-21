@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+data/cache/
+data/odds_api_key.txt
+data/bet_log.csv
+data/paper_log.csv
+data/line_history.csv
+data/config.json
+.venv/
