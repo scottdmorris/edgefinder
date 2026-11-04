@@ -20,6 +20,7 @@ PROPS_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_prop_lines.csv"
 SPORT_KEY = "basketball_nba"
 BOOKMAKER = "fanduel"
 MARKET = "player_points"
+ALT_MARKET = "player_points_alternate"
 QUOTA_RESERVE = 100  # never spend the last requests; the board needs them
 
 COLUMNS = [
@@ -83,6 +84,31 @@ def fetch_event_lines(event: dict) -> list[dict]:
          "oddsFormat": "american"},
     ).json()
     return parse_player_lines(payload)
+
+
+def fetch_alt_lines(event: dict) -> list[dict]:
+    """One game's "X+ points" prices (alternate lines). Costs 1 request."""
+    payload = _get(
+        f"/sports/{SPORT_KEY}/events/{event['event_id']}/odds",
+        {"regions": "us", "markets": ALT_MARKET, "bookmakers": BOOKMAKER,
+         "oddsFormat": "american"},
+    ).json()
+    return parse_alt_lines(payload)
+
+
+def parse_alt_lines(payload: dict) -> list[dict]:
+    """One row per X+ price. Only the over side is ever offered, so the
+    under side is ignored if one shows up."""
+    book = next((b for b in payload.get("bookmakers", []) if b.get("key") == BOOKMAKER), None)
+    market_data = None if book is None else next(
+        (m for m in book.get("markets", []) if m.get("key") == ALT_MARKET), None)
+    if market_data is None:
+        return []
+    return [
+        {"player": o["description"], "line": o["point"], "over_odds": o.get("price")}
+        for o in market_data.get("outcomes", [])
+        if o.get("description") and o.get("point") is not None and o.get("name") == "Over"
+    ]
 
 
 def parse_player_lines(payload: dict, market: str = MARKET) -> list[dict]:

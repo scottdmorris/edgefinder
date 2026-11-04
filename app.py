@@ -13,7 +13,7 @@ import streamlit as st
 from edgefinder import config
 from edgefinder.data import odds_api
 from edgefinder.ui import (
-    betlog_tab, board_tab, evaluator_tab, parlay_tab, soccer_tab, ufc_tab,
+    betlog_tab, board_tab, evaluator_tab, nba_tab, parlay_tab, soccer_tab, ufc_tab,
 )
 
 st.set_page_config(page_title="EdgeFinder", page_icon="📈", layout="wide")
@@ -69,13 +69,7 @@ def main() -> None:
     with ufc:
         ufc_tab.render(settings)
     with nba:
-        st.subheader("NBA")
-        st.info(
-            "The NBA season tips off in October. The same Elo engine and EV "
-            "pipeline will power the NBA board (K=20, ~70 Elo home edge) — "
-            "game data comes from the league's free stats feed once the "
-            "season starts."
-        )
+        nba_tab.render()
 
 
 if __name__ == "__main__":

@@ -25,9 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
 from edgefinder.models import nba_minutes_points, nba_points  # noqa: E402
-from edgefinder.tracking import nba_recording  # noqa: E402
+from edgefinder.tracking import nba_alt, nba_recording  # noqa: E402
 
 log = logging.getLogger("nba_props_snapshot")
+
+# an X+ call costs one more request per game, so it is capped to stay in budget
+MAX_ALT_GAMES = 4
 
 # three seasons to train the minutes model, plus one more for its priors
 HISTORY_SEASONS = 4
@@ -86,6 +89,28 @@ def record_lines(event: dict, lines: list[dict], models: Models) -> dict[str, in
         event, lines, models.get(),
         recorded_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         game_date=nba_snapshot_plan.tip_date(event))
+
+
+def record_alt_lines(event: dict, models: Models) -> None:
+    """Price a game's "X+ points" lines too. It costs one more request, so
+    only the first MAX_ALT_GAMES games a night get it, and a failure here
+    never disturbs the main snapshot."""
+    game_date = nba_snapshot_plan.tip_date(event)
+    if nba_alt.games_recorded(nba_alt.load_ledger(), game_date) >= MAX_ALT_GAMES:
+        return
+    remaining = nba_props.requests_remaining()
+    if remaining is not None and remaining <= nba_props.QUOTA_RESERVE:
+        return
+    try:
+        lines = nba_props.fetch_alt_lines(event)
+    except nba_props.PropsApiError as exc:
+        log.info("X+ lines unavailable for %s @ %s: %s", event["away"], event["home"], exc)
+        return
+    added = nba_alt.record_event(
+        event, lines, models.get(),
+        recorded_at=dt.datetime.now(dt.timezone.utc).isoformat(), game_date=game_date)
+    log.info("X+ points %s @ %s: %d prices, ledger %s",
+             event["away"], event["home"], len(lines), describe(added))
 
 
 def describe(added: dict[str, int]) -> str:
@@ -153,6 +178,8 @@ def main() -> None:
         recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
         log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
+        if task.phase == "early":
+            record_alt_lines(task.event, models)
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
 
 

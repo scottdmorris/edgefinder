@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
-from edgefinder.tracking import nba_paper  # noqa: E402
+from edgefinder.tracking import nba_alt, nba_paper  # noqa: E402
 
 
 def build_report(today: dt.date) -> str:
@@ -41,7 +41,24 @@ def build_report(today: dt.date) -> str:
         else:
             lines += ["Head to head on the lines every model priced (Brier, lower is better):",
                       comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
+    lines += alt_block(games, today)
     return "\n".join(lines)
+
+
+def alt_block(games, today: dt.date) -> list[str]:
+    """Settle the X+ points ledger and report each model's picks."""
+    alt = nba_alt.load_ledger()
+    if alt.empty:
+        return []
+    settled = nba_alt.settle(alt, games, today)
+    nba_alt.save_ledger(settled)
+    lines = ["", f"X+ points ledger: {len(settled)} prices  "
+                  f"{settled['status'].value_counts().to_dict()}"]
+    for version in sorted(settled["model_version"].dropna().unique()):
+        s = nba_alt.summary(settled, version)
+        lines.append(f"[{version}] X+ picks: {s['picks']} made, {s['settled']} settled, "
+                     f"record {s['record']}, {s['units']:+.2f} units ({s['roi_pct']:+.1f}% ROI)")
+    return lines
 
 
 def version_block(settled, version: str) -> list[str]:

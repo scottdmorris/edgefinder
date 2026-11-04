@@ -31,6 +31,7 @@ you enter FanDuel's odds manually in the Bet Evaluator.
 | Bet Log | Real-bet P/L, ROI, and CLV — plus the **paper-trade record**: one click records the model's +EV picks (flat 1-unit stakes, no money), auto-settles them from final scores, and computes CLV from the line-history archive. This is the model's objective track record |
 | Soccer | EPL, La Liga, Bundesliga, Serie A, Ligue 1: Poisson attack/defense model (trained on free football-data.co.uk results) vs FanDuel three-way and goals lines, market-anchored like MLB |
 | UFC | FanDuel MMA lines with devigged market probabilities. Deliberately model-free (free MMA data is too thin to model honestly) — enter your own probability to price your read against the market |
+| NBA | Read-only view of the player-points paper tracker (see below): each line with every model's projection next to FanDuel's own probability, the scorecard and head-to-head, and how much data the scheduled jobs have collected. Never calls the Odds API |
 
 Everywhere a bet can be logged there is a **custom stake input** showing
 the dollar EV of your stake, with an overstake warning when you exceed
@@ -113,6 +114,16 @@ remaining error is information nobody has before tip-off, like who is
 injured tonight. The settle report scores each model and compares them
 head to head on the lines both priced. One model failing never stops
 the other from recording.
+
+**X+ points bets** ("Jaylen Brown 15+"): the models predict a whole
+distribution, so any total can be priced. The tab has a ladder (each
+model's chance and break-even odds for 5+ through 40+, no API requests)
+and a ledger of FanDuel's real X+ prices from the alternate-lines market,
+priced by every model and settled from box scores. An X+ bet has no under
+side, so there is no devigged market probability; the market anchor is the
+price's raw implied probability, which is the conservative direction.
+Each X+ call costs one request per game, so it runs for at most 4 games a
+night at the early snapshot.
 
 ```powershell
 .venv\Scripts\python scripts\nba_props_snapshot.py --dry-run  # what's due; spends nothing
