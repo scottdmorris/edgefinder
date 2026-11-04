@@ -75,8 +75,44 @@ the board's line-movement view and closing-line capture for CLV.
 - No park factors, bullpen strength, lineup, or rest-day inputs yet.
 - Parlay legs are assumed independent — same-game parlays are
   correlated and the builder warns about this.
-- NBA board activates when the season starts (same Elo engine, K=20,
-  ~70-point home edge).
+- The NBA game board (Elo, K=20, ~70-point home edge) isn't built yet;
+  the NBA work so far is the player-prop tracker below.
+
+## NBA player-prop tracking (paper only)
+
+A measurement pipeline for NBA player-points props, built to answer one
+question honestly: does a points model add anything beyond FanDuel's own
+price?
+
+- **Baselines first.** `scripts/nba_baseline_eval.py` scores four
+  rolling-average predictors walk-forward over a full season (points MAE
+  is about 5.2 for all of them). Every prediction uses only earlier
+  games, which the tests enforce.
+- **Budgeted line snapshots.** The free Odds API tier is 500 requests a
+  month and a props call costs one request per game, so
+  `nba_snapshot_plan` covers at most 6 games a night: one early snapshot
+  (the price a pick is made at) and one inside 90 minutes of tip-off (a
+  closing-line proxy). A reserve stops it before the quota runs dry, and
+  re-running never spends twice on the same job.
+- **Paper ledger.** Every priced line is logged with the model's
+  probability and the market's devigged probability, so calibration is
+  scored on all lines, not only the picks. Settlement grades picks at a
+  flat 1 unit, voids players who don't play, and attaches closing-line
+  movement.
+- **The test.** `scripts/nba_props_settle.py` compares the model's Brier
+  score with the market's on every settled line. If the model can't beat
+  the market's own number, it has nothing to offer.
+
+The current model is a rolling average that can't see role or minutes
+changes, so expect it to lose to the market. The next step is a
+minutes-times-rate model, judged by the same ledger.
+
+```powershell
+.venv\Scripts\python scripts\nba_props_snapshot.py --dry-run  # what's due; spends nothing
+.venv\Scripts\python scripts\nba_props_snapshot.py            # one snapshot cycle
+.venv\Scripts\python scripts\nba_props_settle.py              # grade picks, print the report
+powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1  # schedule both
+```
 
 ## An honest note on profit
 
@@ -92,10 +128,11 @@ Problem gambling help: 1-800-GAMBLER.
 ## Development
 
 ```powershell
-.venv\Scripts\python -m pytest      # 43 tests over the betting math
+.venv\Scripts\python -m pytest      # betting math, models, data layer, ledger
 ```
 
-Layout: `src/edgefinder/betting` (odds/EV/parlay/Poisson math),
-`models` (Elo, MLB, props), `data` (MLB Stats API + The Odds API
-clients with file caching), `tracking` (bet log), `ui` (Streamlit
-tabs), `pipeline.py` (board assembly).
+Layout: `src/edgefinder/betting` (odds/EV/parlay/Poisson and
+negative-binomial math), `models` (Elo, MLB, props, NBA baselines),
+`data` (MLB Stats API, NBA game logs, The Odds API clients with file
+caching), `eval` (walk-forward scoring), `tracking` (bet log, paper
+ledgers), `ui` (Streamlit tabs), `pipeline.py` (board assembly).
