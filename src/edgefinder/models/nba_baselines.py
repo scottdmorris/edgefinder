@@ -33,12 +33,13 @@ def add_baseline_predictions(
 ) -> pd.DataFrame:
     """Return a copy of `games` with one prediction column per baseline.
 
-    `games` needs player_id, season, game_date, game_id, minutes and the
-    stat column, and may span several seasons (earlier seasons supply the
+    `games` needs player_id, season, game_date, minutes and the stat
+    column, and may span several seasons (earlier seasons supply the
     priors). Adds: n_prior, prior_minutes, pred_season_to_date,
     pred_shrunk, pred_last10, pred_ewma.
     """
-    ordered = games.sort_values(["player_id", "game_date", "game_id"])
+    # a player never has two games on one date, so date alone orders them
+    ordered = games.sort_values(["player_id", "game_date"], kind="stable")
     ordered = ordered.reset_index(drop=True)
     ordered = _attach_priors(ordered, stat, min_prior_games)
 
@@ -60,6 +61,36 @@ def add_baseline_predictions(
         pred_ewma=prior_games_series.groupby(ordered["player_id"]).transform(
             lambda s: s.ewm(alpha=ewm_alpha, adjust=True, ignore_na=False).mean()),
     ).drop(columns=["prior_mean", "prior_games", "prev_season", "league_prior"])
+
+
+def predict_upcoming(
+    games: pd.DataFrame,
+    stat: str,
+    player_ids,
+    season: str,
+    game_date,
+    **options,
+) -> pd.DataFrame:
+    """Baseline predictions for each player's NEXT game, which hasn't
+    been played yet.
+
+    A placeholder row stands in for that game. Because a game's own
+    result never feeds its own prediction, the placeholder's stat value
+    is irrelevant, so no leakage is possible.
+    """
+    placeholders = pd.DataFrame({
+        "player_id": list(player_ids),
+        "season": season,
+        "game_date": pd.Timestamp(game_date),
+        stat: 0.0,
+        "minutes": float("nan"),
+        "_upcoming": True,
+    })
+    combined = pd.concat([games.assign(_upcoming=False), placeholders], ignore_index=True)
+    predicted = add_baseline_predictions(combined, stat, **options)
+    columns = ["player_id", "n_prior", "pred_season_to_date",
+               "pred_shrunk", "pred_last10", "pred_ewma"]
+    return predicted.loc[predicted["_upcoming"], columns].reset_index(drop=True)
 
 
 def _attach_priors(games: pd.DataFrame, stat: str, min_prior_games: int) -> pd.DataFrame:

@@ -1,0 +1,210 @@
+import datetime as dt
+
+import pandas as pd
+import pytest
+
+from edgefinder.betting.odds_math import american_to_decimal, implied_prob
+from edgefinder.tracking import nba_paper
+
+EVENT = {"event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
+         "home": "Detroit Pistons", "away": "Philadelphia 76ers"}
+RECORDED_AT = "2026-11-04T17:00:00+00:00"
+GAME_DATE = "2026-11-04"
+
+
+def build(lines, predictions):
+    return nba_paper.build_ledger_rows(EVENT, lines, predictions, RECORDED_AT, GAME_DATE)
+
+
+def line(player="Cade Cunningham", point=24.5, over=-110, under=-110):
+    return {"player": player, "line": point, "over_odds": over, "under_odds": under}
+
+
+def prediction(mean=24.5, player_id=1):
+    return {"player_id": player_id, "mean": mean}
+
+
+def test_a_much_higher_projection_creates_an_over_pick():
+    rows = build([line()], {"Cade Cunningham": prediction(mean=32.0)})
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["pick_side"] == "over"
+    assert row["pick_ev"] >= nba_paper.MIN_EV_TO_RECORD
+    assert row["pick_odds"] == -110
+    assert row["status"] == "pending"
+    assert row["model_version"] == nba_paper.MODEL_VERSION
+
+
+def test_a_much_lower_projection_creates_an_under_pick():
+    row = build([line()], {"Cade Cunningham": prediction(mean=16.0)})[0]
+    assert row["pick_side"] == "under"
+
+
+def test_a_projection_at_the_line_is_logged_but_not_picked():
+    row = build([line()], {"Cade Cunningham": prediction(mean=24.5)})[0]
+    assert row["pick_side"] is None
+    assert row["pick_ev"] is None
+    assert 0.3 < row["model_p_over"] < 0.7  # still scored for calibration
+
+
+def test_the_market_probability_is_devigged():
+    row = build([line(over=-130, under=-102)], {"Cade Cunningham": prediction()})[0]
+    over, under = implied_prob(-130), implied_prob(-102)
+    assert row["fair_p_over"] == pytest.approx(over / (over + under))
+
+
+def test_lines_without_both_prices_are_skipped():
+    rows = build([line(under=None), line(player="Other", over=None)],
+                 {"Cade Cunningham": prediction(), "Other": prediction(player_id=2)})
+    assert rows == []
+
+
+def test_whole_number_lines_are_skipped_because_they_can_push():
+    assert build([line(point=24.0)], {"Cade Cunningham": prediction()}) == []
+
+
+def test_players_without_a_projection_are_skipped():
+    assert build([line(player="Unmatched Rookie")], {"Cade Cunningham": prediction()}) == []
+
+
+def test_pick_ev_uses_the_blend_of_model_and_market():
+    row = build([line()], {"Cade Cunningham": prediction(mean=32.0)})[0]
+    blend = (nba_paper.MODEL_WEIGHT * row["model_p_over"]
+             + (1 - nba_paper.MODEL_WEIGHT) * row["fair_p_over"])
+    decimal = american_to_decimal(-110)
+    assert row["pick_ev"] == pytest.approx(blend * (decimal - 1) - (1 - blend))
+
+
+def test_recording_twice_does_not_duplicate_rows(tmp_path):
+    path = tmp_path / "log.csv"
+    rows = build([line()], {"Cade Cunningham": prediction(mean=32.0)})
+    assert nba_paper.append_rows(rows, path=path) == 1
+    assert nba_paper.append_rows(rows, path=path) == 0
+    assert len(nba_paper.load_ledger(path=path)) == 1
+
+
+def ledger_with(rows):
+    return pd.DataFrame(rows, columns=nba_paper.COLUMNS)
+
+
+def games_frame(entries):
+    """entries: (player_id, 'YYYY-MM-DD', pts)"""
+    return pd.DataFrame(entries, columns=["player_id", "game_date", "pts"]).assign(
+        game_date=lambda f: pd.to_datetime(f["game_date"]))
+
+
+def empty_snapshots():
+    return pd.DataFrame(columns=["fetched_at", "phase", "event_id", "player",
+                                 "line", "over_odds", "under_odds"])
+
+
+TODAY_AFTER = dt.date(2026, 11, 6)
+TODAY_SAME = dt.date(2026, 11, 4)
+
+
+def pending_over_pick(mean=32.0):
+    return build([line()], {"Cade Cunningham": prediction(mean=mean)})
+
+
+def test_an_over_pick_wins_when_the_player_scores_more_than_the_line():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(1, GAME_DATE, 30)]),
+        empty_snapshots(), TODAY_AFTER)
+    row = settled.iloc[0]
+    assert row["status"] == "settled"
+    assert row["actual"] == 30
+    assert bool(row["went_over"]) is True
+    assert row["result"] == "win"
+    assert row["pnl_units"] == pytest.approx(american_to_decimal(-110) - 1)
+
+
+def test_an_over_pick_loses_when_the_player_scores_less():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(1, GAME_DATE, 20)]),
+        empty_snapshots(), TODAY_AFTER)
+    row = settled.iloc[0]
+    assert row["result"] == "loss"
+    assert row["pnl_units"] == -1.0
+
+
+def test_a_player_who_did_not_play_voids_the_row_once_the_day_has_passed():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(99, GAME_DATE, 10)]),
+        empty_snapshots(), TODAY_AFTER)
+    row = settled.iloc[0]
+    assert row["status"] == "void"
+    assert row["pnl_units"] == 0.0
+
+
+def test_rows_stay_pending_while_the_game_day_is_not_over():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(99, GAME_DATE, 10)]),
+        empty_snapshots(), TODAY_SAME)
+    assert settled.iloc[0]["status"] == "pending"
+
+
+def late_snapshot(point=24.5, over=-125, under=105):
+    return pd.DataFrame([{
+        "fetched_at": "2026-11-04T23:45:00+00:00", "phase": "late", "event_id": "e1",
+        "player": "Cade Cunningham", "line": point, "over_odds": over, "under_odds": under,
+    }])
+
+
+def test_clv_compares_the_pick_price_with_the_closing_price_at_the_same_line():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(1, GAME_DATE, 30)]),
+        late_snapshot(over=-125), TODAY_AFTER)
+    row = settled.iloc[0]
+    placed, closed = implied_prob(-110), implied_prob(-125)
+    assert row["closing_over_odds"] == -125
+    assert row["clv_pct"] == pytest.approx((closed - placed) / placed * 100)
+    assert row["line_move"] == 0.0
+
+
+def test_when_the_line_moved_clv_is_reported_as_points_of_line_movement():
+    settled = nba_paper.settle(
+        ledger_with(pending_over_pick()), games_frame([(1, GAME_DATE, 30)]),
+        late_snapshot(point=25.5), TODAY_AFTER)
+    row = settled.iloc[0]
+    assert pd.isna(row["clv_pct"])
+    assert row["line_move"] == pytest.approx(1.0)  # over at 24.5 beat the 25.5 close
+
+
+def test_under_picks_gain_when_the_line_falls():
+    under_pick = build([line()], {"Cade Cunningham": prediction(mean=16.0)})
+    settled = nba_paper.settle(
+        ledger_with(under_pick), games_frame([(1, GAME_DATE, 10)]),
+        late_snapshot(point=23.5), TODAY_AFTER)
+    assert settled.iloc[0]["line_move"] == pytest.approx(1.0)
+
+
+def test_summary_reports_record_units_and_clv():
+    rows = pending_over_pick() + build(
+        [line(player="Second Guy", point=20.5)],
+        {"Second Guy": prediction(mean=28.0, player_id=2)})
+    games = games_frame([(1, GAME_DATE, 30), (2, GAME_DATE, 15)])
+    settled = nba_paper.settle(ledger_with(rows), games, late_snapshot(over=-125), TODAY_AFTER)
+    summary = nba_paper.summary(settled)
+    assert summary["picks"] == 2
+    assert summary["settled"] == 2
+    assert summary["record"] == "1-1"
+    assert summary["units"] == pytest.approx(american_to_decimal(-110) - 2)
+
+
+def test_calibration_compares_the_model_with_the_market_on_every_line():
+    frame = pd.DataFrame({
+        "status": ["settled"] * 4 + ["void", "pending"],
+        "went_over": [1, 0, 1, 0, None, None],
+        "model_p_over": [1.0, 0.0, 1.0, 0.0, 0.9, 0.9],   # perfect
+        "fair_p_over": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],    # coin flip
+    })
+    result = nba_paper.calibration_summary(frame)
+    assert result["n"] == 4
+    assert result["brier_model"] == pytest.approx(0.0)
+    assert result["brier_market"] == pytest.approx(0.25)
+
+
+def test_calibration_with_no_settled_rows_is_empty_not_an_error():
+    frame = pd.DataFrame({"status": ["pending"], "went_over": [None],
+                          "model_p_over": [0.6], "fair_p_over": [0.5]})
+    assert nba_paper.calibration_summary(frame)["n"] == 0

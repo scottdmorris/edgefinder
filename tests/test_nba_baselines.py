@@ -109,3 +109,31 @@ def test_players_without_enough_prior_games_fall_back_to_league_mean():
 def test_prior_season_minutes_are_attached_for_rotation_filtering():
     result = current(predict(two_season_player()))
     assert result["prior_minutes"].tolist() == pytest.approx([30.0, 30.0, 30.0])
+
+
+def upcoming(frame, player_ids, **overrides):
+    options = {"min_prior_games": 1, **overrides}
+    return nb.predict_upcoming(
+        frame, "pts", player_ids, season="2025-26", game_date="2025-10-28", **options
+    ).set_index("player_id")
+
+
+def test_upcoming_predictions_use_every_game_played_so_far():
+    result = upcoming(two_season_player(), [1])
+    assert result.loc[1, "n_prior"] == 3
+    assert result.loc[1, "pred_season_to_date"] == pytest.approx(30.0)  # (20+30+40)/3
+
+
+def test_a_player_with_no_games_this_season_still_gets_a_shrunk_prediction():
+    result = upcoming(two_season_player(), [1, 2])
+    assert result.loc[2, "n_prior"] == 0
+    assert pd.isna(result.loc[2, "pred_season_to_date"])
+    # no history of their own, so the prior is the league mean of last season
+    assert result.loc[2, "pred_shrunk"] == pytest.approx(10.0)
+
+
+def test_predicting_upcoming_games_does_not_change_the_history_passed_in():
+    frame = two_season_player()
+    before = frame.copy()
+    upcoming(frame, [1])
+    pd.testing.assert_frame_equal(frame, before)

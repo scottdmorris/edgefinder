@@ -47,6 +47,11 @@ def over_prob(line: float, mean, dispersion):
     return _distribution(mean, dispersion).sf(np.floor(line))
 
 
+def under_prob(line: float, mean, dispersion):
+    """P(count < line). Whole-number lines exclude the push."""
+    return _distribution(mean, dispersion).cdf(np.ceil(line) - 1)
+
+
 def central_interval(mean, dispersion, coverage: float):
     """Lower and upper count bounds of the central `coverage` interval."""
     tail = (1.0 - coverage) / 2.0

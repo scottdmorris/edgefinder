@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 data/cache/
 data/nba/
+data/nba_prop_lines.csv
+data/nba_paper_log.csv
+data/*.log
 data/odds_api_key.txt
 data/bet_log.csv
 data/paper_log.csv

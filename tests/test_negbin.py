@@ -45,3 +45,14 @@ def test_central_interval_brackets_the_mean():
 
 def test_zero_mean_does_not_blow_up():
     assert np.isfinite(negbin.logpmf(0, 0.0, 5.0))
+
+
+def test_over_and_under_cover_everything_on_a_half_point_line():
+    total = negbin.over_prob(24.5, 24.0, 8.0) + negbin.under_prob(24.5, 24.0, 8.0)
+    assert total == pytest.approx(1.0)
+
+
+def test_a_whole_number_line_leaves_room_for_the_push():
+    push = float(np.exp(negbin.logpmf(24, 24.0, 8.0)))
+    total = negbin.over_prob(24.0, 24.0, 8.0) + negbin.under_prob(24.0, 24.0, 8.0)
+    assert total == pytest.approx(1.0 - push)
