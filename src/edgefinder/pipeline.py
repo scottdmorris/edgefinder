@@ -61,7 +61,7 @@ def build_board(season: int, date_iso: str) -> list[dict]:
     """One row per scheduled game with model probs, market odds, and EV."""
     state = build_mlb_state(season)
     schedule = mlb_api.todays_schedule(date_iso)
-    odds_by_matchup = _index_odds(odds_api.fanduel_odds("mlb"))
+    odds_by_matchup = _index_odds(odds_api.multibook_odds("mlb"))
     board = []
     for game in schedule:
         if not game["home"] or not game["away"]:
@@ -70,8 +70,10 @@ def build_board(season: int, date_iso: str) -> list[dict]:
         candidates = odds_by_matchup.get((game["home"], game["away"]), [])
         match = _match_event(candidates, game.get("game_time"))
         if match is not None:
-            row.update({key: match[key] for key in (
+            row.update({key: match.get(key) for key in (
                 "home_ml", "away_ml", "total_line", "over_odds", "under_odds",
+                "sharp_home_ml", "sharp_away_ml", "sharp_total_line",
+                "sharp_over_odds", "sharp_under_odds",
             )})
         _attach_ev(row)
         board.append(row)
@@ -160,15 +162,32 @@ def _attach_ev(row: dict) -> None:
     """Compute EV per unit for each available market side, and flag the
     row as suspect when model and market disagree implausibly."""
     row["suspect"] = False
+    row["anchor"] = None
     candidates = []
+    sharp_evs = []
     if row.get("home_ml") is not None and row.get("away_ml") is not None:
         fair_home, _ = odds_math.devig_two_way(
             odds_math.implied_prob(row["home_ml"]),
             odds_math.implied_prob(row["away_ml"]),
         )
-        if abs(row["p_home"] - fair_home) > SUSPECT_EDGE:
+        anchor_home = fair_home
+        row["anchor"] = "fanduel"
+        if (row.get("sharp_home_ml") is not None
+                and row.get("sharp_away_ml") is not None):
+            sharp_home, _ = odds_math.devig_two_way(
+                odds_math.implied_prob(row["sharp_home_ml"]),
+                odds_math.implied_prob(row["sharp_away_ml"]),
+            )
+            anchor_home = sharp_home
+            row["anchor"] = "pinnacle"
+            row["sharp_home_ev"] = ev.ev_per_unit(
+                sharp_home, odds_math.american_to_decimal(row["home_ml"]))
+            row["sharp_away_ev"] = ev.ev_per_unit(
+                1.0 - sharp_home, odds_math.american_to_decimal(row["away_ml"]))
+            sharp_evs.extend([row["sharp_home_ev"], row["sharp_away_ev"]])
+        if abs(row["p_home"] - anchor_home) > SUSPECT_EDGE:
             row["suspect"] = True
-        row["p_home_bet"] = _blend(row["p_home"], fair_home)
+        row["p_home_bet"] = _blend(row["p_home"], anchor_home)
         row["p_away_bet"] = 1.0 - row["p_home_bet"]
         candidates.append(("home_ml_ev", row["p_home_bet"], row["home_ml"]))
         candidates.append(("away_ml_ev", row["p_away_bet"], row["away_ml"]))
@@ -179,12 +198,29 @@ def _attach_ev(row: dict) -> None:
                 odds_math.implied_prob(row["over_odds"]),
                 odds_math.implied_prob(row["under_odds"]),
             )
-            if abs(probs["over"] - fair_over) > SUSPECT_EDGE:
+            anchor_over = fair_over
+            # Pinnacle's total only anchors when it's the same line
+            if (row.get("sharp_total_line") == row["total_line"]
+                    and row.get("sharp_over_odds") is not None
+                    and row.get("sharp_under_odds") is not None):
+                sharp_over, _ = odds_math.devig_two_way(
+                    odds_math.implied_prob(row["sharp_over_odds"]),
+                    odds_math.implied_prob(row["sharp_under_odds"]),
+                )
+                anchor_over = sharp_over
+                row["sharp_over_ev"] = ev.ev_per_unit(
+                    sharp_over, odds_math.american_to_decimal(row["over_odds"]))
+                row["sharp_under_ev"] = ev.ev_per_unit(
+                    1.0 - sharp_over,
+                    odds_math.american_to_decimal(row["under_odds"]))
+                sharp_evs.extend([row["sharp_over_ev"], row["sharp_under_ev"]])
+            if abs(probs["over"] - anchor_over) > SUSPECT_EDGE:
                 row["suspect"] = True
-            row["p_over_bet"] = _blend(probs["over"], fair_over)
+            row["p_over_bet"] = _blend(probs["over"], anchor_over)
             row["p_under_bet"] = 1.0 - row["p_over_bet"]
             candidates.append(("over_ev", row["p_over_bet"], row["over_odds"]))
             candidates.append(("under_ev", row["p_under_bet"], row["under_odds"]))
+    row["sharp_best_ev"] = max(sharp_evs) if sharp_evs else None
     best = None
     for key, prob, american in candidates:
         value = ev.ev_per_unit(prob, odds_math.american_to_decimal(american))

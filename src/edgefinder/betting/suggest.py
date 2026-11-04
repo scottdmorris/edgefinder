@@ -23,6 +23,7 @@ from .odds_math import american_to_decimal
 MAX_LEG_POOL = 12          # cap the pool so combinations stay cheap
 DEFAULT_TOP_N = 5
 MIN_CONFIDENCE_PROB = 0.55  # confidence mode: only clear model favorites
+MAX_LEG_REUSE = 2          # a leg may appear in at most this many suggestions
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,24 @@ def suggest_parlays(
     suggestions.sort(key=key, reverse=True)
     if odds_mode:
         suggestions = [s for s in suggestions if s.ev > 0.0]
-    return suggestions[:top_n]
+    return _diversify(suggestions, top_n)
+
+
+def _diversify(suggestions: list[SuggestedParlay], top_n: int) -> list[SuggestedParlay]:
+    """Keep the ranking but stop one strong leg from dominating every
+    ticket, so the user sees genuinely different parlays."""
+    selected: list[SuggestedParlay] = []
+    usage: dict[str, int] = {}
+    for suggestion in suggestions:
+        if any(usage.get(leg.description, 0) >= MAX_LEG_REUSE
+               for leg in suggestion.legs):
+            continue
+        selected.append(suggestion)
+        for leg in suggestion.legs:
+            usage[leg.description] = usage.get(leg.description, 0) + 1
+        if len(selected) == top_n:
+            break
+    return selected
 
 
 def _build_pool(

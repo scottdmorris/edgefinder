@@ -118,9 +118,11 @@ def _render_suggestion(
             odds_txt = (shared.fmt_american(leg.american_odds)
                         if leg.american_odds is not None
                         else f"fair {shared.fair_american(leg.model_prob)}")
+            leg_ev_txt = ("" if leg.ev is None
+                          else f" · leg EV {leg.ev * 100:+.1f}%")
             st.markdown(
-                f"- **{leg.description}** — model "
-                f"{shared.fmt_pct(leg.model_prob)} at {odds_txt}"
+                f"- **{leg.description}** — win prob "
+                f"{shared.fmt_pct(leg.model_prob)} at {odds_txt}{leg_ev_txt}"
             )
         if odds_mode:
             stake = ev_mod.recommended_stake(

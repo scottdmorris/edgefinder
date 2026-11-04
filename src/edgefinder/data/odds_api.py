@@ -28,6 +28,9 @@ SOCCER_LEAGUES = {
     "Ligue 1": "soccer_france_ligue_one",
 }
 UFC_SPORT_KEY = "mma_mixed_martial_arts"
+# Pinnacle is the sharpest book available on the API: its devigged
+# price is the best free estimate of true probability we can get
+SHARP_BOOKMAKER = "pinnacle"
 KEY_FILE = Path(__file__).resolve().parents[3] / "data" / "odds_api_key.txt"
 QUOTA_CACHE_KEY = "odds_api_quota"
 
@@ -56,6 +59,52 @@ def fanduel_odds(sport: str) -> list[dict]:
     """MLB/NBA moneyline + totals. [] when no API key (manual mode)."""
     sport_key = SPORT_KEYS[sport]
     return _fetch_events(sport_key, "h2h,totals")
+
+
+def multibook_odds(sport: str) -> list[dict]:
+    """FanDuel prices to bet into, plus Pinnacle's as the sharp
+    reference. Events without a FanDuel line are dropped; sharp fields
+    are None when Pinnacle doesn't list the game."""
+    api_key = get_api_key()
+    if not api_key:
+        return []
+    sport_key = SPORT_KEYS[sport]
+    cache_key = f"odds_{sport_key}_multibook_v1"
+    cached = cache.get(cache_key, ODDS_CACHE_SECONDS)
+    if cached is not None:
+        return cached
+    url = (
+        f"{BASE}/sports/{sport_key}/odds"
+        f"?apiKey={api_key}&regions=us,eu&markets=h2h,totals"
+        f"&bookmakers=fanduel,{SHARP_BOOKMAKER}&oddsFormat=american"
+    )
+    try:
+        response = requests.get(url, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        stale = cache.get(cache_key, float("inf"))
+        if stale is not None:
+            return stale
+        raise OddsApiError(f"Odds API request failed: {exc}") from exc
+    _store_quota(response.headers)
+    parsed = []
+    for event in response.json():
+        merged = merge_books(event)
+        if merged is not None:
+            parsed.append(merged)
+    cache.put(cache_key, parsed)
+    line_history.append_snapshots(sport_key, parsed)
+    return parsed
+
+
+def merge_books(event: dict) -> dict | None:
+    fanduel = _parse_book(event, "fanduel")
+    if fanduel is None:
+        return None
+    sharp = _parse_book(event, SHARP_BOOKMAKER)
+    for field in ("home_ml", "away_ml", "total_line", "over_odds", "under_odds"):
+        fanduel[f"sharp_{field}"] = sharp.get(field) if sharp else None
+    return fanduel
 
 
 def fanduel_soccer(league: str) -> list[dict]:
@@ -105,8 +154,12 @@ def _store_quota(headers) -> None:
 
 
 def _parse_event(event: dict) -> dict | None:
+    return _parse_book(event, "fanduel")
+
+
+def _parse_book(event: dict, book_key: str) -> dict | None:
     bookmaker = next(
-        (b for b in event.get("bookmakers", []) if b.get("key") == "fanduel"),
+        (b for b in event.get("bookmakers", []) if b.get("key") == book_key),
         None,
     )
     if bookmaker is None:

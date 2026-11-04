@@ -38,7 +38,10 @@ def render() -> None:
         "only worth considering when its EV is positive after vig. "
         "⚠️ marks games where model and market disagree implausibly — "
         "that's a data problem or scratched starter, not free money; "
-        "those games are excluded from parlay suggestions."
+        "those games are excluded from parlay suggestions. "
+        "**Sharp edge** = best EV betting FanDuel's price against "
+        "Pinnacle's devigged probability — the most trustworthy edge "
+        "signal on the board (it needs no model at all)."
     )
     _line_movement(board)
 
@@ -80,6 +83,8 @@ def _to_display(board: list[dict]) -> pd.DataFrame:
             row["FD away ML"] = shared.fmt_american(g.get("away_ml"))
             row["Home ML EV"] = shared.fmt_pct(g.get("home_ml_ev"))
             row["Away ML EV"] = shared.fmt_pct(g.get("away_ml_ev"))
+        if g.get("sharp_best_ev") is not None:
+            row["Sharp edge"] = shared.fmt_pct(g.get("sharp_best_ev"))
         if g.get("total_line") is not None:
             row["FD total"] = g.get("total_line")
             row["Over EV"] = shared.fmt_pct(g.get("over_ev"))

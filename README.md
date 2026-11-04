@@ -40,8 +40,17 @@ the board's line-movement view and closing-line capture for CLV.
 
 ## The model (v1)
 
+- **Sharp anchor (Pinnacle)**: the odds fetch also pulls Pinnacle,
+  the sharpest book on the API. When Pinnacle lists a game, its
+  devigged price becomes the market anchor and the board shows a
+  **Sharp edge** column — the EV of betting FanDuel's price against
+  Pinnacle's probability, which needs no model at all and is the most
+  trustworthy signal in the app. `scripts/backtest_mlb.py` runs a free
+  walk-forward calibration backtest of the Elo model (2026 result:
+  narrowly beats a home-advantage baseline, overconfident above 60% —
+  which is why the model gets only 30% weight).
 - **Market anchoring**: for EV and suggestions, model probabilities
-  are blended 30/70 toward the devigged FanDuel price — the market
+  are blended 30/70 toward the devigged anchor price — the market
   embeds injuries, lineups, and weather the model can't see, so raw
   model edges of 20%+ are treated as data problems, not free money.
   Games where model and market disagree by >15 points are flagged ⚠️

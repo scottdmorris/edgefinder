@@ -16,18 +16,22 @@ def main() -> None:
     with_odds = [g for g in board if g.get("home_ml") is not None]
     print(f"games: {len(board)} | with FanDuel odds: {len(with_odds)}")
     for g in with_odds:
+        sharp = g.get("sharp_best_ev")
+        sharp_txt = "no pinnacle" if sharp is None else f"sharp {sharp * 100:+.1f}%"
         print(
             f"{g['away']} @ {g['home']} | p_home={g['p_home']:.3f} "
             f"| FD ml {g['away_ml']}/{g['home_ml']} "
             f"| total {g.get('total_line')} "
-            f"| best EV {g['best_ev'] * 100:+.1f}%"
+            f"| best EV {g['best_ev'] * 100:+.1f}% | {sharp_txt}"
+            f"{' | SUSPECT' if g.get('suspect') else ''}"
         )
     legs = suggest.board_candidate_legs(board)
     combos = suggest.suggest_parlays(legs, num_legs=2)
     print(f"\nsuggested +EV 2-leg parlays: {len(combos)}")
     for c in combos:
         names = " + ".join(l.description for l in c.legs)
-        print(f"  {names} | hits {c.true_prob * 100:.1f}% | EV {c.ev * 100:+.1f}%")
+        ev_txt = "n/a (no odds)" if c.ev is None else f"{c.ev * 100:+.1f}%"
+        print(f"  {names} | hits {c.true_prob * 100:.1f}% | EV {ev_txt}")
 
 
 if __name__ == "__main__":
