@@ -2,4 +2,7 @@ streamlit>=1.36
 requests>=2.31
 pandas>=2.0
 numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.5
+nba_api>=1.12
 pytest>=8.0
