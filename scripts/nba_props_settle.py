@@ -30,26 +30,39 @@ def build_report(today: dt.date) -> str:
     nba_paper.save_ledger(settled)
 
     lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"]
-    summary = nba_paper.summary(settled)
+    versions = sorted(settled["model_version"].dropna().unique())
+    for version in versions:
+        lines += ["", *version_block(settled, version)]
+    if len(versions) > 1:
+        comparison = nba_paper.compare_versions(settled)
+        lines.append("")
+        if comparison.empty:
+            lines.append("Head to head: no settled lines priced by every model yet.")
+        else:
+            lines += ["Head to head on the lines every model priced (Brier, lower is better):",
+                      comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
+    return "\n".join(lines)
+
+
+def version_block(settled, version: str) -> list[str]:
+    summary = nba_paper.summary(settled, model_version=version)
     clv, move = summary["avg_clv_pct"], summary["avg_line_move"]
-    lines += [
-        f"Picks: {summary['picks']} made, {summary['settled']} settled, "
+    lines = [
+        f"[{version}] picks: {summary['picks']} made, {summary['settled']} settled, "
         f"record {summary['record']}, {summary['units']:+.2f} units "
         f"({summary['roi_pct']:+.1f}% ROI)",
         "  avg CLV: " + (f"{clv:+.2f}%" if clv is not None else "n/a")
         + "   avg line move in our favour: "
         + (f"{move:+.2f} pts" if move is not None else "n/a"),
     ]
-    calibration = nba_paper.calibration_summary(settled)
+    calibration = nba_paper.calibration_summary(settled, model_version=version)
     if calibration["n"] == 0:
-        lines.append("Calibration: no settled lines yet.")
+        lines.append("  calibration: no settled lines yet.")
     else:
-        lines += [
-            f"Calibration on {calibration['n']} settled lines (Brier, lower is better):",
-            f"  model  {calibration['brier_model']:.4f}",
-            f"  market {calibration['brier_market']:.4f}",
-        ]
-    return "\n".join(lines)
+        lines.append(
+            f"  calibration on {calibration['n']} lines: model {calibration['brier_model']:.4f}"
+            f" vs market {calibration['brier_market']:.4f} (Brier, lower is better)")
+    return lines
 
 
 def main() -> None:

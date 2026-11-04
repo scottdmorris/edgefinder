@@ -75,6 +75,31 @@ def test_snapshots_round_trip_through_the_csv(tmp_path):
     assert set(loaded["event_id"]) == {"91df8655"}
 
 
+def test_early_snapshots_are_regrouped_into_events_and_lines():
+    snapshots = pd.DataFrame([
+        {"fetched_at": "t1", "phase": "early", "event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
+         "home": "Detroit Pistons", "away": "Philadelphia 76ers", "player": "Cade Cunningham",
+         "line": 23.5, "over_odds": -130.0, "under_odds": -102.0},
+        {"fetched_at": "t1", "phase": "early", "event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
+         "home": "Detroit Pistons", "away": "Philadelphia 76ers", "player": "Duncan Robinson",
+         "line": 13.5, "over_odds": -130.0, "under_odds": float("nan")},
+        {"fetched_at": "t2", "phase": "late", "event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
+         "home": "Detroit Pistons", "away": "Philadelphia 76ers", "player": "Cade Cunningham",
+         "line": 24.5, "over_odds": -120.0, "under_odds": 100.0},
+        {"fetched_at": "t1", "phase": "early", "event_id": "e2", "commence_time": "2026-11-05T01:00:00Z",
+         "home": "Boston Celtics", "away": "Milwaukee Bucks", "player": "Jayson Tatum",
+         "line": 27.5, "over_odds": -110.0, "under_odds": -110.0},
+    ])
+    grouped = nba_props.early_snapshots_by_event(snapshots)
+    assert [(event["event_id"], len(lines)) for event, lines in grouped] == [("e1", 2), ("e2", 1)]
+    event, lines = grouped[0]
+    assert event == {"event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
+                     "home": "Detroit Pistons", "away": "Philadelphia 76ers"}
+    assert lines[0] == {"player": "Cade Cunningham", "line": 23.5,
+                        "over_odds": -130, "under_odds": -102}   # the late 24.5 line is ignored
+    assert lines[1]["under_odds"] is None
+
+
 def test_loading_a_missing_file_gives_an_empty_frame(tmp_path):
     loaded = nba_props.load_snapshots(path=tmp_path / "nope.csv")
     assert loaded.empty

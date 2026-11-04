@@ -87,6 +87,11 @@ def test_games_too_close_to_tipoff_are_skipped_for_early():
     assert planned(tasks) == [("g1", "early")]
 
 
+def test_tip_date_is_the_eastern_calendar_date():
+    assert plan.tip_date(event("g", "2026-11-05T00:00:00Z")) == "2026-11-04"   # 7pm ET
+    assert plan.tip_date(event("g", "2026-11-05T05:00:00Z")) == "2026-11-05"   # midnight ET
+
+
 def test_the_slate_date_follows_eastern_time_not_utc():
     # 03:30Z on Nov 5 is 10:30pm ET on Nov 4: still tonight's slate
     late_game = event("late", "2026-11-05T03:30:00Z")

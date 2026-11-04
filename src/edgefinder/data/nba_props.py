@@ -130,3 +130,29 @@ def load_snapshots(path: Path | None = None) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS)
     return pd.read_csv(path)
+
+
+def _odds(value) -> int | float | None:
+    if pd.isna(value):
+        return None
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def early_snapshots_by_event(snapshots: pd.DataFrame) -> list[tuple[dict, list[dict]]]:
+    """Regroup archived early snapshots into (event, lines) pairs, in the
+    shape the fetcher produces, so they can be priced again by another
+    model. Late snapshots are ignored."""
+    early = snapshots[snapshots["phase"] == "early"]
+    grouped = []
+    for event_id, group in early.groupby("event_id", sort=False):
+        group = group.drop_duplicates(["player", "line"], keep="last")
+        first = group.iloc[0]
+        event = {"event_id": event_id, "commence_time": first["commence_time"],
+                 "home": first["home"], "away": first["away"]}
+        lines = [
+            {"player": row.player, "line": float(row.line),
+             "over_odds": _odds(row.over_odds), "under_odds": _odds(row.under_odds)}
+            for row in group.itertuples()
+        ]
+        grouped.append((event, lines))
+    return grouped

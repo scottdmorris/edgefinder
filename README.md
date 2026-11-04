@@ -103,13 +103,21 @@ price?
   score with the market's on every settled line. If the model can't beat
   the market's own number, it has nothing to offer.
 
-The current model is a rolling average that can't see role or minutes
-changes, so expect it to lose to the market. The next step is a
-minutes-times-rate model, judged by the same ledger.
+Two models price every line side by side, each under its own
+`model_version`: `ewma-v1` (a rolling average of points) and
+`minutes-v1` (a learned minutes model times recent points per minute;
+see `scripts/nba_minutes_eval.py`). Offline, minutes-v1 beat the rolling
+average by only about 1.4% (points MAE 5.21 to 5.14, 95% CI 0.054 to
+0.095) while perfect minutes would give about 16%, so most of the
+remaining error is information nobody has before tip-off, like who is
+injured tonight. The settle report scores each model and compares them
+head to head on the lines both priced. One model failing never stops
+the other from recording.
 
 ```powershell
 .venv\Scripts\python scripts\nba_props_snapshot.py --dry-run  # what's due; spends nothing
 .venv\Scripts\python scripts\nba_props_snapshot.py            # one snapshot cycle
+.venv\Scripts\python scripts\nba_props_snapshot.py --backfill-models  # price archived pre-tip games with a new model
 .venv\Scripts\python scripts\nba_props_settle.py              # grade picks, print the report
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1  # schedule both
 ```

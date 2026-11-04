@@ -204,6 +204,67 @@ def test_calibration_compares_the_model_with_the_market_on_every_line():
     assert result["brier_market"] == pytest.approx(0.25)
 
 
+def two_version_rows():
+    champion = build([line()], {"Cade Cunningham": prediction(mean=32.0)})
+    challenger = nba_paper.build_ledger_rows(
+        EVENT, [line()], {"Cade Cunningham": prediction(mean=16.0)},
+        RECORDED_AT, GAME_DATE, model_version="challenger")
+    return champion + challenger
+
+
+def test_the_model_version_and_dispersion_can_be_overridden():
+    wide = nba_paper.build_ledger_rows(
+        EVENT, [line()], {"Cade Cunningham": prediction(mean=32.0)}, RECORDED_AT, GAME_DATE,
+        model_version="challenger", dispersion=2.0)[0]
+    default = build([line()], {"Cade Cunningham": prediction(mean=32.0)})[0]
+    assert wide["model_version"] == "challenger"
+    assert wide["model_p_over"] < default["model_p_over"]   # more spread, less sure of the over
+
+
+def test_two_model_versions_can_record_the_same_line(tmp_path):
+    path = tmp_path / "log.csv"
+    rows = two_version_rows()
+    assert nba_paper.append_rows(rows[:1], path=path) == 1
+    assert nba_paper.append_rows(rows[1:], path=path) == 1
+    assert len(nba_paper.load_ledger(path=path)) == 2
+
+
+def test_summary_can_be_limited_to_one_model_version():
+    settled = nba_paper.settle(
+        ledger_with(two_version_rows()), games_frame([(1, GAME_DATE, 30)]),
+        empty_snapshots(), TODAY_AFTER)
+    assert nba_paper.summary(settled)["picks"] == 2
+    champion = nba_paper.summary(settled, model_version=nba_paper.MODEL_VERSION)
+    challenger = nba_paper.summary(settled, model_version="challenger")
+    assert champion["record"] == "1-0"       # over pick, scored 30 vs 24.5
+    assert challenger["record"] == "0-1"     # under pick lost
+
+
+def comparison_frame():
+    def row(version, player, p_model, went_over):
+        return {"event_id": "e1", "player": player, "line": 24.5, "model_version": version,
+                "status": "settled", "went_over": went_over,
+                "model_p_over": p_model, "fair_p_over": 0.5}
+    return pd.DataFrame([
+        row("a", "p1", 1.0, 1), row("a", "p2", 0.0, 0), row("a", "p3", 1.0, 1),
+        row("b", "p1", 0.5, 1), row("b", "p2", 0.5, 0),
+    ])
+
+
+def test_versions_are_compared_only_on_the_lines_they_share():
+    table = nba_paper.compare_versions(comparison_frame())
+    assert table.loc["a", "n"] == 2 and table.loc["b", "n"] == 2    # p3 is only in "a"
+    assert table.loc["a", "brier_model"] == pytest.approx(0.0)
+    assert table.loc["b", "brier_model"] == pytest.approx(0.25)
+    assert table.loc["a", "brier_market"] == pytest.approx(0.25)
+    assert table.loc["b", "brier_market"] == pytest.approx(0.25)
+
+
+def test_comparing_with_a_single_version_gives_an_empty_table():
+    only_a = comparison_frame().query("model_version == 'a'")
+    assert nba_paper.compare_versions(only_a).empty
+
+
 def test_calibration_with_no_settled_rows_is_empty_not_an_error():
     frame = pd.DataFrame({"status": ["pending"], "went_over": [None],
                           "model_p_over": [0.6], "fair_p_over": [0.5]})

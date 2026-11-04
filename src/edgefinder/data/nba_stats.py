@@ -50,6 +50,12 @@ def previous_season(season: str) -> str:
     return season_label(int(season[:4]) - 1)
 
 
+def recent_seasons(today: dt.date, count: int) -> list[str]:
+    """The current season and the `count - 1` before it, oldest first."""
+    start_year = int(current_season(today)[:4])
+    return [season_label(start_year - back) for back in range(count - 1, -1, -1)]
+
+
 def _season_end(season: str) -> dt.datetime:
     month, day = SEASON_ENDS
     return dt.datetime(int(season[:4]) + 1, month, day)

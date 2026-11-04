@@ -61,6 +61,12 @@ def test_current_season_rolls_over_in_october():
     assert nba_stats.current_season(dt.date(2026, 9, 1)) == "2025-26"
 
 
+def test_recent_seasons_run_oldest_first_and_end_at_the_current_one():
+    assert nba_stats.recent_seasons(dt.date(2026, 11, 4), 4) == [
+        "2023-24", "2024-25", "2025-26", "2026-27"]
+    assert nba_stats.recent_seasons(dt.date(2027, 3, 1), 2) == ["2025-26", "2026-27"]
+
+
 def test_previous_season():
     assert nba_stats.previous_season("2026-27") == "2025-26"
     assert nba_stats.previous_season("2000-01") == "1999-00"

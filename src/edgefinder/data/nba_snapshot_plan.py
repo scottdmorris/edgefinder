@@ -34,6 +34,11 @@ def tip_time(event: dict) -> dt.datetime:
     return dt.datetime.fromisoformat(event["commence_time"].replace("Z", "+00:00"))
 
 
+def tip_date(event: dict) -> str:
+    """The game's Eastern-time calendar date, e.g. '2026-11-04'."""
+    return tip_time(event).astimezone(EASTERN).date().isoformat()
+
+
 def plan_snapshots(
     events: list[dict],
     snapshots: pd.DataFrame,

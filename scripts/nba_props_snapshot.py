@@ -3,11 +3,14 @@
 Safe to run repeatedly (e.g. every 30 minutes through the afternoon and
 evening): the policy in nba_snapshot_plan decides what is due, so
 re-running never spends a request twice on the same job. Each early
-snapshot also writes the model's view of every line to the paper ledger.
+snapshot also writes every registered model's view of every line to the
+paper ledger, so the models are judged head to head on the same lines.
 
-Usage:  python scripts/nba_props_snapshot.py [--dry-run] [--log-file PATH]
-  --dry-run   show what would be fetched without spending any requests
-  --log-file  also append the log to PATH (scheduled runs have no console)
+Usage:  python scripts/nba_props_snapshot.py [--dry-run] [--backfill-models] [--log-file PATH]
+  --dry-run          show what would be fetched or recorded; spends and writes nothing
+  --backfill-models  price already-archived early snapshots with any model that hasn't
+                     yet, for games that haven't tipped off. Spends no API requests.
+  --log-file         also append the log to PATH (scheduled runs have no console)
 """
 
 import argparse
@@ -21,10 +24,13 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
-from edgefinder.models import nba_points  # noqa: E402
-from edgefinder.tracking import nba_paper  # noqa: E402
+from edgefinder.models import nba_minutes_points, nba_points  # noqa: E402
+from edgefinder.tracking import nba_recording  # noqa: E402
 
 log = logging.getLogger("nba_props_snapshot")
+
+# three seasons to train the minutes model, plus one more for its priors
+HISTORY_SEASONS = 4
 
 
 def configure_logging(log_file: Path | None) -> None:
@@ -38,36 +44,84 @@ def configure_logging(log_file: Path | None) -> None:
                         datefmt="%Y-%m-%d %H:%M", handlers=handlers or None)
 
 
-def load_games(today: dt.date) -> pd.DataFrame:
+def build_models(today: dt.date) -> list[nba_recording.RegisteredModel]:
+    """Every model that prices tonight's lines. The first is the original
+    rolling-average model, built exactly as before (two seasons of history)."""
     season = nba_stats.current_season(today)
-    return pd.concat(
+    games = pd.concat(
         [nba_stats.load_season(s, today=today)
-         for s in (nba_stats.previous_season(season), season)],
-        ignore_index=True,
-    )
+         for s in nba_stats.recent_seasons(today, HISTORY_SEASONS)],
+        ignore_index=True)
+    recent = games[games["season"].isin(nba_stats.recent_seasons(today, 2))]
+
+    def rolling_average(event: dict, names: list[str]) -> dict[str, dict]:
+        return nba_points.project_event(
+            event, names, recent, season=season, game_date=nba_snapshot_plan.tip_date(event))
+
+    return [
+        nba_recording.RegisteredModel(
+            nba_points.MODEL_VERSION, nba_points.MODEL_DISPERSION, rolling_average),
+        nba_recording.RegisteredModel(
+            nba_minutes_points.MODEL_VERSION, nba_minutes_points.MODEL_DISPERSION,
+            nba_minutes_points.LiveProjector(games, season)),
+    ]
 
 
-def record_early_lines(event: dict, lines: list[dict], games: pd.DataFrame, today: dt.date) -> int:
-    game_date = nba_snapshot_plan.tip_time(event).astimezone(
-        nba_snapshot_plan.EASTERN).date().isoformat()
-    projections = nba_points.project_event(
-        event, [line["player"] for line in lines], games,
-        season=nba_stats.current_season(today), game_date=game_date)
-    rows = nba_paper.build_ledger_rows(
-        event, lines, projections,
-        recorded_at=dt.datetime.now(dt.timezone.utc).isoformat(), game_date=game_date)
-    return nba_paper.append_rows(rows)
+class Models:
+    """Loads history and builds the models only when first needed, so runs
+    with nothing to record stay fast."""
+
+    def __init__(self, today: dt.date):
+        self._today = today
+        self._models: list[nba_recording.RegisteredModel] | None = None
+
+    def get(self) -> list[nba_recording.RegisteredModel]:
+        if self._models is None:
+            self._models = build_models(self._today)
+        return self._models
+
+
+def record_lines(event: dict, lines: list[dict], models: Models) -> dict[str, int]:
+    return nba_recording.record_event(
+        event, lines, models.get(),
+        recorded_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+        game_date=nba_snapshot_plan.tip_date(event))
+
+
+def describe(added: dict[str, int]) -> str:
+    return ", ".join(f"{version} +{count}" for version, count in added.items())
+
+
+def backfill_models(models: Models, now: dt.datetime, dry_run: bool) -> None:
+    """Price archived early snapshots with models that haven't yet. Only
+    games that haven't tipped off: projections use games through last
+    night, so pricing a game that already started would be hindsight."""
+    for event, lines in nba_props.early_snapshots_by_event(nba_props.load_snapshots()):
+        matchup = f"{event['away']} @ {event['home']}"
+        if nba_snapshot_plan.tip_time(event) <= now:
+            log.info("skip %s: already tipped off", matchup)
+        elif dry_run:
+            log.info("would price %s (%d lines)", matchup, len(lines))
+        else:
+            log.info("%s: %s", matchup, describe(record_lines(event, lines, models)))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--backfill-models", action="store_true")
     parser.add_argument("--log-file", type=Path)
     args = parser.parse_args()
     configure_logging(args.log_file)
 
     now = dt.datetime.now(dt.timezone.utc)
     today = now.astimezone(nba_snapshot_plan.EASTERN).date()
+    models = Models(today)
+
+    if args.backfill_models:
+        backfill_models(models, now, args.dry_run)
+        return
+
     try:
         events = nba_props.upcoming_events()
     except nba_props.PropsApiError as exc:
@@ -83,7 +137,6 @@ def main() -> None:
         log.info("(dry run: no requests spent)")
         return
 
-    games = None
     for task in tasks:
         remaining = nba_props.requests_remaining()
         if remaining is not None and remaining <= nba_props.QUOTA_RESERVE:
@@ -97,11 +150,8 @@ def main() -> None:
             break
         nba_props.append_snapshot(
             task.event, task.phase, lines, dt.datetime.now(dt.timezone.utc).isoformat())
-        recorded = 0
-        if task.phase == "early":
-            games = load_games(today) if games is None else games
-            recorded = record_early_lines(task.event, lines, games, today)
-        log.info("%-5s %s @ %s: %d lines archived, %d added to the ledger",
+        recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
+        log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
 

@@ -48,10 +48,16 @@ def build_ledger_rows(
     predictions: dict[str, dict],
     recorded_at: str,
     game_date: str,
+    *,
+    model_version: str = MODEL_VERSION,
+    dispersion: float = MODEL_DISPERSION,
 ) -> list[dict]:
     """One row per line we can price. Skipped: players with no projection,
     lines missing a side, and whole-number lines (a push would need its
-    own handling, and FanDuel almost always posts half points)."""
+    own handling, and FanDuel almost always posts half points).
+
+    Several models can price the same line: each writes its own rows,
+    tagged with its `model_version` and using its own `dispersion`."""
     rows = []
     for item in lines:
         prediction = predictions.get(item["player"])
@@ -61,7 +67,7 @@ def build_ledger_rows(
         if float(point).is_integer():
             continue
         fair_over, _ = devig_two_way(implied_prob(over_odds), implied_prob(under_odds))
-        model_over = float(negbin.over_prob(point, prediction["mean"], MODEL_DISPERSION))
+        model_over = float(negbin.over_prob(point, prediction["mean"], dispersion))
         blend_over = MODEL_WEIGHT * model_over + (1 - MODEL_WEIGHT) * fair_over
         ev_over = ev_per_unit(blend_over, american_to_decimal(over_odds))
         ev_under = ev_per_unit(1 - blend_over, american_to_decimal(under_odds))
@@ -74,7 +80,7 @@ def build_ledger_rows(
             "home": event["home"], "away": event["away"],
             "player": item["player"], "player_id": prediction["player_id"],
             "line": point, "over_odds": over_odds, "under_odds": under_odds,
-            "model_version": MODEL_VERSION, "model_mean": prediction["mean"],
+            "model_version": model_version, "model_mean": prediction["mean"],
             "model_p_over": model_over, "fair_p_over": fair_over,
             "pick_side": side if is_pick else None,
             "pick_odds": odds if is_pick else None,
@@ -187,8 +193,15 @@ def _attach_closing(out: pd.DataFrame, snapshots: pd.DataFrame) -> None:
                 (implied_prob(float(closing_odds)) - placed) / placed * 100.0)
 
 
-def summary(ledger: pd.DataFrame) -> dict:
-    picks = ledger[ledger["pick_side"].notna()]
+def _only_version(ledger: pd.DataFrame, model_version: str | None) -> pd.DataFrame:
+    if model_version is None:
+        return ledger
+    return ledger[ledger["model_version"] == model_version]
+
+
+def summary(ledger: pd.DataFrame, model_version: str | None = None) -> dict:
+    picks = _only_version(ledger, model_version)
+    picks = picks[picks["pick_side"].notna()]
     settled = picks[picks["status"] == "settled"]
     units = float(pd.to_numeric(settled["pnl_units"], errors="coerce").sum())
     clv = pd.to_numeric(picks["clv_pct"], errors="coerce").dropna()
@@ -208,10 +221,11 @@ def _mean_or_none(series: pd.Series) -> float | None:
     return float(values.mean()) if len(values) else None
 
 
-def calibration_summary(ledger: pd.DataFrame) -> dict:
+def calibration_summary(ledger: pd.DataFrame, model_version: str | None = None) -> dict:
     """Brier score of the model's P(over) vs the market's devigged P(over)
     on every settled line. Lower is better; the model only has something
     to offer if its score beats the market's."""
+    ledger = _only_version(ledger, model_version)
     settled = ledger[ledger["status"] == "settled"].dropna(subset=["went_over"])
     if settled.empty:
         return {"n": 0, "brier_model": None, "brier_market": None}
@@ -221,3 +235,30 @@ def calibration_summary(ledger: pd.DataFrame) -> dict:
         "brier_model": float(((settled["model_p_over"].astype(float) - outcome) ** 2).mean()),
         "brier_market": float(((settled["fair_p_over"].astype(float) - outcome) ** 2).mean()),
     }
+
+
+def compare_versions(ledger: pd.DataFrame) -> pd.DataFrame:
+    """Head-to-head Brier scores, one row per model version, on only the
+    settled lines that EVERY version priced, so no model is flattered by
+    an easier set of lines. The market's score on the same lines is
+    included. Empty when fewer than two versions have settled lines."""
+    columns = ["n", "brier_model", "brier_market"]
+    settled = ledger[ledger["status"] == "settled"].dropna(subset=["went_over"])
+    versions = settled["model_version"].nunique()
+    if versions < 2:
+        return pd.DataFrame(columns=columns)
+    key = ["event_id", "player", "line"]
+    priced_by_all = settled.groupby(key)["model_version"].nunique()
+    shared = priced_by_all[priced_by_all == versions].index.to_frame(index=False)
+    common = settled.merge(shared, on=key)
+    if common.empty:
+        return pd.DataFrame(columns=columns)
+    rows = {}
+    for version, group in common.groupby("model_version"):
+        outcome = group["went_over"].astype(float)
+        rows[version] = {
+            "n": len(group),
+            "brier_model": float(((group["model_p_over"].astype(float) - outcome) ** 2).mean()),
+            "brier_market": float(((group["fair_p_over"].astype(float) - outcome) ** 2).mean()),
+        }
+    return pd.DataFrame(rows).T[columns]
