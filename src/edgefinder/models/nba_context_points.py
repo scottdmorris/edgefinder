@@ -41,8 +41,9 @@ class PointsModel:
     """Gradient-boosted direct points predictor. Handles missing inputs natively
     and never predicts a negative score."""
 
-    def __init__(self, **params):
+    def __init__(self, columns: list[str] | None = None, **params):
         self.params = {**PARAMS, **params}
+        self._wanted = list(FEATURES if columns is None else columns)
         self._model: HistGradientBoostingRegressor | None = None
         self._columns: list[str] = []
         self.n_train = 0
@@ -50,7 +51,7 @@ class PointsModel:
     def fit(self, features: pd.DataFrame) -> "PointsModel":
         usable = features[features["min_ewma_mid"].notna() & features["pts"].notna()]
         # an input that is missing in every training row can't be used
-        self._columns = [c for c in FEATURES if usable[c].notna().any()]
+        self._columns = [c for c in self._wanted if usable[c].notna().any()]
         self._model = HistGradientBoostingRegressor(**self.params).fit(
             usable[self._columns], usable["pts"])
         self.n_train = len(usable)
@@ -131,16 +132,22 @@ class LiveProjector:
                     log.warning("%s; projecting as if nobody is out", error)
         return self._out
 
+    def _train(self):
+        """The model to project with. A variant overrides this and `_build_slate`."""
+        return train(self._games, self._season)
+
+    def _build_slate(self, game_date: str) -> pd.DataFrame:
+        return nba_minutes_points.build_slate_features(self._games, self._season, game_date)
+
     def __call__(self, event: dict, player_names: list[str]) -> dict[str, dict]:
         if self._error is not None:
             raise self._error
         game_date = nba_snapshot_plan.tip_date(event)
         try:
             if self._model is None:
-                self._model = train(self._games, self._season)
+                self._model = self._train()
             if game_date not in self._slates:
-                self._slates[game_date] = nba_minutes_points.build_slate_features(
-                    self._games, self._season, game_date)
+                self._slates[game_date] = self._build_slate(game_date)
                 self._contexts[game_date] = nba_context.SlateContext(self._games, game_date)
         except Exception as exc:
             self._error = exc

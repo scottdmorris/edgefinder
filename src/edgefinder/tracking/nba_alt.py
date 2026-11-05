@@ -18,6 +18,7 @@ import csv
 import datetime as dt
 import logging
 import math
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -25,7 +26,7 @@ import pandas as pd
 from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
-from ..models import nba_context_points, nba_minutes_points, nba_points
+from ..models import nba_context_points, nba_context_v2, nba_minutes_points, nba_points
 from .nba_paper import MIN_EV_TO_RECORD, MODEL_WEIGHT
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ DISPERSIONS = {
     nba_points.MODEL_VERSION: nba_points.MODEL_DISPERSION,
     nba_minutes_points.MODEL_VERSION: nba_minutes_points.MODEL_DISPERSION,
     nba_context_points.MODEL_VERSION: nba_context_points.MODEL_DISPERSION,
+    nba_context_v2.MODEL_VERSION: nba_context_v2.MODEL_DISPERSION,
 }
 _MIN_PROB, _MAX_PROB = 0.001, 0.999
 # The model's spread was fitted around the middle of the distribution, where
@@ -62,7 +64,7 @@ COLUMNS = [
 ]
 
 
-def p_at_least(threshold: int, mean: float, dispersion: float) -> float:
+def p_at_least(threshold: int, mean: float, dispersion: float | Callable) -> float:
     """Chance of scoring `threshold` points or more."""
     return float(negbin.over_prob(threshold - 0.5, mean, dispersion))
 
@@ -97,7 +99,7 @@ def build_alt_rows(
     game_date: str,
     *,
     model_version: str,
-    dispersion: float,
+    dispersion: float | Callable,
 ) -> list[dict]:
     """One row per X+ price we can price. `lines` hold player, line (a half
     point such as 14.5, meaning 15+) and over_odds."""

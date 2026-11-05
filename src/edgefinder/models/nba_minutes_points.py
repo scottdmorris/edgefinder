@@ -33,7 +33,8 @@ def train(games: pd.DataFrame, season: str) -> nba_minutes.MinutesModel:
     return nba_minutes.MinutesModel().fit(features[features["season"].isin(wanted)])
 
 
-def build_slate_features(games: pd.DataFrame, season: str, game_date: str) -> pd.DataFrame:
+def build_slate_features(games: pd.DataFrame, season: str, game_date: str,
+                         extra_features=None) -> pd.DataFrame:
     """One row of pre-game features for every player who has played this
     season, as of `game_date`. A placeholder row stands in for the game;
     since a game's own result never feeds its own features, its dummy
@@ -54,6 +55,8 @@ def build_slate_features(games: pd.DataFrame, season: str, game_date: str) -> pd
     })
     combined = pd.concat([games.assign(_upcoming=False), placeholders], ignore_index=True)
     features = nba_features.build_features(combined)
+    if extra_features is not None:
+        features = extra_features(features)       # more inputs, built the same leak-free way
     return features[features["_upcoming"]].drop(columns="_upcoming").reset_index(drop=True)
 
 

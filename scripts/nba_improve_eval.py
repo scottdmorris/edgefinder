@@ -33,38 +33,11 @@ from edgefinder.data import nba_stats  # noqa: E402
 from edgefinder.eval import nba_eval  # noqa: E402
 from edgefinder.models import (  # noqa: E402
     nba_baselines, nba_context, nba_features, nba_minutes)
+from edgefinder.models.nba_shot_features import SHOT_COLUMNS, add_shot_features  # noqa: E402
 
 import nba_context_eval as base  # noqa: E402  (same folder: reuse the exact setup)
 
-SHOT_ALPHAS = {"ewma_10": 0.10, "ewma_30": 0.30}
-SHOT_COLUMNS = (["fga_rate_ewma_10", "fga_rate_ewma_30", "fta_rate_ewma_10",
-                 "fta_rate_ewma_30", "pts_std10", "pts_season_rate"])
 SPREAD_BINS = (0, 8, 12, 17, 22, 10_000)
-
-
-def add_shot_features(features: pd.DataFrame) -> pd.DataFrame:
-    """Shots and free throws per minute (smoothed), scoring steadiness and the season's
-    points per minute so far, all from games before the one being predicted."""
-    df = features.sort_values(["player_id", "game_date"], kind="stable").reset_index(drop=True)
-    by_player = df.groupby("player_id")
-
-    def previous_ewm(series: pd.Series, alpha: float) -> pd.Series:
-        shifted = series.groupby(df["player_id"]).shift(1)
-        return shifted.groupby(df["player_id"]).transform(lambda s: s.ewm(alpha=alpha).mean())
-
-    minutes = df["minutes"].where(df["minutes"] > 0)
-    for name, alpha in SHOT_ALPHAS.items():
-        for stat in ("fga", "fta"):
-            rate = (df[stat] / minutes)
-            df[f"{stat}_rate_{name}"] = previous_ewm(rate, alpha)
-    previous_pts = by_player["pts"].shift(1)
-    df["pts_std10"] = previous_pts.groupby(df["player_id"]).transform(
-        lambda s: s.rolling(10, min_periods=3).std())
-    in_season = df.groupby(["player_id", "season"])
-    games_before = in_season.cumcount()
-    df["pts_season_rate"] = ((in_season["pts"].cumsum() - df["pts"])
-                             / (in_season["minutes"].cumsum() - df["minutes"]).where(games_before > 0))
-    return df
 
 
 def predict_variants(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
@@ -91,6 +64,19 @@ def band_log_score(frame: pd.DataFrame, column: str, table: pd.Series) -> float:
     bands = pd.cut(frame[column], SPREAD_BINS, include_lowest=True)
     dispersion = bands.map(table).astype(float).fillna(table.median())
     return float(np.mean(negbin.logpmf(np.rint(frame["pts"]), frame[column], dispersion)))
+
+
+def knots(frame: pd.DataFrame, column: str) -> tuple[list[float], list[float]]:
+    """(mean projection, dispersion) per band: the points a smooth width is drawn through."""
+    bands = pd.cut(frame[column], SPREAD_BINS, include_lowest=True)
+    groups = [g for _, g in frame.groupby(bands, observed=True)]
+    return ([float(g[column].mean()) for g in groups],
+            [float(negbin.estimate_dispersion(g[column], g["pts"])) for g in groups])
+
+
+def smooth_log_score(frame: pd.DataFrame, column: str, points) -> float:
+    width = negbin.varying(*points)
+    return float(np.mean(negbin.logpmf(np.rint(frame["pts"]), frame[column], width)))
 
 
 def fixed_log_score(frame: pd.DataFrame, column: str, dispersion: float) -> float:
@@ -136,8 +122,15 @@ def main() -> None:
     print(f"  one fixed width ({base.nba_eval.negbin.estimate_dispersion(scored[best], scored['pts']):.2f} "
           f"from validation): {fixed_log_score(final, best, negbin.estimate_dispersion(scored[best], scored['pts'])):.4f}")
     print(f"  width by projection band, from validation:    {band_log_score(final, best, table):.4f}")
+    print(f"  smooth width through the validation points:   "
+          f"{smooth_log_score(final, best, knots(scored, best)):.4f}")
     print(f"  (for reference, width fitted on the test season itself: "
           f"{fixed_log_score(final, best, flat):.4f})")
+    means, widths = knots(final, "pts_blend_shots")
+    print("\nProduction knots, measured on the 2025-26 predictions of pts_blend_shots "
+          "(what context-v2 uses, as context-v1 did):")
+    print("  MEANS =", [round(m, 2) for m in means])
+    print("  WIDTHS =", [round(w, 2) for w in widths])
 
 
 if __name__ == "__main__":

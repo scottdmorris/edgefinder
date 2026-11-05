@@ -15,8 +15,26 @@ MAX_DISPERSION = 1e6  # effectively Poisson
 _MIN_MEAN = 1e-6
 
 
+def varying(means, dispersions):
+    """A dispersion that depends on the projection: straight lines between the given
+    (mean, dispersion) points, held flat beyond the first and last. Pass the result
+    anywhere a dispersion number is accepted. Low projections are relatively noisier
+    than high ones, so one number for everybody misprices both ends."""
+    means = np.asarray(means, dtype=float)
+    dispersions = np.asarray(dispersions, dtype=float)
+    if means.ndim != 1 or means.shape != dispersions.shape or len(means) < 2:
+        raise ValueError("need at least two matching (mean, dispersion) points")
+    if np.any(np.diff(means) <= 0):
+        raise ValueError("the means must be strictly increasing")
+    if np.any(dispersions <= 0):
+        raise ValueError("every dispersion must be positive")
+    return lambda mean: np.clip(np.interp(mean, means, dispersions), MIN_DISPERSION, MAX_DISPERSION)
+
+
 def _distribution(mean, dispersion):
     safe_mean = np.maximum(np.asarray(mean, dtype=float), _MIN_MEAN)
+    if callable(dispersion):
+        dispersion = dispersion(safe_mean)
     probability = dispersion / (dispersion + safe_mean)
     return stats.nbinom(dispersion, probability)
 

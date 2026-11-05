@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A fourth model, `context-v2`
+- **Runs alongside the others** (the nightly snapshot prices every line with it too,
+  including Kalshi points lines). Shot-habit inputs, a blend of the direct and
+  minutes-based views, and probability spread sized to each player's projection.
+- **Measured on 2025-26 after choosing on 2024-25:** points error 5.108 -> 5.090
+  (small but real); log score -3.302 -> -3.234 from the variable spread (the big
+  gain, since low and high projections were priced with the wrong width).
+- **Plumbing:** `negbin.varying` makes a spread that depends on the projection, and
+  the ledger, X+ and Kalshi pricing accept it. `nba_shot_features` holds the new
+  inputs. The v1 projector is unchanged apart from two small hooks v2 reuses.
+- **Not a promise of profit.** This is better probabilities, measured on past games;
+  whether it beats FanDuel is what the live record is for.
+
 ### Slips worth the stake, averages, and a model experiment
 - **Suggested slips must pay.** Each style has a minimum win per $1 (Safer $1.00,
   Balanced $2.00, Bigger payouts $6.00) and every slip needs at least one real leg

@@ -27,7 +27,7 @@ whether they add anything beyond the sportsbook's own price.
 **1. History in.** Every player's past games: points, rebounds, assists,
 3-pointers and minutes, from NBA's own stats feed.
 
-**2. Three projections, same slot.**
+**2. Four projections, same slot.**
 - **`ewma-v1`, the baseline.** A weighted average of recent games, where
   recent ones count most and older ones fade. At the start of a season it
   leans on last season.
@@ -39,6 +39,9 @@ whether they add anything beyond the sportsbook's own price.
   out tonight (from the injury report), how weak the opposing defense is, and
   how fast the game should run. It is running alongside the others, not
   replacing them, until the record says it should.
+- **`context-v2`, the sharpest.** Adds how often a player shoots and gets to
+  the line, blends two views of the same game, and, importantly, sizes the
+  uncertainty to each player (see below).
 
 **3. One number to a chance.** A player doesn't score exactly 24.4; he lands
 anywhere from 10 to 40. We use a standard curve for count data (a negative
@@ -141,6 +144,29 @@ comes from the new information, not from the model type.
 **One timing change came with it.** A projection made before the injury
 report is published can't know who is out, so the pick-making snapshot is now
 taken 2.5 to 4 hours before tip-off instead of at noon.
+
+### Model 4: sharper chances (`context-v2`)
+Three changes on top of model 3, each tested the same way (choose on 2024-25,
+score 2025-26 once, see `scripts/nba_improve_eval.py`):
+- **Shot habits as inputs.** Shots and free throws per minute (smoothed), how
+  steady his scoring has been, and his points per minute this season.
+  Attempts are steadier than points. On its own this was not distinguishable
+  from zero.
+- **A blend of two views.** The average of the direct points model and the
+  minutes-times-rate model that also knows who is out. Together with the shot
+  inputs, points error fell from 5.108 to 5.090 (about 0.4%; interval +0.006
+  to +0.029). Real, but small.
+- **Uncertainty that depends on the projection.** This was the big one. One
+  fixed spread for everybody is wrong: a 6-point projection is far noisier,
+  relative to its size, than a 25-point one (the fitted spread differs about
+  6x). Letting it vary with the projection improved the log score from
+  -3.302 to -3.234, about five times the gain from the changes to the
+  projection itself, and it is out of sample. It matters where the bets are:
+  "4+ points" on a role player, and big scorers' high lines.
+
+What this does **not** show: that it beats FanDuel. These are measurements
+against past games, not against posted lines. The live record is where that is
+tested, and `context-v2` starts at zero graded picks like everything else.
 
 ### From a projection to a chance
 A negative binomial distribution with the projection as its mean. Its spread

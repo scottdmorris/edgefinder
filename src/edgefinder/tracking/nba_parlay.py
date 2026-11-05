@@ -35,6 +35,8 @@ MODEL_NAMES = {
     "ewma-v1": "Simple: recent scoring average",
     "minutes-v1": "Smarter: projected minutes × scoring rate",
     "context-v1": "Smartest: adds who's out, the opponent and pace",
+    "context-v2": "Sharpest: adds shot habits, blends two views, and sizes the uncertainty "
+                  "to each player",
 }
 LIKELY = 0.6               # from here a chance reads better as "N in 10" than "1 in 1"
 EVEN_BAND = 0.05          # slips within 5 cents per dollar of break-even read as "about even"
@@ -48,7 +50,8 @@ def headshot_url(player_id) -> str:
     return HEADSHOT_URL.format(player_id=int(player_id))
 
 
-SHORT_MODEL_NAMES = {"ewma-v1": "Simple", "minutes-v1": "Smarter", "context-v1": "Smartest"}
+SHORT_MODEL_NAMES = {"ewma-v1": "Simple", "minutes-v1": "Smarter", "context-v1": "Smartest",
+                      "context-v2": "Sharpest"}
 
 
 def short_model_name(version: str) -> str:

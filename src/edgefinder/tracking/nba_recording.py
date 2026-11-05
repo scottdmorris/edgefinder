@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class RegisteredModel:
     version: str
-    dispersion: float
+    dispersion: float | Callable
     project: Callable[[dict, list[str]], dict[str, dict]]
 
 

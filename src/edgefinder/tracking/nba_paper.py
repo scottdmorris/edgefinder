@@ -17,6 +17,7 @@ in the pick's favour.
 
 import csv
 import datetime as dt
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -56,7 +57,7 @@ def build_ledger_rows(
     game_date: str,
     *,
     model_version: str = MODEL_VERSION,
-    dispersion: float = MODEL_DISPERSION,
+    dispersion: float | Callable = MODEL_DISPERSION,
     stat: str = DEFAULT_STAT,
     book: str = DEFAULT_BOOK,
 ) -> list[dict]:

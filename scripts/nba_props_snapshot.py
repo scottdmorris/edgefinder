@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_injuries, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
 from edgefinder.models import (  # noqa: E402
-    nba_context_points, nba_minutes_points, nba_points, nba_stat_model)
+    nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_recording  # noqa: E402
 
 log = logging.getLogger("nba_props_snapshot")
@@ -77,6 +77,9 @@ def build_models(today: dt.date, games: pd.DataFrame) -> list[nba_recording.Regi
         nba_recording.RegisteredModel(
             nba_context_points.MODEL_VERSION, nba_context_points.MODEL_DISPERSION,
             nba_context_points.LiveProjector(games, season, injuries=nba_injuries.fetch_injuries)),
+        nba_recording.RegisteredModel(
+            nba_context_v2.MODEL_VERSION, nba_context_v2.MODEL_DISPERSION,
+            nba_context_v2.LiveProjector(games, season, injuries=nba_injuries.fetch_injuries)),
     ]
 
 
