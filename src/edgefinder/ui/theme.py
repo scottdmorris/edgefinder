@@ -42,6 +42,12 @@ hr {{ border-color: {LINE} !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {LINE}; }}
 .stTabs [data-baseweb="tab"] {{ font-weight: 500; padding: 14px 16px; color: {MUTED}; }}
 .stTabs [aria-selected="true"] {{ color: {TEXT}; font-weight: 800; }}
+[data-testid="stTab"] {{ font-weight: 500; color: {MUTED}; }}
+[data-testid="stTab"][aria-selected="true"] {{ color: {TEXT}; font-weight: 800; }}
+
+/* heads-up boxes keep the black look: no default blue/yellow/green fills */
+[data-testid="stAlert"] {{ background: {RAISED} !important; border: 1px solid {LINE};
+  border-radius: 16px; color: {TEXT}; }}
 
 /* buttons are pills: outlined, with the chosen one filled white */
 .stButton > button, .stDownloadButton > button {{
@@ -228,6 +234,22 @@ hr {{ border-color: {LINE} !important; }}
   .bk-slip-big {{ font-size: 1.7rem; }}
   .bk-slip-row {{ gap: 16px; }}
   .stTabs [data-baseweb="tab"] {{ padding: 12px 10px; }}
+  /* all six tabs fit on one row, so none hides behind the scroll arrow */
+  [role="tablist"] {{ gap: 0 !important; }}
+  [data-testid="stTab"] {{ padding: 8px 8px; font-size: .8rem; }}
+  /* hover-only extras: tiny targets nobody can use with a thumb */
+  [data-testid="stElementToolbar"], [data-testid="stHeaderActionElements"] {{ display: none !important; }}
+}}
+/* anything a thumb taps is at least 44px tall (phones, and touch tablets) */
+@media (max-width: 900px), (pointer: coarse) {{
+  [data-testid="stTab"] {{ min-height: 44px; }}
+  [data-testid="stBaseButton-pills"], [data-testid="stBaseButton-pillsActive"] {{ min-height: 44px; }}
+  .stButton > button, .stDownloadButton > button {{ min-height: 44px; }}
+  .st-key-browse-list button {{ min-height: 44px; }}
+  [data-testid="stRadio"] label {{ min-height: 44px; align-items: center; }}
+  [data-testid="stNumberInput"] button {{ min-height: 44px; min-width: 44px; }}
+  [data-baseweb="select"] > div {{ min-height: 44px; }}
+  [data-testid="stExpander"] summary {{ min-height: 44px; }}
 }}
 </style>
 """

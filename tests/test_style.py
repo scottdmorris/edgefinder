@@ -194,3 +194,37 @@ def test_short_model_names_are_one_word_and_unknown_versions_pass_through():
     assert nba_parlay.short_model_name("minutes-v1") == "Smarter"
     assert nba_parlay.short_model_name("ewma-v1") == "Simple"
     assert nba_parlay.short_model_name("future-v9") == "future-v9"
+
+
+def test_the_tap_target_rules_come_last_and_ask_for_44px():
+    css = style.CSS
+    start = css.index("@media (max-width: 900px), (pointer: coarse)")
+    block = css[start:]
+    assert start > css.index("@media (max-width: 640px)")
+    for selector in ('[data-testid="stTab"]', '[data-testid="stBaseButton-pills"]',
+                     '[data-testid="stBaseButton-pillsActive"]', ".stButton > button",
+                     ".st-key-browse-list button", '[data-testid="stRadio"] label',
+                     '[data-testid="stNumberInput"] button', '[data-baseweb="select"] > div',
+                     '[data-testid="stExpander"] summary'):
+        assert selector in block
+    assert block.count("min-height: 44px") >= 8
+    assert "min-height: 2" not in block           # nothing here may shrink a target again
+
+
+def test_all_six_tabs_fit_a_phone_and_hover_only_extras_are_hidden():
+    css = style.CSS
+    phone = css[css.index("@media (max-width: 640px)"):css.index("@media (max-width: 900px), (pointer")]
+    assert '[data-testid="stTab"] { padding: 8px 8px;' in phone
+    assert '[role="tablist"] { gap: 0 !important; }' in phone
+    assert '[data-testid="stElementToolbar"]' in phone and '[data-testid="stHeaderActionElements"]' in phone
+
+
+def test_the_tabs_style_works_on_streamlit_versions_that_use_testids():
+    assert '[data-testid="stTab"][aria-selected="true"]' in style.CSS
+
+
+def test_heads_up_boxes_use_theme_tokens_not_the_default_blue():
+    css = style.CSS
+    rule = css[css.index('[data-testid="stAlert"]'):]
+    rule = rule[:rule.index("}")]
+    assert "background: #16181C" in rule and "border: 1px solid #2F3336" in rule
