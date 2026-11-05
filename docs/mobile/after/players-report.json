@@ -1,0 +1,56 @@
+{
+ "360": {
+  "scrollW": 360,
+  "W": 360,
+  "small": [
+   "Help for Search an 16",
+   "Search any player 38",
+   "Clear value 38",
+   "Open 38",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "Points line 36"
+  ],
+  "wide": [
+   "DIV.dvn-stack",
+   "DIV."
+  ]
+ },
+ "375": {
+  "scrollW": 375,
+  "W": 375,
+  "small": [
+   "Help for Search an 16",
+   "Search any player 38",
+   "Clear value 38",
+   "Open 38",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "Points line 36"
+  ],
+  "wide": [
+   "DIV.dvn-stack",
+   "DIV."
+  ]
+ },
+ "768": {
+  "scrollW": 768,
+  "W": 768,
+  "small": [
+   "Help for Search an 16",
+   "Search any player 38",
+   "Clear value 38",
+   "Open 38",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "INPUT 13",
+   "Points line 36"
+  ],
+  "wide": []
+ }
+}

@@ -1,0 +1,251 @@
+{
+ "375/Parlay": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 255x36"
+  ]
+ },
+ "375/Live": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 0,
+  "small": []
+ },
+ "375/Players": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 18,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 255x36",
+   "BUTTON:Help for Search any  16x16",
+   "INPUT:Search any player 291x38",
+   "BUTTON:Clear value 24x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Points line 259x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 315x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "375/Picks": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 9,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 255x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 315x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "375/Record": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 255x36"
+  ]
+ },
+ "375/About": {
+  "scrollW": 375,
+  "clientW": 375,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 255x36"
+  ]
+ },
+ "360/Parlay": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 240x36"
+  ]
+ },
+ "360/Live": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 0,
+  "small": []
+ },
+ "360/Players": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 18,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 240x36",
+   "BUTTON:Help for Search any  16x16",
+   "INPUT:Search any player 276x38",
+   "BUTTON:Clear value 24x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Points line 244x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 300x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "360/Picks": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 9,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 240x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 300x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "360/Record": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 240x36"
+  ]
+ },
+ "360/About": {
+  "scrollW": 360,
+  "clientW": 360,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 240x36"
+  ]
+ },
+ "768/Parlay": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 201x36"
+  ]
+ },
+ "768/Live": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 0,
+  "small": []
+ },
+ "768/Players": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 18,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 201x36",
+   "BUTTON:Help for Search any  16x16",
+   "INPUT:Search any player 678x38",
+   "BUTTON:Clear value 24x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Points line 646x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 702x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "768/Picks": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 9,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 201x36",
+   "BUTTON:Help for Player 16x16",
+   "INPUT:Player 702x38",
+   "BUTTON:Open 32x38",
+   "INPUT: 13x13",
+   "INPUT: 13x13",
+   "INPUT:Only lines where a m 13x13"
+  ]
+ },
+ "768/Record": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 201x36"
+  ]
+ },
+ "768/About": {
+  "scrollW": 768,
+  "clientW": 768,
+  "tabsOffscreen": [],
+  "smallCount": 3,
+  "small": [
+   "BUTTON:Help for Type a play 16x16",
+   "INPUT:Selected Jalen Bruns 18x28",
+   "INPUT:How much are you bet 201x36"
+  ]
+ }
+}
