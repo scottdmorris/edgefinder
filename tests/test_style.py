@@ -230,3 +230,9 @@ def test_heads_up_boxes_use_theme_tokens_not_the_default_blue():
     rule = css[css.index('[data-testid="stAlert"]'):]
     rule = rule[:rule.index("}")]
     assert "background: #16181C" in rule and "border: 1px solid #2F3336" in rule
+
+
+def test_the_alert_body_is_neutral_too_not_just_its_outer_box():
+    css = style.CSS
+    assert '[data-testid="stAlertContainer"] { background: transparent !important; color: #E7E9EA !important; }' in css
+    assert '[data-testid^="stAlertContent"] { color: #E7E9EA !important; }' in css

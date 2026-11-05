@@ -48,6 +48,8 @@ hr {{ border-color: {LINE} !important; }}
 /* heads-up boxes keep the black look: no default blue/yellow/green fills */
 [data-testid="stAlert"] {{ background: {RAISED} !important; border: 1px solid {LINE};
   border-radius: 16px; color: {TEXT}; }}
+[data-testid="stAlertContainer"] {{ background: transparent !important; color: {TEXT} !important; }}
+[data-testid^="stAlertContent"] {{ color: {TEXT} !important; }}
 
 /* buttons are pills: outlined, with the chosen one filled white */
 .stButton > button, .stDownloadButton > button {{
