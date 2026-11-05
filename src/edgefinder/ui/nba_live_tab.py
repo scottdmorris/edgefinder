@@ -14,10 +14,9 @@ import streamlit as st
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_live
 from ..tracking import nba_parlay, nba_slip_tracker
-from . import nba_parlay_tab, style
+from . import nba_game_center, nba_parlay_tab, style
 
 REFRESH_SECONDS = 30
-FEED_LENGTH = 14
 STATE_NAMES = {nba_live.SCHEDULED: "upcoming", nba_live.LIVE: "live", nba_live.FINAL: "final"}
 BADGES = {
     nba_slip_tracker.HIT: ("hit", "Hit"),
@@ -39,8 +38,8 @@ def _box(game_id: str) -> dict[int, nba_live.PlayerLine]:
 
 
 @st.cache_data(ttl=15, show_spinner=False)
-def _plays(game_id: str, away: str, home: str) -> list[nba_live.Play]:
-    return nba_live.fetch_plays(game_id, away, home)
+def _detail(game_id: str, away: str, home: str) -> nba_live.GameDetail:
+    return nba_live.fetch_detail(game_id, away, home)
 
 
 def render() -> None:
@@ -123,11 +122,13 @@ def _card(game: nba_live.LiveGame) -> str:
 def _game_detail(games: list[nba_live.LiveGame]) -> None:
     st.markdown("#### Any game")
     by_id = {g.game_id: g for g in games}
-    default = next((i for i, g in enumerate(games) if g.status == nba_live.LIVE), 0)
-    game_id = st.selectbox(
-        "Pick a game", list(by_id), index=default, key="live_game",
-        format_func=lambda gid: f"{by_id[gid].away} @ {by_id[gid].home}  ·  "
-                                f"{by_id[gid].status_text}")
+    # games on the court right now come first, then upcoming, then finished
+    order = {nba_live.LIVE: 0, nba_live.SCHEDULED: 1, nba_live.FINAL: 2}
+    ranked = sorted(games, key=lambda g: order.get(g.status, 3))
+    game_id = style.choose(
+        "Pick a game", [g.game_id for g in ranked], "live_game",
+        format_func=lambda gid: f"{'🔴 ' if by_id[gid].status == nba_live.LIVE else ''}"
+                                f"{by_id[gid].away} @ {by_id[gid].home}")
     game = by_id[game_id]
     if game.status < nba_live.LIVE:
         st.markdown(_card(game), unsafe_allow_html=True)
@@ -135,13 +136,15 @@ def _game_detail(games: list[nba_live.LiveGame]) -> None:
                 "once the game starts.")
         return
     try:
-        plays = _plays(game.game_id, game.away, game.home)
+        detail = _detail(game.game_id, game.away, game.home)
     except nba_live.LiveDataError as error:
-        plays = []
+        st.markdown(_card(game), unsafe_allow_html=True)
         st.warning(str(error))
-    st.markdown(_card(_freshest(game, plays)), unsafe_allow_html=True)
-    _play_feed(plays)
-    _box_score(game)
+        return
+    game = _freshest(game, detail.plays)
+    st.markdown(_card(game), unsafe_allow_html=True)
+    st.markdown(nba_game_center.timeout_line(game), unsafe_allow_html=True)
+    nba_game_center.render(game, detail)
 
 
 def _freshest(game: nba_live.LiveGame, plays: list[nba_live.Play]) -> nba_live.LiveGame:
@@ -154,34 +157,3 @@ def _freshest(game: nba_live.LiveGame, plays: list[nba_live.Play]) -> nba_live.L
                    status_text=nba_live.period_status(latest.period), clock=latest.clock)
 
 
-def _play_feed(plays: list[nba_live.Play]) -> None:
-    st.markdown("**What just happened**")
-    if not plays:
-        st.caption("No plays yet.")
-        return
-    latest = list(reversed(plays[-FEED_LENGTH:]))
-    st.markdown("".join(
-        style.feed_item(f"{p.period} {p.clock}", p.text, p.score) for p in latest),
-        unsafe_allow_html=True)
-
-
-def _box_score(game: nba_live.LiveGame) -> None:
-    st.markdown("**Box score**")
-    try:
-        box = _box(game.game_id)
-    except nba_live.LiveDataError as error:
-        st.warning(str(error))
-        return
-    played = [p for p in box.values() if p.played]
-    table = pd.DataFrame({
-        "": [nba_parlay.headshot_url(p.player_id) for p in played],
-        "Player": [p.name + ("  🏀" if p.on_court else "") for p in played],
-        "Team": [p.team for p in played],
-        "Pts": [p.points for p in played],
-        "Reb": [p.rebounds for p in played],
-        "Ast": [p.assists for p in played],
-        "Min": [round(p.minutes) for p in played],
-    }).sort_values("Pts", ascending=False)
-    st.dataframe(table, use_container_width=True, hide_index=True, row_height=44,
-                 column_config={"": st.column_config.ImageColumn(" ", width="small")})
-    st.caption("🏀 marks players on the court right now.")

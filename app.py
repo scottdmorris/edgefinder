@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 import streamlit as st
 
 from edgefinder.data import odds_api
-from edgefinder.ui import nba_live_tab, nba_parlay_tab, nba_player_tab, nba_tab, style
+from edgefinder.ui import (
+    about_tab, nba_live_tab, nba_parlay_tab, nba_player_tab, nba_tab, style,
+)
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -37,8 +39,9 @@ def render_sidebar() -> None:
 def main() -> None:
     style.inject()
     render_sidebar()
-    parlay, live, players, picks = st.tabs(
-        ["🎰 Parlay builder", "📡 Live", "🔎 Players", "🏀 Picks & tracking"])
+    parlay, live, players, picks, about = st.tabs(
+        ["🎰 Parlay builder", "📡 Live", "🔎 Players", "🏀 Picks & tracking",
+         "ℹ️ How it works"])
     with parlay:
         nba_parlay_tab.render()
     with live:
@@ -47,6 +50,8 @@ def main() -> None:
         nba_player_tab.render()
     with picks:
         nba_tab.render()
+    with about:
+        about_tab.render()
 
 
 if __name__ == "__main__":

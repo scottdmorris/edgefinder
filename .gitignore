@@ -13,3 +13,4 @@ data/paper_log.csv
 data/line_history.csv
 data/config.json
 .venv/
+.claude/

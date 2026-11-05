@@ -24,6 +24,7 @@ import pandas as pd
 from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
+from ..models import nba_stat_model
 from ..models.nba_points import MODEL_DISPERSION, MODEL_VERSION
 
 LEDGER_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_paper_log.csv"
@@ -38,8 +39,13 @@ COLUMNS = [
     "status", "actual", "went_over", "result", "pnl_units",
     "closing_line", "closing_over_odds", "closing_under_odds",
     "clv_pct", "line_move",
+    "stat", "book",
 ]
-_TEXT_COLUMNS = ["status", "result", "pick_side", "went_over"]
+_TEXT_COLUMNS = ["status", "result", "pick_side", "went_over", "stat", "book"]
+DEFAULT_STAT = "points"
+DEFAULT_BOOK = "fanduel"
+# rows written before these columns existed were all FanDuel points lines
+_LEGACY_DEFAULTS = {"stat": DEFAULT_STAT, "book": DEFAULT_BOOK}
 
 
 def build_ledger_rows(
@@ -51,6 +57,8 @@ def build_ledger_rows(
     *,
     model_version: str = MODEL_VERSION,
     dispersion: float = MODEL_DISPERSION,
+    stat: str = DEFAULT_STAT,
+    book: str = DEFAULT_BOOK,
 ) -> list[dict]:
     """One row per line we can price. Skipped: players with no projection,
     lines missing a side, and whole-number lines (a push would need its
@@ -85,7 +93,7 @@ def build_ledger_rows(
             "pick_side": side if is_pick else None,
             "pick_odds": odds if is_pick else None,
             "pick_ev": ev if is_pick else None,
-            "status": "pending",
+            "status": "pending", "stat": stat, "book": book,
         })
     return rows
 
@@ -94,7 +102,21 @@ def load_ledger(path: Path | None = None) -> pd.DataFrame:
     path = path or LEDGER_PATH
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS).astype({c: object for c in _TEXT_COLUMNS})
-    return pd.read_csv(path).astype({c: object for c in _TEXT_COLUMNS})
+    ledger = pd.read_csv(path)
+    for column, default in _LEGACY_DEFAULTS.items():
+        if column not in ledger.columns:
+            ledger[column] = default
+        ledger[column] = ledger[column].fillna(default)
+    return ledger.astype({c: object for c in _TEXT_COLUMNS})
+
+
+def _upgrade_file(path: Path) -> None:
+    """Rewrite an older ledger file with the current columns before new rows
+    are appended, so the header and the rows can never disagree."""
+    with path.open(encoding="utf-8") as handle:
+        header = handle.readline().strip().split(",")
+    if header != COLUMNS:
+        save_ledger(load_ledger(path).reindex(columns=COLUMNS), path)
 
 
 def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:
@@ -104,14 +126,14 @@ def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:
 
 
 def append_rows(rows: list[dict], path: Path | None = None) -> int:
-    """Add rows not already recorded for the same game, player and model.
-    Returns how many were new."""
+    """Add rows not already recorded for the same game, player, line, model,
+    stat and book. Returns how many were new."""
     path = path or LEDGER_PATH
     existing = load_ledger(path)
-    seen = set(zip(existing["event_id"], existing["player"], existing["model_version"]))
+    seen = set(map(_row_key, existing.to_dict("records")))
     fresh = []
     for row in rows:
-        key = (row["event_id"], row["player"], row["model_version"])
+        key = _row_key(row)
         if key not in seen:
             seen.add(key)
             fresh.append(row)
@@ -119,12 +141,19 @@ def append_rows(rows: list[dict], path: Path | None = None) -> int:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
+    if not is_new:
+        _upgrade_file(path)
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
         if is_new:
             writer.writeheader()
         writer.writerows(fresh)
     return len(fresh)
+
+
+def _row_key(row: dict) -> tuple:
+    return (row["event_id"], row["player"], float(row["line"]), row["model_version"],
+            row.get("stat") or DEFAULT_STAT, row.get("book") or DEFAULT_BOOK)
 
 
 def settle(
@@ -136,22 +165,36 @@ def settle(
     """Return a copy of the ledger with finished games settled and closing
     information attached. `games` needs player_id, game_date and pts."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
-    points = {
-        (int(row.player_id), row.game_date.strftime("%Y-%m-%d")): float(row.pts)
-        for row in games.itertuples()
-    }
+    values = _stat_values(out, games)
 
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
+        stat_values = values.get(row["stat"])
+        if stat_values is None:
+            continue                         # the game logs don't cover this stat
         key = (int(row["player_id"]), str(row["game_date"]))
-        if key in points:
-            _settle_row(out, index, row, points[key])
+        if key in stat_values:
+            _settle_row(out, index, row, stat_values[key])
         elif str(row["game_date"]) < today.isoformat():
             out.loc[index, "status"] = "void"  # the player never got on the floor
             out.loc[index, "pnl_units"] = 0.0
 
     _attach_closing(out, snapshots)
     return out
+
+
+def _stat_values(ledger: pd.DataFrame, games: pd.DataFrame) -> dict[str, dict]:
+    """For each stat in the ledger that the game logs cover: what every
+    player did on every date."""
+    values = {}
+    for stat in ledger["stat"].dropna().unique():
+        column = nba_stat_model.STATS[stat].column
+        if column in games.columns:
+            values[stat] = {
+                (int(row.player_id), row.game_date.strftime("%Y-%m-%d")): float(getattr(row, column))
+                for row in games.itertuples()
+            }
+    return values
 
 
 def _settle_row(out: pd.DataFrame, index, row: pd.Series, actual: float) -> None:
@@ -172,7 +215,10 @@ def _attach_closing(out: pd.DataFrame, snapshots: pd.DataFrame) -> None:
     if late.empty:
         return
     closing = late.groupby(["event_id", "player"]).tail(1).set_index(["event_id", "player"])
-    for index in out.index[out["status"] != "pending"]:
+    # the late snapshots are FanDuel points lines, so they only close those rows
+    closable = (out["status"] != "pending") & (out["stat"] == DEFAULT_STAT) \
+        & (out["book"] == DEFAULT_BOOK)
+    for index in out.index[closable]:
         row = out.loc[index]
         key = (row["event_id"], row["player"])
         if key not in closing.index:
@@ -193,14 +239,19 @@ def _attach_closing(out: pd.DataFrame, snapshots: pd.DataFrame) -> None:
                 (implied_prob(float(closing_odds)) - placed) / placed * 100.0)
 
 
-def _only_version(ledger: pd.DataFrame, model_version: str | None) -> pd.DataFrame:
-    if model_version is None:
-        return ledger
-    return ledger[ledger["model_version"] == model_version]
+def scope(ledger: pd.DataFrame, model_version: str | None = None, stat: str | None = None,
+          book: str | None = None) -> pd.DataFrame:
+    """Only the rows for one model, stat and/or book; None leaves that
+    dimension unfiltered."""
+    for column, wanted in (("model_version", model_version), ("stat", stat), ("book", book)):
+        if wanted is not None:
+            ledger = ledger[ledger[column] == wanted]
+    return ledger
 
 
-def summary(ledger: pd.DataFrame, model_version: str | None = None) -> dict:
-    picks = _only_version(ledger, model_version)
+def summary(ledger: pd.DataFrame, model_version: str | None = None, stat: str | None = None,
+            book: str | None = None) -> dict:
+    picks = scope(ledger, model_version, stat, book)
     picks = picks[picks["pick_side"].notna()]
     settled = picks[picks["status"] == "settled"]
     units = float(pd.to_numeric(settled["pnl_units"], errors="coerce").sum())
@@ -221,11 +272,12 @@ def _mean_or_none(series: pd.Series) -> float | None:
     return float(values.mean()) if len(values) else None
 
 
-def calibration_summary(ledger: pd.DataFrame, model_version: str | None = None) -> dict:
+def calibration_summary(ledger: pd.DataFrame, model_version: str | None = None,
+                        stat: str | None = None, book: str | None = None) -> dict:
     """Brier score of the model's P(over) vs the market's devigged P(over)
     on every settled line. Lower is better; the model only has something
     to offer if its score beats the market's."""
-    ledger = _only_version(ledger, model_version)
+    ledger = scope(ledger, model_version, stat, book)
     settled = ledger[ledger["status"] == "settled"].dropna(subset=["went_over"])
     if settled.empty:
         return {"n": 0, "brier_model": None, "brier_market": None}
@@ -237,17 +289,20 @@ def calibration_summary(ledger: pd.DataFrame, model_version: str | None = None) 
     }
 
 
-def compare_versions(ledger: pd.DataFrame) -> pd.DataFrame:
+def compare_versions(ledger: pd.DataFrame, stat: str | None = None,
+                     book: str | None = None) -> pd.DataFrame:
     """Head-to-head Brier scores, one row per model version, on only the
     settled lines that EVERY version priced, so no model is flattered by
     an easier set of lines. The market's score on the same lines is
     included. Empty when fewer than two versions have settled lines."""
     columns = ["n", "brier_model", "brier_market"]
-    settled = ledger[ledger["status"] == "settled"].dropna(subset=["went_over"])
+    settled = scope(ledger, stat=stat, book=book)
+    settled = settled[settled["status"] == "settled"].dropna(subset=["went_over"])
     versions = settled["model_version"].nunique()
     if versions < 2:
         return pd.DataFrame(columns=columns)
-    key = ["event_id", "player", "line"]
+    # older ledgers have no stat or book column; they were all one line type
+    key = [c for c in ("event_id", "player", "line", "stat", "book") if c in settled.columns]
     priced_by_all = settled.groupby(key)["model_version"].nunique()
     shared = priced_by_all[priced_by_all == versions].index.to_frame(index=False)
     common = settled.merge(shared, on=key)

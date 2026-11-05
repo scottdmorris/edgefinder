@@ -20,7 +20,7 @@ MUTED = "#8FA0BC"
 
 CSS = f"""
 <style>
-.block-container {{ padding-top: 2.2rem; max-width: 880px; }}
+.block-container {{ padding-top: 2.2rem; max-width: 1180px; }}
 h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 6px; border-bottom: 1px solid #22304d; }}
 .stTabs [data-baseweb="tab"] {{ font-weight: 700; padding: 10px 14px; }}
@@ -40,6 +40,11 @@ h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
 .bk-card.hit {{ border-left-color: {GREEN}; }}
 .bk-card.alive {{ border-left-color: {AMBER}; }}
 .bk-card.missed {{ border-left-color: {RED}; }}
+.bk-card.compact {{ gap: 10px; padding: 8px 10px; margin: 5px 0; }}
+.bk-card.compact .bk-photo {{ width: 40px; height: 40px; }}
+.bk-card.compact .bk-title {{ font-size: 0.92rem; }}
+.bk-card.compact .bk-sub {{ font-size: 0.76rem; }}
+.bk-card.compact .bk-pill {{ min-width: 50px; padding: 6px 8px; font-size: 0.85rem; }}
 .bk-photo {{
   width: 56px; height: 56px; border-radius: 50%; object-fit: cover; object-position: top;
   background: #0b1220; flex: none;
@@ -85,6 +90,31 @@ h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
 .bk-logo {{ width: 26px; height: 26px; object-fit: contain; flex: none; }}
 .bk-game-status {{ font-size: 0.78rem; font-weight: 700; color: {MUTED}; text-align: right; flex: none; }}
 .bk-game.live .bk-game-status {{ color: {GREEN}; }}
+.st-key-slip-panel {{
+  position: sticky; top: 3.6rem; max-height: calc(100vh - 4.5rem); overflow-y: auto;
+  padding-right: 4px;
+}}
+.bk-cmp {{ padding: 7px 0; }}
+.bk-cmp-top {{ display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-size: 0.92rem; }}
+.bk-cmp-label {{ color: {MUTED}; font-size: 0.78rem; text-align: center; flex: 1; }}
+.bk-cmp-val {{ min-width: 92px; font-weight: 600; color: {MUTED}; }}
+.bk-cmp-val:last-child {{ text-align: right; }}
+.bk-cmp-val.lead {{ color: #F4F7FB; font-weight: 800; }}
+.bk-cmp-bar {{ display: flex; height: 7px; border-radius: 5px; overflow: hidden; margin-top: 4px;
+  background: #0b1220; gap: 2px; }}
+.bk-cmp-bar .away {{ background: {BLUE}; }}
+.bk-cmp-bar .home {{ background: {AMBER}; }}
+.bk-leader {{ display: flex; align-items: center; gap: 12px; padding: 8px 10px; margin: 6px 0;
+  background: #131d33; border: 1px solid #22304d; border-radius: 12px; }}
+.bk-photo.small {{ width: 42px; height: 42px; }}
+.bk-leader-stat {{ text-align: right; flex: none; }}
+.bk-leader-stat b {{ font-size: 1.3rem; display: block; line-height: 1.1; }}
+.bk-leader-stat span {{ color: {MUTED}; font-size: 0.72rem; }}
+.bk-empty {{
+  text-align: center; padding: 28px 16px; border: 1.5px dashed #33425f; border-radius: 14px;
+}}
+.bk-empty-title {{ font-weight: 700; margin-bottom: 4px; }}
 .bk-feed {{ padding: 8px 0; border-bottom: 1px solid #1d2a45; }}
 .bk-feed:last-child {{ border-bottom: 0; }}
 .bk-feed-time {{ color: {MUTED}; font-size: 0.78rem; font-weight: 700; }}
@@ -97,22 +127,42 @@ def inject() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
+def choose(label: str, options: list, key: str, format_func=str, on_change=None):
+    """Pick one of a few options as tappable chips instead of a dropdown.
+
+    Always returns an option: the first until the user picks, and the last pick
+    if they tap it again to clear it. With only one option there is nothing to
+    choose, so it is shown as plain text, and the value is still stored under
+    `key` so other views can read it."""
+    if len(options) == 1:
+        st.session_state[key] = options[0]
+        st.caption(f"**{label}:** {format_func(options[0])}")
+        return options[0]
+    if st.session_state.get(key) not in options:
+        st.session_state.pop(key, None)
+    picked = st.pills(label, options, selection_mode="single", default=options[0], key=key,
+                      format_func=format_func, on_change=on_change)
+    return options[0] if picked is None else picked
+
+
 def odds_pill(text: str, kind: str = "") -> str:
     return f'<div class="bk-pill {escape(kind)}">{escape(text)}</div>'
 
 
 def leg_card(photo_url: str, title: str, subtitle: str, pill_text: str, *, kind: str = "",
-             progress: float | None = None, detail: str = "") -> str:
+             progress: float | None = None, detail: str = "", compact: bool = False) -> str:
     """One bet as a card: photo, bet, small print, an optional progress bar,
     and a pill on the right (the odds, or a status). `kind` colours the card
-    and pill: hit, alive, missed, neutral, or empty for the default blue."""
+    and pill: hit, alive, missed, neutral, or empty for the default blue.
+    `compact` shrinks it to fit a narrow column such as the slip."""
     bar = ""
     if progress is not None:
         width = round(max(0.0, min(1.0, progress)) * 100)
         bar = f'<div class="bk-bar"><div style="width:{width}%"></div></div>'
     more = f'<div class="bk-sub">{escape(detail)}</div>' if detail else ""
+    size = " compact" if compact else ""
     return (
-        f'<div class="bk-card {escape(kind)}">'
+        f'<div class="bk-card {escape(kind)}{size}">'
         f'<img class="bk-photo" src="{escape(photo_url, quote=True)}" alt="">'
         f'<div class="bk-body"><div class="bk-title">{escape(title)}</div>'
         f'<div class="bk-sub">{escape(subtitle)}</div>{more}{bar}</div>'
@@ -152,6 +202,42 @@ def game_card(away: str, home: str, away_logo: str, home_logo: str, away_score: 
         f'{row(home, home_logo, home_score, away_score)}'
         f'</div><div class="bk-game-status">{escape(status)}</div></div>'
     )
+
+
+def compare_bar(label: str, away_text: str, home_text: str, away_share: float,
+                ahead: str) -> str:
+    """One team-stat row: the number for each side, the label between them, and
+    a bar split by their shares. The side that is ahead is highlighted."""
+    width = round(max(0.0, min(1.0, away_share)) * 100)
+    return (
+        f'<div class="bk-cmp"><div class="bk-cmp-top">'
+        f'<span class="bk-cmp-val {"lead" if ahead == "away" else ""}">{escape(away_text)}</span>'
+        f'<span class="bk-cmp-label">{escape(label)}</span>'
+        f'<span class="bk-cmp-val {"lead" if ahead == "home" else ""}">{escape(home_text)}</span>'
+        f'</div><div class="bk-cmp-bar"><div class="away" style="width:{width}%"></div>'
+        f'<div class="home" style="width:{100 - width}%"></div></div></div>'
+    )
+
+
+def leader_card(photo_url: str, name: str, team: str, stat: str, value: int) -> str:
+    return (
+        f'<div class="bk-leader"><img class="bk-photo small" '
+        f'src="{escape(photo_url, quote=True)}" alt="">'
+        f'<div class="bk-body"><div class="bk-title">{escape(name)}</div>'
+        f'<div class="bk-sub">{escape(team)}</div></div>'
+        f'<div class="bk-leader-stat"><b>{value}</b><span>{escape(stat)}</span></div></div>'
+    )
+
+
+def dots(filled: int, total: int = 7) -> str:
+    """'●●●○○○○' for timeouts left."""
+    filled = max(0, min(total, filled))
+    return "●" * filled + "○" * (total - filled)
+
+
+def empty_slip(title: str, hint: str) -> str:
+    return (f'<div class="bk-empty"><div class="bk-empty-title">{escape(title)}</div>'
+            f'<div class="bk-sub">{escape(hint)}</div></div>')
 
 
 def feed_item(clock: str, text: str, score: str) -> str:

@@ -184,9 +184,10 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5) -
                 "Chance %": summary["joint_probability"] * 100.0,
                 "Pays": summary["decimal_odds"] - 1.0,
                 "EV %": summary["ev_per_unit"] * 100.0,
+                "bets": list(combo),          # positions in `candidates`, to load onto a slip
             })
     if not slips:
-        return pd.DataFrame(columns=["Slip", "Legs", "Chance %", "Pays", "EV %"])
+        return pd.DataFrame(columns=["Slip", "Legs", "Chance %", "Pays", "EV %", "bets"])
     return pd.DataFrame(slips).sort_values("EV %", ascending=False).head(top).reset_index(drop=True)
 
 

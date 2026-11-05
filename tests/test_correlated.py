@@ -77,6 +77,37 @@ def test_payout_is_the_product_of_decimal_odds():
     assert correlated.decimal_odds(legs) == pytest.approx(2.0 * 1.5)
 
 
+def stat_leg(player, stat, team="AAA", prob=0.5):
+    return Leg(player=player, event_id="e1", team=team, is_over=True, prob=prob,
+               american_odds=100, stat=stat)
+
+
+def test_bets_on_different_stats_in_one_game_are_treated_as_independent():
+    legs = [stat_leg("a", "points"), stat_leg("b", "rebounds", team="BBB")]
+    assert correlated.joint_probability(legs) == pytest.approx(0.25, abs=1e-6)
+
+
+def test_each_stat_uses_its_own_measured_correlation():
+    import math
+    # for two coin-flip legs with correlation r, P(both) = 1/4 + asin(r) / (2 pi)
+    for stat, (_, opponents) in correlated.CORRELATIONS.items():
+        legs = [stat_leg("a", stat), stat_leg("b", stat, team="BBB")]
+        assert correlated.joint_probability(legs) == pytest.approx(
+            0.25 + math.asin(opponents) / (2 * math.pi), abs=1e-4), stat
+
+
+def test_every_stat_has_a_measured_correlation_pair_that_is_small():
+    from edgefinder.models import nba_stat_model
+    assert set(correlated.CORRELATIONS) == set(nba_stat_model.STATS)
+    for teammates, opponents in correlated.CORRELATIONS.values():
+        assert abs(teammates) < 0.1 and abs(opponents) < 0.1
+
+
+def test_an_explicit_correlation_overrides_the_measured_one_for_every_stat():
+    legs = [stat_leg("a", "points"), stat_leg("b", "rebounds", team="BBB")]
+    assert correlated.joint_probability(legs, 0.0, 0.5) > 0.25
+
+
 def test_decimal_odds_convert_to_american_both_ways():
     assert correlated.decimal_to_american(3.5) == 250
     assert correlated.decimal_to_american(2.0) == 100

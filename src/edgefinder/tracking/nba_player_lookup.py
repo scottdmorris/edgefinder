@@ -6,6 +6,8 @@ Works on the game logs the models already use. The hit-rate question
 before a bet, so it sits next to the averages.
 """
 
+import unicodedata
+
 import pandas as pd
 
 from ..data.nba_players import normalize_name
@@ -29,6 +31,28 @@ def search(games: pd.DataFrame, query: str, limit: int = 8) -> pd.DataFrame:
     played = matches.groupby("player_id")["minutes"].sum().rename("total_minutes")
     found = latest.join(played, on="player_id").sort_values("total_minutes", ascending=False)
     return found[["player_id", "player_name", "team"]].head(limit).reset_index(drop=True)
+
+
+def plain_letters(name: str) -> str:
+    """'Luka Dončić' -> 'Luka Doncic', so a search typed without accents still hits."""
+    decomposed = unicodedata.normalize("NFKD", name)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def player_options(games: pd.DataFrame, season: str | None = None) -> dict[int, str]:
+    """Everyone to choose from in a type-ahead box, most-played first, as
+    {player_id: 'Name · TEAM'}. A name with accents also lists its plain
+    spelling, because the box filters on exactly what it shows."""
+    pool = games if season is None else games[games["season"] == season]
+    latest = pool.sort_values("game_date").groupby("player_id").tail(1)
+    played = pool.groupby("player_id")["minutes"].sum().rename("total_minutes")
+    ranked = latest.join(played, on="player_id").sort_values("total_minutes", ascending=False)
+    options = {}
+    for row in ranked.itertuples():
+        label = f"{row.player_name} · {row.team}"
+        plain = plain_letters(row.player_name)
+        options[int(row.player_id)] = label if plain == row.player_name else f"{label}  ({plain})"
+    return options
 
 
 def player_games(games: pd.DataFrame, player_id: int) -> pd.DataFrame:

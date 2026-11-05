@@ -240,6 +240,80 @@ def test_summary_can_be_limited_to_one_model_version():
     assert challenger["record"] == "0-1"     # under pick lost
 
 
+def test_rows_default_to_fanduel_points_and_can_carry_another_stat_and_book():
+    (default,) = build([line()], {"Cade Cunningham": prediction()})
+    assert (default["stat"], default["book"]) == ("points", "fanduel")
+    (other,) = nba_paper.build_ledger_rows(
+        EVENT, [line(point=8.5)], {"Cade Cunningham": prediction(mean=9.0)}, RECORDED_AT,
+        GAME_DATE, stat="rebounds", book="kalshi")
+    assert (other["stat"], other["book"]) == ("rebounds", "kalshi")
+
+
+def test_the_same_player_can_have_several_lines_and_stats_recorded(tmp_path):
+    path = tmp_path / "ledger.csv"
+    points = build([line(point=24.5)], {"Cade Cunningham": prediction()})
+    higher = build([line(point=29.5)], {"Cade Cunningham": prediction()})
+    rebounds = nba_paper.build_ledger_rows(
+        EVENT, [line(point=24.5)], {"Cade Cunningham": prediction()}, RECORDED_AT, GAME_DATE,
+        stat="rebounds")
+    assert nba_paper.append_rows(points, path) == 1
+    assert nba_paper.append_rows(points, path) == 0                    # same line: a repeat
+    assert nba_paper.append_rows(higher, path) == 1                    # another line is new
+    assert nba_paper.append_rows(rebounds, path) == 1                  # another stat is new
+    assert len(nba_paper.load_ledger(path)) == 3
+
+
+def test_an_old_ledger_file_is_upgraded_before_new_rows_are_appended(tmp_path):
+    path = tmp_path / "ledger.csv"
+    old_columns = [c for c in nba_paper.COLUMNS if c not in ("stat", "book")]
+    old_row = {c: None for c in old_columns} | {
+        "event_id": "e0", "player": "Old Timer", "line": 20.5, "model_version": "ewma-v1",
+        "status": "pending", "game_date": "2026-11-03", "player_id": 9}
+    pd.DataFrame([old_row], columns=old_columns).to_csv(path, index=False)
+
+    new = build([line()], {"Cade Cunningham": prediction()})
+    assert nba_paper.append_rows(new, path) == 1
+
+    ledger = nba_paper.load_ledger(path)
+    assert len(ledger) == 2 and list(ledger.columns) == nba_paper.COLUMNS
+    old = ledger[ledger["player"] == "Old Timer"].iloc[0]
+    assert (old["stat"], old["book"]) == ("points", "fanduel")      # filled in for old rows
+    assert path.read_text(encoding="utf-8").splitlines()[0].split(",") == nba_paper.COLUMNS
+
+
+def test_each_stat_is_settled_from_its_own_box_score_column():
+    rebounds = nba_paper.build_ledger_rows(
+        EVENT, [line(point=8.5)], {"Cade Cunningham": prediction(mean=12.0)}, RECORDED_AT,
+        GAME_DATE, stat="rebounds")
+    games = pd.DataFrame({"player_id": [1], "game_date": pd.to_datetime([GAME_DATE]),
+                          "pts": [30.0], "reb": [10.0]})
+    settled = nba_paper.settle(ledger_with(rebounds), games, empty_snapshots(), TODAY_AFTER)
+    assert settled["actual"].iloc[0] == 10.0                  # rebounds, not the 30 points
+    assert bool(settled["went_over"].iloc[0]) is True
+
+
+def test_a_stat_the_game_logs_dont_cover_is_left_pending_not_guessed():
+    threes = nba_paper.build_ledger_rows(
+        EVENT, [line(point=2.5)], {"Cade Cunningham": prediction(mean=3.0)}, RECORDED_AT,
+        GAME_DATE, stat="threes")
+    games = pd.DataFrame({"player_id": [1], "game_date": pd.to_datetime([GAME_DATE]),
+                          "pts": [30.0]})                     # no fg3m column
+    settled = nba_paper.settle(ledger_with(threes), games, empty_snapshots(), TODAY_AFTER)
+    assert settled["status"].iloc[0] == "pending"
+
+
+def test_summary_can_be_limited_to_one_stat_and_book():
+    points = build([line()], {"Cade Cunningham": prediction(mean=32.0)})
+    rebounds = nba_paper.build_ledger_rows(
+        EVENT, [line(point=8.5)], {"Cade Cunningham": prediction(mean=14.0)}, RECORDED_AT,
+        GAME_DATE, stat="rebounds", book="kalshi")
+    ledger = ledger_with(points + rebounds)
+    assert nba_paper.summary(ledger)["picks"] == 2
+    assert nba_paper.summary(ledger, stat="rebounds")["picks"] == 1
+    assert nba_paper.summary(ledger, book="fanduel")["picks"] == 1
+    assert len(nba_paper.scope(ledger, stat="points", book="fanduel")) == 1
+
+
 def comparison_frame():
     def row(version, player, p_model, went_over):
         return {"event_id": "e1", "player": player, "line": 24.5, "model_version": version,

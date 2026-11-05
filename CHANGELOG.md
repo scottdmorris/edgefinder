@@ -2,6 +2,60 @@
 
 Newest first. Dates are when the work was committed.
 
+## Unreleased
+
+### Game center, modeled on how sports apps show a live game
+- **Open any game** from the Live tab for Stats, Plays and Box score tabs
+  under a score header with team logos, timeouts left and bonus status.
+- **Quarter-by-quarter scores** and a **shot chart** on a full court: every
+  make (dot) and miss (✕) for both teams at its real location, filterable by
+  period, with each team's makes and attempts. The court is drawn to scale
+  and tested (three-point arc distance, mirrored ends, hoop position).
+- **Team stats side by side:** field goals, 3-pointers, free throws,
+  rebounds, assists, steals, blocks, turnovers, points in the paint, fast
+  break, second chance, points off turnovers, bench points and biggest lead,
+  with the leading side highlighted (for turnovers, fewer leads).
+- **Game leaders** and a full **box score** per team, starters and bench, with
+  minutes, points, rebounds, assists, shooting splits, steals, blocks,
+  turnovers and plus/minus.
+
+### An easier slip
+- **Slip stays in view:** browse on the left, the slip on the right, and a
+  one-line summary with a Clear button at the top, so a bet is never out of
+  sight after you add it.
+- **One tap each way:** tap a price to add it (it gets a ✓), tap again to
+  remove it, or hit the ✕ on any bet in the slip. A second price for the same
+  player replaces the first.
+- **One tap for a whole idea:** each suggested slip has an "Add to slip" button
+  that loads all its bets at once.
+- **Tappable chips instead of dropdowns** for the projection, the game to
+  browse and the live game, and an in-app **How it works** page that shows
+  the methodology and this changelog.
+
+### Explaining it, and better player search
+- **`docs/METHODOLOGY.md`:** how the predictions work, written to be said out
+  loud. A 30-second version, a two-minute version with a worked example from
+  real data, the details, the evidence so far (including that nothing has
+  settled yet), what it can't do, and answers to the questions people ask.
+- **Type-ahead player search:** the Players tab is now a dropdown that
+  filters as you type, and it understands plain spellings, so "doncic" finds
+  Dončić.
+
+### Foundation for rebounds, assists and 3-pointers
+- **One registry for four stats** (`models/nba_stat_model.py`): points,
+  rebounds, assists and 3-pointers each know their game-log column, Odds
+  API market, label and spread, and share one rolling-average projection.
+- **Measured, not assumed:** each stat's spread and same-game correlations
+  were fitted from three seasons of logs. Rebounds and assists turned out
+  steadier than I had guessed (spread about 11 against 7.8 for points), and
+  every same-game correlation is tiny (never above 0.04). Bets on different
+  stats in one game are treated as independent, since nobody has measured
+  that.
+- **Ledger generalized:** rows now carry a `stat` and a `book`, a row's
+  identity includes its line, and settlement reads the right box-score
+  column per stat. Older ledger files are upgraded in place before any new
+  row is written, so the header and rows can't disagree.
+
 ## 2026-11-04
 
 ### Sportsbook-style look, player lookup, and a logo

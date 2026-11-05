@@ -39,20 +39,18 @@ def render() -> None:
     if history.empty:
         st.warning("Game logs aren't available right now, so players can't be looked up.")
         return
-    query = st.text_input("Search any player", placeholder="e.g. Jalen Brunson",
-                          key="player_query")
-    if not query.strip():
-        st.caption("Type part of a name. You'll see their season averages, recent games, "
-                   "and how often they've cleared a number.")
+    options = lookup.player_options(history, nba_stats.current_season(dt.date.today())) \
+        or lookup.player_options(history)
+    player_id = st.selectbox(
+        "Search any player", list(options), index=None, format_func=options.get,
+        placeholder="Start typing a name…", key="player_pick",
+        help="Matches as you type. Accents don't matter: “doncic” finds Dončić.")
+    if player_id is None:
+        st.caption("Pick a player to see their season averages, recent games, and how "
+                   "often they've cleared a number.")
         return
-    found = lookup.search(history, query)
-    if found.empty:
-        st.info(f"No player matches “{query}”.")
-        return
-    labels = {int(r.player_id): f"{r.player_name} · {r.team}" for r in found.itertuples()}
-    player_id = st.selectbox("Player", list(labels), format_func=labels.get,
-                             key="player_pick") if len(labels) > 1 else next(iter(labels))
-    _profile(history, player_id, found.set_index("player_id").loc[player_id])
+    latest = history[history["player_id"] == player_id].sort_values("game_date").iloc[-1]
+    _profile(history, player_id, latest)
 
 
 def _profile(history: pd.DataFrame, player_id: int, row: pd.Series) -> None:

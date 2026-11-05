@@ -19,13 +19,17 @@ MIN_PROJECTED_POINTS = 10.0
 MIN_PRIOR_GAMES = 10
 
 
-def standardised_misses(games: pd.DataFrame, dispersion: float) -> pd.DataFrame:
-    """Rows with a z column: (pts - pred_ewma) / sd. `games` needs the
-    columns add_baseline_predictions produces plus game_id, team and pts."""
-    rated = games[(games["pred_ewma"] >= MIN_PROJECTED_POINTS)
+def standardised_misses(games: pd.DataFrame, dispersion: float, stat: str = "pts",
+                        min_projection: float = MIN_PROJECTED_POINTS) -> pd.DataFrame:
+    """Rows with a z column: (stat - pred_ewma) / sd. `games` needs the
+    columns add_baseline_predictions produces for that stat, plus game_id and
+    team. `min_projection` keeps out players too small for the stat to be
+    anything but noise (10 for points; use a lower bar for rebounds or
+    assists)."""
+    rated = games[(games["pred_ewma"] >= min_projection)
                   & (games["n_prior"] >= MIN_PRIOR_GAMES)].copy()
     variance = rated["pred_ewma"] + rated["pred_ewma"] ** 2 / dispersion
-    rated["z"] = (rated["pts"] - rated["pred_ewma"]) / np.sqrt(variance)
+    rated["z"] = (rated[stat] - rated["pred_ewma"]) / np.sqrt(variance)
     return rated[["game_id", "team", "z"]]
 
 

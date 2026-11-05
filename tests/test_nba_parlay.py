@@ -194,6 +194,15 @@ def test_a_slip_with_two_value_legs_has_the_joint_chance_of_both():
     assert 0 < top["Chance %"] < 100 and top["EV %"] > 0
 
 
+def test_each_suggested_slip_says_which_bets_it_is_made_of():
+    pool = worthwhile_pool()
+    top = nba_parlay.suggest_parlays(pool).iloc[0]
+    chosen = pool.loc[top["bets"]]
+    assert len(chosen) == top["Legs"]
+    assert set(chosen["Player"]) == {"Jaylen Brown", "Other Guy"}
+    assert "  +  ".join(chosen["Leg"]) == top["Slip"]
+
+
 def test_with_value_in_only_one_game_there_is_nothing_to_combine():
     only_one = nba_parlay.candidate_legs(
         ledger(mean=29.5), pd.DataFrame(columns=nba_alt.COLUMNS), "2026-11-04", "minutes-v1")

@@ -22,10 +22,18 @@ from scipy import stats
 from .ev import ev_per_unit
 from .odds_math import american_to_decimal
 
-# measured on 2023-24 to 2025-26 game logs (about 60,000 teammate pairs and
-# 70,000 opposing pairs); see scripts/nba_correlation_report.py
-TEAMMATE_RHO = -0.026
-OPPONENT_RHO = 0.023
+# Measured on 2023-24 to 2025-26 game logs (about 60,000 teammate pairs and
+# 70,000 opposing pairs per stat); see scripts/nba_correlation_report.py.
+# (teammates, opponents) for two bets on the SAME stat in one game. Every one
+# is small. Bets on different stats are treated as independent: nobody has
+# measured those, and guessing would be worse than saying so.
+CORRELATIONS = {
+    "points": (-0.026, 0.023),
+    "rebounds": (-0.005, 0.023),
+    "assists": (-0.025, 0.014),
+    "threes": (-0.002, 0.004),
+}
+TEAMMATE_RHO, OPPONENT_RHO = CORRELATIONS["points"]
 _SEED = 7
 
 
@@ -38,11 +46,13 @@ class Leg:
     prob: float              # the model's chance this leg hits
     american_odds: float
     label: str = ""
+    stat: str = "points"
 
 
-def joint_probability(legs: list[Leg], teammate_rho: float = TEAMMATE_RHO,
-                      opponent_rho: float = OPPONENT_RHO) -> float:
-    """Chance every leg hits."""
+def joint_probability(legs: list[Leg], teammate_rho: float | None = None,
+                      opponent_rho: float | None = None) -> float:
+    """Chance every leg hits. Passing a correlation overrides the measured
+    one for every stat; leaving it out uses the measured value per stat."""
     _validate(legs)
     ordered = sorted(legs, key=lambda leg: leg.event_id)
     joint = 1.0
@@ -72,8 +82,8 @@ def fair_american(probability: float) -> int:
     return round(-100.0 * p / (1.0 - p)) if p >= 0.5 else round(100.0 * (1.0 - p) / p)
 
 
-def summarise(legs: list[Leg], teammate_rho: float = TEAMMATE_RHO,
-              opponent_rho: float = OPPONENT_RHO) -> dict:
+def summarise(legs: list[Leg], teammate_rho: float | None = None,
+              opponent_rho: float | None = None) -> dict:
     """Everything the builder shows for a slip."""
     joint = joint_probability(legs, teammate_rho, opponent_rho)
     payout = decimal_odds(legs)
@@ -98,12 +108,22 @@ def _validate(legs: list[Leg]) -> None:
         raise ValueError("every leg's probability must be strictly between 0 and 1")
 
 
-def _game_probability(legs: list[Leg], teammate_rho: float, opponent_rho: float) -> float:
+def _correlation(a: Leg, b: Leg, teammate_rho: float | None, opponent_rho: float | None) -> float:
+    """How two bets in one game move together."""
+    if a.stat != b.stat and teammate_rho is None and opponent_rho is None:
+        return 0.0
+    measured_teammates, measured_opponents = CORRELATIONS.get(a.stat, CORRELATIONS["points"])
+    if a.team == b.team:
+        return measured_teammates if teammate_rho is None else teammate_rho
+    return measured_opponents if opponent_rho is None else opponent_rho
+
+
+def _game_probability(legs: list[Leg], teammate_rho: float | None,
+                      opponent_rho: float | None) -> float:
     if len(legs) == 1:
         return legs[0].prob
     signs = np.array([-1.0 if leg.is_over else 1.0 for leg in legs])
-    base = np.array([[1.0 if i == j else
-                      teammate_rho if a.team == b.team else opponent_rho
+    base = np.array([[1.0 if i == j else _correlation(a, b, teammate_rho, opponent_rho)
                       for j, b in enumerate(legs)] for i, a in enumerate(legs)])
     covariance = base * np.outer(signs, signs)
     if np.linalg.eigvalsh(covariance).min() <= 1e-9:

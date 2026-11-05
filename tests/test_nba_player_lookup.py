@@ -44,6 +44,30 @@ def test_nothing_typed_or_nothing_found_gives_an_empty_result():
     assert lookup.search(GAMES, "zzzz").empty
 
 
+def test_accents_are_stripped_for_a_plain_spelling():
+    assert lookup.plain_letters("Luka Dončić") == "Luka Doncic"
+    assert lookup.plain_letters("Nikola Jokić") == "Nikola Jokic"
+    assert lookup.plain_letters("Jalen Brunson") == "Jalen Brunson"
+
+
+def test_type_ahead_options_list_everyone_most_played_first_with_their_team():
+    options = lookup.player_options(GAMES)
+    assert list(options.values())[0].startswith("Jaylen Brown")        # most minutes
+    assert options[1] == "Jaylen Brown · PHI"                           # latest team
+    assert set(options) == {1, 2, 3, 4}
+
+
+def test_an_accented_name_also_shows_its_plain_spelling_so_typing_it_matches():
+    assert lookup.player_options(GAMES)[3] == "Luka Dončić · LAL  (Luka Doncic)"
+
+
+def test_options_can_be_limited_to_one_season():
+    old = pd.concat([GAMES, pd.DataFrame([log(7, "Retired Guy", "BOS", "2024-01-01", 10,
+                                                 season="2023-24")])])
+    assert 7 not in lookup.player_options(old, season="2025-26")
+    assert 7 in lookup.player_options(old)
+
+
 def test_season_averages_are_per_game_means():
     brown = lookup.player_games(GAMES, 1)
     averages = lookup.season_averages(brown)

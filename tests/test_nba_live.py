@@ -29,6 +29,104 @@ BOX = {"game": {
 }}
 
 
+DETAILED_BOX = {"game": {
+    "period": 2,
+    "awayTeam": {
+        "teamTricode": "PHI",
+        "periods": [{"period": 1, "score": 30}, {"period": 2, "score": 12},
+                    {"period": 3, "score": 0}, {"period": 4, "score": 0}],
+        "statistics": {"fieldGoalsMade": 15, "fieldGoalsAttempted": 27, "assists": 10,
+                       "pointsInThePaint": 12, "pointsFastBreak": 4, "benchPoints": 8,
+                       "turnovers": 7, "notAStatWeKeep": 99},
+        "players": [{
+            "personId": 1, "name": "Tyrese Maxey", "played": "1", "oncourt": "1",
+            "starter": "1",
+            "statistics": {"points": 18, "reboundsTotal": 3, "assists": 4,
+                           "minutes": "PT20M30.00S", "fieldGoalsMade": 7,
+                           "fieldGoalsAttempted": 12, "threePointersMade": 3,
+                           "threePointersAttempted": 6, "freeThrowsMade": 1,
+                           "freeThrowsAttempted": 2, "steals": 1, "blocks": 0,
+                           "turnovers": 2, "plusMinusPoints": 5.0}}]},
+    "homeTeam": {
+        "teamTricode": "DET",
+        "periods": [{"period": 1, "score": 28}, {"period": 2, "score": 9},
+                    {"period": 3, "score": 0}, {"period": 4, "score": 0}],
+        "statistics": {"fieldGoalsMade": 14, "fieldGoalsAttempted": 26},
+        "players": []},
+}}
+
+
+def test_a_player_line_carries_the_full_shooting_split_and_role():
+    maxey = nba_live.parse_boxscore(DETAILED_BOX)[1]
+    assert maxey.starter is True
+    assert (maxey.fg_made, maxey.fg_att) == (7, 12)
+    assert (maxey.threes, maxey.three_att) == (3, 6)
+    assert (maxey.ft_made, maxey.ft_att) == (1, 2)
+    assert (maxey.steals, maxey.blocks, maxey.turnovers, maxey.plus_minus) == (1, 0, 2, 5.0)
+
+
+def test_a_player_line_without_the_extra_stats_falls_back_to_zeros():
+    simple = nba_live.parse_boxscore(BOX)[1]
+    assert simple.fg_made == 0 and simple.starter is False and simple.plus_minus == 0.0
+
+
+def test_team_stats_keep_only_the_numbers_we_compare():
+    stats = nba_live.parse_team_stats(DETAILED_BOX)
+    assert stats["PHI"]["fieldGoalsMade"] == 15 and stats["PHI"]["pointsInThePaint"] == 12
+    assert "notAStatWeKeep" not in stats["PHI"]
+    assert stats["DET"] == {"fieldGoalsMade": 14.0, "fieldGoalsAttempted": 26.0}
+
+
+def test_period_scores_cover_only_the_periods_played_so_far():
+    assert nba_live.parse_period_scores(DETAILED_BOX) == {"PHI": [30, 12], "DET": [28, 9]}
+
+
+def test_no_box_score_means_no_team_stats_or_period_scores():
+    assert nba_live.parse_team_stats({}) == {}
+    assert nba_live.parse_period_scores({}) == {}
+
+
+SHOT_PLAYS = {"game": {"actions": [
+    {"isFieldGoal": 1, "teamTricode": "PHI", "playerNameI": "J. Embiid", "shotResult": "Made",
+     "x": 8.1, "y": 52.6, "period": 1, "shotDistance": 2.7, "actionType": "2pt",
+     "description": "Embiid Layup"},
+    {"isFieldGoal": 1, "teamTricode": "DET", "playerNameI": "D. Robinson",
+     "shotResult": "Missed", "x": 81.1, "y": 7.7, "period": 2, "shotDistance": 24.5,
+     "actionType": "3pt", "description": "MISS Robinson 3PT"},
+    {"isFieldGoal": 1, "teamTricode": "PHI", "shotResult": "Made", "x": None, "y": None},
+    {"isFieldGoal": 0, "actionType": "rebound", "description": "REBOUND"},
+]}}
+
+
+def test_shots_have_their_location_result_and_shooter():
+    layup, three = nba_live.parse_shots(SHOT_PLAYS)
+    assert (layup.team, layup.player, layup.made, layup.is_three) == \
+        ("PHI", "J. Embiid", True, False)
+    assert (layup.x, layup.y, layup.period, layup.distance) == (8.1, 52.6, 1, 2.7)
+    assert (three.made, three.is_three, three.period) == (False, True, 2)
+
+
+def test_shots_without_a_location_and_non_shots_are_left_out():
+    assert len(nba_live.parse_shots(SHOT_PLAYS)) == 2
+    assert nba_live.parse_shots({}) == []
+
+
+def test_the_scoreboard_reads_timeouts_and_bonus_for_the_header():
+    payload = {"scoreboard": {"games": [{
+        "gameId": "g", "gameStatus": 2, "gameStatusText": "Q2", "period": 2, "gameClock": "",
+        "awayTeam": {"teamTricode": "A", "score": 1, "timeoutsRemaining": 3, "inBonus": "1"},
+        "homeTeam": {"teamTricode": "B", "score": 2, "timeoutsRemaining": 5, "inBonus": None}}]}}
+    game = nba_live.parse_scoreboard(payload)[0]
+    assert (game.away_timeouts, game.home_timeouts) == (3, 5)
+    assert game.away_bonus is True and game.home_bonus is False
+
+
+def test_a_scoreboard_without_timeout_data_defaults_to_none_left():
+    game = nba_live.parse_scoreboard(SCOREBOARD)[0]
+    assert (game.away_timeouts, game.home_timeouts) == (0, 0)
+    assert game.away_bonus is False
+
+
 def test_durations_become_minutes_and_a_game_clock():
     assert nba_live.minutes_from_duration("PT13M51.00S") == pytest.approx(13.85)
     assert nba_live.minutes_from_duration("PT00M30.00S") == pytest.approx(0.5)

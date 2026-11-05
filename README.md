@@ -71,6 +71,10 @@ less.
 
 ## How it works
 
+Want it explained to someone? [docs/METHODOLOGY.md](docs/METHODOLOGY.md)
+has a 30-second version, a two-minute version with a worked example, the
+details, the evidence so far, and the limits.
+
 - **Baselines first.** `scripts/nba_baseline_eval.py` scores four
   rolling-average predictors walk-forward over a full season (points MAE
   is about 5.2 for all of them). Every prediction uses only earlier

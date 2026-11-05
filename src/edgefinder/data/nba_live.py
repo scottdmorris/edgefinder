@@ -29,6 +29,10 @@ class LiveGame:
     home: str
     away_score: int
     home_score: int
+    away_timeouts: int = 0
+    home_timeouts: int = 0
+    away_bonus: bool = False
+    home_bonus: bool = False
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,30 @@ class PlayerLine:
     minutes: float
     played: bool
     on_court: bool
+    starter: bool = False
+    fg_made: int = 0
+    fg_att: int = 0
+    threes: int = 0          # 3-pointers made
+    three_att: int = 0
+    ft_made: int = 0
+    ft_att: int = 0
+    steals: int = 0
+    blocks: int = 0
+    turnovers: int = 0
+    plus_minus: float = 0.0
+
+
+@dataclass(frozen=True)
+class Shot:
+    team: str
+    player: str
+    made: bool
+    x: float                 # 0-100 along the court's length
+    y: float                 # 0-100 across its width
+    period: int
+    distance: float          # feet from the basket
+    is_three: bool
+    description: str
 
 
 @dataclass(frozen=True)
@@ -129,7 +157,10 @@ def parse_scoreboard(payload: dict) -> list[LiveGame]:
             status_text=game["gameStatusText"].strip(), period=int(game.get("period", 0)),
             clock=clock_from_duration(game.get("gameClock", "")),
             away=away["teamTricode"], home=home["teamTricode"],
-            away_score=int(away["score"]), home_score=int(home["score"])))
+            away_score=int(away["score"]), home_score=int(home["score"]),
+            away_timeouts=int(away.get("timeoutsRemaining") or 0),
+            home_timeouts=int(home.get("timeoutsRemaining") or 0),
+            away_bonus=bool(away.get("inBonus")), home_bonus=bool(home.get("inBonus"))))
     return games
 
 
@@ -146,8 +177,73 @@ def parse_boxscore(payload: dict) -> dict[int, PlayerLine]:
                 team=team["teamTricode"], points=int(stats["points"]),
                 rebounds=int(stats["reboundsTotal"]), assists=int(stats["assists"]),
                 minutes=minutes_from_duration(stats.get("minutes", "")),
-                played=player.get("played") == "1", on_court=player.get("oncourt") == "1")
+                played=player.get("played") == "1", on_court=player.get("oncourt") == "1",
+                starter=player.get("starter") == "1",
+                fg_made=int(stats.get("fieldGoalsMade", 0)),
+                fg_att=int(stats.get("fieldGoalsAttempted", 0)),
+                threes=int(stats.get("threePointersMade", 0)),
+                three_att=int(stats.get("threePointersAttempted", 0)),
+                ft_made=int(stats.get("freeThrowsMade", 0)),
+                ft_att=int(stats.get("freeThrowsAttempted", 0)),
+                steals=int(stats.get("steals", 0)), blocks=int(stats.get("blocks", 0)),
+                turnovers=int(stats.get("turnovers", 0)),
+                plus_minus=float(stats.get("plusMinusPoints", 0.0)))
     return lines
+
+
+# the team numbers worth comparing, straight from the box score
+TEAM_STAT_FIELDS = (
+    "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted",
+    "freeThrowsMade", "freeThrowsAttempted", "reboundsTotal", "reboundsOffensive", "assists",
+    "steals", "blocks", "turnovers", "pointsInThePaint", "pointsFastBreak",
+    "pointsSecondChance", "pointsFromTurnovers", "benchPoints", "biggestLead",
+    "foulsPersonal", "points",
+)
+
+
+def parse_team_stats(payload: dict) -> dict[str, dict[str, float]]:
+    """Each team's comparison numbers, keyed by tricode. A number the feed
+    doesn't carry (it varies by game state) is simply left out."""
+    game = payload.get("game", {})
+    teams = {}
+    for side in ("awayTeam", "homeTeam"):
+        team = game.get(side)
+        if team:
+            stats = team.get("statistics", {})
+            teams[team["teamTricode"]] = {
+                field: float(stats[field]) for field in TEAM_STAT_FIELDS if field in stats}
+    return teams
+
+
+def parse_period_scores(payload: dict) -> dict[str, list[int]]:
+    """Points by period for each team, keyed by tricode, covering only the
+    periods that have been played or are being played."""
+    game = payload.get("game", {})
+    current = int(game.get("period") or 0)
+    scores = {}
+    for side in ("awayTeam", "homeTeam"):
+        team = game.get(side)
+        if team:
+            scores[team["teamTricode"]] = [
+                int(p["score"]) for p in team.get("periods", [])
+                if int(p["period"]) <= max(current, 1)]
+    return scores
+
+
+def parse_shots(payload: dict) -> list[Shot]:
+    """Every field-goal attempt that has a court location, in game order."""
+    shots = []
+    for action in payload.get("game", {}).get("actions", []):
+        if action.get("isFieldGoal") != 1 or action.get("x") is None or action.get("y") is None:
+            continue
+        shots.append(Shot(
+            team=action.get("teamTricode") or "", player=action.get("playerNameI") or "",
+            made=action.get("shotResult") == "Made", x=float(action["x"]), y=float(action["y"]),
+            period=int(action.get("period", 1)),
+            distance=float(action.get("shotDistance") or 0.0),
+            is_three=action.get("actionType") == "3pt",
+            description=(action.get("description") or "").strip()))
+    return shots
 
 
 def fetch_games() -> list[LiveGame]:
@@ -167,6 +263,30 @@ def fetch_plays(game_id: str, away: str, home: str) -> list[Play]:
         return parse_playbyplay(payload, away, home)
     except Exception as exc:
         raise LiveDataError(f"The play-by-play is unavailable ({type(exc).__name__})") from None
+
+
+@dataclass(frozen=True)
+class GameDetail:
+    """Everything the game center shows, from one box score and one
+    play-by-play fetch."""
+    players: dict[int, PlayerLine]
+    team_stats: dict[str, dict[str, float]]
+    period_scores: dict[str, list[int]]
+    shots: list[Shot]
+    plays: list[Play]
+
+
+def fetch_detail(game_id: str, away: str, home: str) -> GameDetail:
+    from nba_api.live.nba.endpoints import boxscore, playbyplay
+    try:
+        box = boxscore.BoxScore(game_id, timeout=REQUEST_TIMEOUT).get_dict()
+        plays = playbyplay.PlayByPlay(game_id, timeout=REQUEST_TIMEOUT).get_dict()
+        return GameDetail(
+            players=parse_boxscore(box), team_stats=parse_team_stats(box),
+            period_scores=parse_period_scores(box), shots=parse_shots(plays),
+            plays=parse_playbyplay(plays, away, home))
+    except Exception as exc:
+        raise LiveDataError(f"The game details are unavailable ({type(exc).__name__})") from None
 
 
 def fetch_box(game_id: str) -> dict[int, PlayerLine]:
