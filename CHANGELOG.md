@@ -4,6 +4,21 @@ Newest first. Dates are when the work was committed.
 
 ## 2026-11-04
 
+### Parlay builder
+- **Parlay builder view:** pick over, under and X+ legs from the day's
+  lines for either model and see the chance all hit, the break-even odds
+  and the expected value. Each leg's chance is the model blended 30/70
+  toward the market.
+- **Same-game correlation, measured instead of assumed:** teammates'
+  points correlate at -0.026 and opponents' at +0.023, consistent across
+  three seasons (about 60,000 and 70,000 pairs). Same-game legs are
+  priced with a Gaussian copula using those numbers; the effect on
+  points-only slips is small, and the UI says so.
+- **Suggested slips:** built only from legs worth betting on their own,
+  with the same guardrails as X+ picks, one leg per game so legs are
+  independent.
+- `scripts/nba_correlation_report.py` reproduces the correlations.
+
 ### Ball Knowledge (rebrand)
 - The project is now **Ball Knowledge**, basketball only. The dashboard
   shows just the NBA view; the MLB, soccer and UFC views, bet evaluator,
@@ -44,7 +59,8 @@ Newest first. Dates are when the work was committed.
   error in the minutes projection.
 - Nothing has settled yet, so neither model has a record. The first
   results arrive on 2026-11-05.
-- No NBA moneyline, spread, or props parlay builder yet.
+- No NBA moneyline or spread. The parlay builder doesn't cover bets tied
+  to a game's total or result, or FanDuel's own same-game slip price.
 
 ## 2026-08-21
 - Initial EdgeFinder: MLB, soccer and UFC betting-value dashboard for

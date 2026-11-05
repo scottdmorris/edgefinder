@@ -5,9 +5,10 @@ question honestly: does a points model add anything beyond FanDuel's own
 price? Every projection is paper-tracked and scored against real results
 before anyone is asked to trust it.
 
-The plan is a product for building NBA parlays on top of those
-projections. What exists today is the measurement engine and a read-only
-dashboard; the parlay builder and accounts are next (see Roadmap).
+The product is a parlay builder for NBA player props, built on those
+projections. What exists today is the measurement engine, a read-only
+tracking dashboard, and the parlay builder; accounts and hosting are next
+(see Roadmap).
 
 ## Quick start
 
@@ -28,7 +29,23 @@ environment variable. The snapshot job (below) uses it.
 
 ## What's inside
 
-The dashboard has one view, the NBA player-points tracker:
+The dashboard has two views.
+
+**Parlay builder.** Pick legs (over, under, or X+ points) from the day's
+lines and see the chance they all hit, the break-even odds, and the
+expected value. Each leg's chance is the model's number blended 30/70
+toward the market's, because the raw model is overconfident and a parlay
+multiplies that. Legs from the same game are priced with a Gaussian
+copula using correlations measured from three seasons of game logs
+(`scripts/nba_correlation_report.py`): teammates' points move very
+slightly against each other (-0.026) and opponents' very slightly
+together (+0.023), so for points alone the effect is small. It also
+suggests slips built only from legs that are each worth betting alone,
+one per game so they are independent. The payout shown is each leg's
+price multiplied; FanDuel prices same-game slips itself and usually pays
+less.
+
+**Picks & tracking** is the NBA player-points tracker:
 
 - **Suggested bets:** positive-expected-value player-points over/unders,
   best first, with how many models agree.
@@ -92,9 +109,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1  # schedu
 1. **Evidence.** A few weeks of settled results decide whether either
    model beats the market. Nothing is sold until that's known.
 2. **Injury and lineup data.** The biggest remaining lever on minutes.
-3. **Parlay builder for props.** Legs from the same game are correlated
-   (a blowout hurts every starter's minutes), so it has to price the
-   combination, not multiply the legs.
+3. **Parlay builder, next steps.** Bets tied to the same game's total or
+   result (a player over plus the game over) are strongly correlated and
+   aren't covered yet; neither is FanDuel's own same-game slip price.
 4. **Accounts and hosting.** Needs a real database, a hosted scheduler,
    and a data licence that allows redistribution, since the free Odds API
    tier is for personal use.

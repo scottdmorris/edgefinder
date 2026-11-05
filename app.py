@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 import streamlit as st
 
 from edgefinder.data import odds_api
-from edgefinder.ui import nba_tab
+from edgefinder.ui import nba_parlay_tab, nba_tab
 
 st.set_page_config(page_title="Ball Knowledge", page_icon="🏀", layout="wide")
 
@@ -32,7 +32,11 @@ def render_sidebar() -> None:
 
 def main() -> None:
     render_sidebar()
-    nba_tab.render()
+    parlay, picks = st.tabs(["🎰 Parlay builder", "🏀 Picks & tracking"])
+    with parlay:
+        nba_parlay_tab.render()
+    with picks:
+        nba_tab.render()
 
 
 if __name__ == "__main__":
