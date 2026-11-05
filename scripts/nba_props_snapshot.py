@@ -5,6 +5,9 @@ evening): the policy in nba_snapshot_plan decides what is due, so
 re-running never spends a request twice on the same job. Each early
 snapshot also writes every registered model's view of every line to the
 paper ledger, so the models are judged head to head on the same lines.
+The same games' liquid Kalshi prices (points, rebounds, assists, threes) are
+recorded at the same moment, with book="kalshi". Kalshi spends no Odds API
+requests and its failure never stops the FanDuel work.
 
 Usage:  python scripts/nba_props_snapshot.py [--dry-run] [--backfill-models] [--log-file PATH]
   --dry-run          show what would be fetched or recorded; spends and writes nothing
@@ -24,8 +27,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_injuries, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
-from edgefinder.models import nba_context_points, nba_minutes_points, nba_points  # noqa: E402
-from edgefinder.tracking import nba_alt, nba_recording  # noqa: E402
+from edgefinder.models import (  # noqa: E402
+    nba_context_points, nba_minutes_points, nba_points, nba_stat_model)
+from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_recording  # noqa: E402
 
 log = logging.getLogger("nba_props_snapshot")
 
@@ -47,14 +51,17 @@ def configure_logging(log_file: Path | None) -> None:
                         datefmt="%Y-%m-%d %H:%M", handlers=handlers or None)
 
 
-def build_models(today: dt.date) -> list[nba_recording.RegisteredModel]:
-    """Every model that prices tonight's lines. The first is the original
-    rolling-average model, built exactly as before (two seasons of history)."""
-    season = nba_stats.current_season(today)
-    games = pd.concat(
+def load_history(today: dt.date) -> pd.DataFrame:
+    return pd.concat(
         [nba_stats.load_season(s, today=today)
          for s in nba_stats.recent_seasons(today, HISTORY_SEASONS)],
         ignore_index=True)
+
+
+def build_models(today: dt.date, games: pd.DataFrame) -> list[nba_recording.RegisteredModel]:
+    """Every model that prices tonight's lines. The first is the original
+    rolling-average model, built exactly as before (two seasons of history)."""
+    season = nba_stats.current_season(today)
     recent = games[games["season"].isin(nba_stats.recent_seasons(today, 2))]
 
     def rolling_average(event: dict, names: list[str]) -> dict[str, dict]:
@@ -79,12 +86,42 @@ class Models:
 
     def __init__(self, today: dt.date):
         self._today = today
+        self._games: pd.DataFrame | None = None
         self._models: list[nba_recording.RegisteredModel] | None = None
+
+    def games(self) -> pd.DataFrame:
+        if self._games is None:
+            self._games = load_history(self._today)
+        return self._games
 
     def get(self) -> list[nba_recording.RegisteredModel]:
         if self._models is None:
-            self._models = build_models(self._today)
+            self._models = build_models(self._today, self.games())
         return self._models
+
+    def kalshi_models(self) -> list[nba_kalshi_ledger.KalshiModel]:
+        """The rolling average prices all four Kalshi stats; the points-only
+        challengers price Kalshi points alongside it."""
+        season = nba_stats.current_season(self._today)
+        recent = self.games()[self.games()["season"].isin(
+            nba_stats.recent_seasons(self._today, 2))]
+
+        def rolling_average(event: dict, stat: str, names: list[str]) -> dict[str, dict]:
+            return nba_stat_model.project_event(
+                nba_stat_model.STATS[stat], event, names, recent, season=season,
+                game_date=nba_snapshot_plan.tip_date(event))
+
+        def points_only(model: nba_recording.RegisteredModel):
+            return lambda event, stat, names: model.project(event, names)
+
+        models = [nba_kalshi_ledger.KalshiModel(
+            nba_points.MODEL_VERSION,
+            {key: stat.dispersion for key, stat in nba_stat_model.STATS.items()},
+            rolling_average)]
+        models += [
+            nba_kalshi_ledger.KalshiModel(m.version, {"points": m.dispersion}, points_only(m))
+            for m in self.get() if m.version != nba_points.MODEL_VERSION]
+        return models
 
 
 def record_lines(event: dict, lines: list[dict], models: Models) -> dict[str, int]:
@@ -118,6 +155,23 @@ def record_alt_lines(event: dict, models: Models) -> None:
 
 def describe(added: dict[str, int]) -> str:
     return ", ".join(f"{version} +{count}" for version, count in added.items())
+
+
+def record_kalshi(events: list[dict], models: Models) -> None:
+    """Record Kalshi prices for the games taking their early snapshot.
+
+    Kalshi costs no Odds API requests, so it ignores the quota reserve. It
+    runs after the FanDuel work, and nothing it raises may fail the run."""
+    try:
+        rows = nba_kalshi_ledger.fetch_kalshi_rows()   # one call per series
+        if not rows:
+            return
+        added = nba_kalshi_ledger.record_kalshi(
+            rows, events, models.kalshi_models(),
+            recorded_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        log.info("Kalshi ledger %s", describe(added))
+    except Exception:
+        log.exception("Kalshi snapshot failed; the FanDuel snapshot is unaffected")
 
 
 def backfill_models(models: Models, now: dt.datetime, dry_run: bool) -> None:
@@ -184,6 +238,9 @@ def main() -> None:
         if task.phase == "early":
             record_alt_lines(task.event, models)
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
+    early_events = [task.event for task in tasks if task.phase == "early"]
+    if early_events:
+        record_kalshi(early_events, models)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,43 @@ Newest first. Dates are when the work was committed.
   and suggested slips shown as cards (player photo, bet, odds, chance and
   payout) instead of a run-on line.
 
+### Kalshi prediction-market prices (data client only)
+- **New `edgefinder.data.kalshi`**: reads Kalshi's public market data (no
+  account or key) for player points, rebounds, assists and 3-pointers.
+  Each "35+ points" contract becomes a row with the player, game, threshold,
+  yes/no bid and ask, spread and volume, and an `is_liquid` flag (both sides
+  quoted, spread at most 10 cents, at least 25 contracts traded).
+- **Priced like a prop line.** "N+" becomes an over at N - 0.5 at the yes
+  ask, and the no side becomes the under at the no ask, in the same shape the
+  FanDuel parser produces, tagged `book="kalshi"`.
+- **Prices are before Kalshi's trading fees**, and books are often thin and
+  wide (a 5-cent bid against a 33-cent ask is normal), so treat them as
+  indications, not as prices you can trade at.
+- Not wired into the app yet; nothing changes on screen.
+
+### Kalshi prices in the paper ledger
+- **The snapshot job now records Kalshi too.** For each game taking its early
+  snapshot (the same 150-240 minutes before tip-off window as FanDuel, no new
+  timing), liquid Kalshi contracts for points, rebounds, assists and 3-pointers
+  are written to the ledger with `book="kalshi"` and the right `stat`, so they
+  can be graded and bet-built later. New module
+  `edgefinder.tracking.nba_kalshi_ledger`.
+- **Joined to the game by teams and date.** A Kalshi ticker names the away and
+  home tricodes and the date; it joins the scheduled game with those teams on
+  that Eastern date. A code that matches no scheduled team is skipped and
+  logged, never guessed. Thin or one-sided books (`is_liquid` false) are not
+  recorded.
+- **Safe to re-run, safe to fail.** The ledger key is (game, player, line,
+  model, stat, book), so a repeat run adds nothing and the early price stands.
+  Kalshi is fetched once per series after the FanDuel work; if it fails, one
+  warning line is logged and FanDuel is untouched. It costs no Odds API
+  requests, so the request reserve does not apply to it.
+- **Rolling-average model on all four stats**, using each stat's own
+  dispersion; the points-only models also price Kalshi points. Kalshi prices
+  are before trading fees, so Kalshi pick EVs flatter the bettor.
+- **Parlay legs stay FanDuel points.** The over/under leg builder now ignores
+  other books and stats in the shared ledger.
+
 ### Injuries and opponent context (a third model, `context-v1`)
 - **Measured on past data first.** Following the same protocol as the minutes
   model (choose on 2024-25, score 2025-26 once), adding who's out, the
