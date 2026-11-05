@@ -50,7 +50,7 @@ GLOSSARY = """
 
 
 def render() -> None:
-    ledger = nba_paper.load_ledger()
+    ledger = nba_paper.load_fanduel_ledger()
     if ledger.empty:
         st.info("No lines recorded yet. The scheduled job fills this in once "
                 "tonight's FanDuel lines are posted.")
@@ -118,7 +118,7 @@ def selected_legs() -> pd.DataFrame | None:
     None when nothing is picked or the lines aren't available."""
     picked = st.session_state.get("parlay_legs")
     date, version = st.session_state.get("parlay_date"), st.session_state.get("parlay_model")
-    ledger = nba_paper.load_ledger()
+    ledger = nba_paper.load_fanduel_ledger()
     if not picked or date is None or version is None or ledger.empty:
         return None
     candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)

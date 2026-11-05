@@ -249,6 +249,12 @@ def scope(ledger: pd.DataFrame, model_version: str | None = None, stat: str | No
     return ledger
 
 
+def load_fanduel_ledger(path: Path | None = None) -> pd.DataFrame:
+    """The ledger's FanDuel rows only. The record views read this so prices from other
+    books (Kalshi) never count towards the per-model FanDuel record or accuracy."""
+    return scope(load_ledger(path), book=DEFAULT_BOOK)
+
+
 def summary(ledger: pd.DataFrame, model_version: str | None = None, stat: str | None = None,
             book: str | None = None) -> dict:
     picks = scope(ledger, model_version, stat, book)

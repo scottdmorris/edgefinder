@@ -495,3 +495,13 @@ def test_winning_profit_per_unit_at_each_price(odds, profit):
                            NO_SNAPSHOTS, TODAY)
     assert out.loc[0, "pnl_units"] == pytest.approx(profit)
     assert american_to_decimal(odds) - 1.0 == pytest.approx(profit)
+
+
+def test_the_fanduel_ledger_leaves_out_other_books(tmp_path):
+    path = tmp_path / "ledger.csv"
+    nba_paper.save_ledger(frame(row(player="A", book="fanduel"),
+                                row(player="B", book="kalshi"),
+                                row(player="C", book="fanduel", stat="rebounds")), path)
+    kept = nba_paper.load_fanduel_ledger(path)
+    assert sorted(kept["player"]) == ["A", "C"]          # Kalshi's B is gone, every stat stays
+    assert set(kept["book"]) == {"fanduel"}

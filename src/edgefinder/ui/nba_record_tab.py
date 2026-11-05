@@ -15,7 +15,7 @@ from . import shared, style
 
 
 def render() -> None:
-    ledger = nba_paper.load_ledger()
+    ledger = nba_paper.load_fanduel_ledger()
     st.subheader("Our record")
     if ledger.empty:
         st.info("No picks yet. They appear here as soon as the first lines are recorded.")

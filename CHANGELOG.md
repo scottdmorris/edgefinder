@@ -4,6 +4,15 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Record views count FanDuel only
+- **Kalshi rows can't pollute the record.** The Record, Players, Picks and Parlay
+  screens now read `nba_paper.load_fanduel_ledger()`, so once Kalshi prices land
+  in the ledger they are never counted in the per-model FanDuel record or
+  accuracy scores.
+- **Four small fixes:** a pick locked seconds before tip is no longer flagged
+  "after tip-off", a 96% chance no longer reads "10 in 10", a sub-cent loss shows
+  `$0.00` rather than `-$0.00`, and the first accuracy bin reads "0-20%".
+
 ### Black look, like X
 - **New look:** pure black, hairline dividers, white pill buttons, white accent
   instead of blue, status colours kept (green hit, amber alive, red missed).

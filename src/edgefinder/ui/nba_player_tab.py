@@ -77,7 +77,7 @@ def _averages(season: pd.DataFrame, color: str) -> None:
 
 
 def _tonight(player_id: int) -> None:
-    ledger = nba_paper.load_ledger()
+    ledger = nba_paper.load_fanduel_ledger()
     if ledger.empty:
         return
     rows = ledger[(ledger["player_id"] == player_id)

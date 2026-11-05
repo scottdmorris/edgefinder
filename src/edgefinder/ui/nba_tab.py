@@ -18,7 +18,7 @@ GAME_SORT = "Game"
 
 def render() -> None:
     st.subheader("Model picks")
-    ledger = nba_paper.load_ledger()
+    ledger = nba_paper.load_fanduel_ledger()
     if ledger.empty:
         st.info(
             "No lines recorded yet. The scheduled job fills this in once "
