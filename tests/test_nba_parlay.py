@@ -80,6 +80,33 @@ def test_an_unknown_team_never_matches_another_unknown_player():
     assert legs[0].team != legs[1].team
 
 
+def test_a_chance_reads_as_one_in_n():
+    assert nba_parlay.one_in(0.5) == "1 in 2"
+    assert nba_parlay.one_in(0.027) == "1 in 37"
+    assert nba_parlay.one_in(0.0001) == "1 in 10,000"
+    assert nba_parlay.one_in(0.89) == "9 in 10"        # likely chances read as N in 10
+    assert nba_parlay.one_in(1.0) == "10 in 10"
+    assert nba_parlay.one_in(0.0) == "never"
+
+
+def test_the_verdict_says_win_lose_or_even_in_plain_words():
+    assert "wins about 12 cents" in nba_parlay.verdict(0.12)
+    assert "loses about 30 cents" in nba_parlay.verdict(-0.30)
+    assert "break-even" in nba_parlay.verdict(0.0)
+    assert "break-even" in nba_parlay.verdict(-0.04)
+    assert "hasn't been tested" in nba_parlay.verdict(0.12)    # a win is never claimed flat out
+
+
+def test_headshots_come_from_the_nba_image_host_by_player_id():
+    assert nba_parlay.headshot_url(1628369.0) == \
+        "https://cdn.nba.com/headshots/nba/latest/260x190/1628369.png"
+
+
+def test_models_have_plain_names_and_unknown_ones_pass_through():
+    assert "minutes" in nba_parlay.model_name("minutes-v1")
+    assert nba_parlay.model_name("some-future-model") == "some-future-model"
+
+
 def test_player_teams_use_the_most_recent_game():
     games = pd.DataFrame({
         "player_id": [1, 1, 2], "team": ["MIL", "BOS", "CHI"],

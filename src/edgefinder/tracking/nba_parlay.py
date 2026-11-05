@@ -25,6 +25,47 @@ SUGGESTION_POOL = 14       # best legs considered when searching for slips
 MIN_LEG_EV = 0.02
 
 
+MODEL_NAMES = {
+    "ewma-v1": "Simple: recent scoring average",
+    "minutes-v1": "Smarter: projected minutes × scoring rate",
+}
+LIKELY = 0.6               # from here a chance reads better as "N in 10" than "1 in 1"
+EVEN_BAND = 0.05          # slips within 5 cents per dollar of break-even read as "about even"
+
+
+HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/260x190/{player_id}.png"
+
+
+def headshot_url(player_id) -> str:
+    """The NBA's own headshot image for a player id (the same id the game logs use)."""
+    return HEADSHOT_URL.format(player_id=int(player_id))
+
+
+def model_name(version: str) -> str:
+    """Plain-language name for a model version; unknown versions pass through."""
+    return MODEL_NAMES.get(version, version)
+
+
+def one_in(probability: float) -> str:
+    """'1 in 37' for a 2.7% chance, '9 in 10' for 89%: easier to feel than a percentage."""
+    if probability <= 0.0:
+        return "never"
+    if probability >= LIKELY:
+        return f"{round(probability * 10)} in 10"
+    return f"1 in {max(1, round(1.0 / probability)):,}"
+
+
+def verdict(ev_per_dollar: float) -> str:
+    """One plain sentence on what a slip is worth, if the model is right."""
+    cents = abs(ev_per_dollar) * 100.0
+    if ev_per_dollar > EVEN_BAND:
+        return (f"On these numbers it wins about {cents:.0f} cents per \\$1 over time. "
+                "That only holds if the projection is right, and it hasn't been tested yet.")
+    if ev_per_dollar < -EVEN_BAND:
+        return f"On these numbers it loses about {cents:.0f} cents per \\$1 over time."
+    return "On these numbers it's roughly break-even over time."
+
+
 def player_teams(games: pd.DataFrame) -> dict[int, str]:
     """Each player's most recent team, from the game logs."""
     latest = games.sort_values("game_date").groupby("player_id").tail(1)

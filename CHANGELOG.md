@@ -4,6 +4,18 @@ Newest first. Dates are when the work was committed.
 
 ## 2026-11-04
 
+### Clearer parlay builder
+- Plain language throughout: "Game day" and "Projection" instead of
+  slate and model ids, a three-step how-to, and a glossary. Chances read as
+  "1 in 37" or "9 in 10", payouts as dollars, and every slip gets a
+  one-sentence verdict (wins, loses, or about break-even over time).
+- Suggested slips are now "Ideas the model likes" and lead with the
+  chance it hits, with a warning that long shots rank high on payout.
+- A bar chart of each bet's chance next to the chance they all hit, and
+  NBA headshots on every bet.
+- Every bet says what stat it is ("points"), and legs carry a Stat field
+  ready for rebounds and assists.
+
 ### Parlay builder
 - **Parlay builder view:** pick over, under and X+ legs from the day's
   lines for either model and see the chance all hit, the break-even odds
