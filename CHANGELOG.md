@@ -4,6 +4,29 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### The public record page
+- **Record tab:** every pick as it was locked, with the lock time and how
+  long before tip-off, and a count of picks recorded at or after tip-off
+  (shown in green when it is zero). It measures the "written down before the
+  game" rule instead of asking anyone to trust it.
+- **Per model:** record, units and return, plus a plain-language verdict that
+  compares the model's accuracy to FanDuel's odds on the same lines, and
+  refuses to judge until about 300 lines are graded. Even a good verdict says
+  it still needs to hold up.
+- **Running profit chart, a calibration view** (when it says 60%, does it
+  happen 60% of the time?), a day-by-day table, and the full pick log. All
+  show an honest empty state until the first games are graded.
+
+### Suggested slips: fewer long shots
+- Suggested slips now have a **risk style**: Safer (at least a 35% chance of
+  hitting), Balanced (20%, the default) and Bigger payouts (8%). Before, they
+  were ranked purely by expected profit, which put 1-in-37 long shots first.
+- Slips no longer get **padded with near-certain legs** like "3+ points" that
+  pay almost nothing and only add a leg. A suggested leg has to pay at least
+  about -333.
+- Each game now offers its likeliest worthwhile bet as well as its best-value
+  one, so the cautious styles have something sensible to build from.
+
 ### Visual audit: cleaner, prettier, works on a phone
 - **Team colors and logos everywhere they fit.** Players are shown as plain
   cutouts standing on the card, with no circle or backdrop behind them. Team

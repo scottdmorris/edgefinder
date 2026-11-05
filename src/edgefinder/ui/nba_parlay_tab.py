@@ -150,10 +150,14 @@ def _slip_bar(current) -> None:
 
 def _suggested(candidates: pd.DataFrame) -> None:
     st.markdown("#### Ideas the model likes")
-    slips = nba_parlay.suggest_parlays(candidates, top=IDEAS_SHOWN)
+    style_name = style.choose("How much risk?", list(nba_parlay.STYLES), "slip_style",
+                              default=nba_parlay.DEFAULT_STYLE)
+    slips = nba_parlay.suggest_parlays(candidates, top=IDEAS_SHOWN,
+                                       min_chance=nba_parlay.STYLES[style_name])
     if slips.empty:
-        st.info("Nothing to suggest on this day: it takes a bet worth making on its "
-                "own in at least two different games.")
+        st.info("Nothing fits that style today. It takes a bet worth making on its own in "
+                "at least two different games, and a real chance of the whole slip hitting. "
+                "Try a bigger-payout style.")
         return
     for position, idea in enumerate(slips.itertuples()):
         text, action = st.columns([5, 2], vertical_alignment="center")
@@ -163,10 +167,10 @@ def _suggested(candidates: pd.DataFrame) -> None:
             f"\\$1 pays \\${idea.Pays + 1:,.2f}")
         action.button("Add to slip", key=f"idea_{position}", on_click=_load, args=(idea.bets,),
                       use_container_width=True)
-    st.caption("Long shots rank high because the payout is big, not because they're likely: "
-               "read the chance first. Each bet is worth making on its own and comes from a "
-               "different game. A parlay multiplies the chances, so a model that's a little too "
-               "confident gets a lot more wrong here.")
+    st.caption("**Safer** slips are about a coin flip or better and pay less; **Bigger payouts** "
+               "hit around 1 time in 12 and pay a lot more. Every bet is worth making on its "
+               "own and comes from a different game. A parlay multiplies the chances, so a "
+               "model that's a little too confident gets a lot more wrong here.")
 
 
 def _browse(candidates: pd.DataFrame) -> None:

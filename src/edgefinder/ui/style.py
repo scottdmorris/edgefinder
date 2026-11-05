@@ -206,22 +206,23 @@ def inject() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def choose(label: str, options: list, key: str, format_func=str, on_change=None):
+def choose(label: str, options: list, key: str, format_func=str, on_change=None, default=None):
     """Pick one of a few options as tappable chips instead of a dropdown.
 
-    Always returns an option: the first until the user picks, and the last pick
-    if they tap it again to clear it. With only one option there is nothing to
-    choose, so it is shown as plain text, and the value is still stored under
-    `key` so other views can read it."""
+    Always returns an option: `default` (the first if none is given) until the
+    user picks, and that default again if they tap their pick to clear it. With
+    only one option there is nothing to choose, so it is shown as plain text,
+    and the value is still stored under `key` so other views can read it."""
     if len(options) == 1:
         st.session_state[key] = options[0]
         st.caption(f"**{label}:** {format_func(options[0])}")
         return options[0]
+    start = options[0] if default is None or default not in options else default
     if st.session_state.get(key) not in options:
         st.session_state.pop(key, None)
-    picked = st.pills(label, options, selection_mode="single", default=options[0], key=key,
+    picked = st.pills(label, options, selection_mode="single", default=start, key=key,
                       format_func=format_func, on_change=on_change)
-    return options[0] if picked is None else picked
+    return start if picked is None else picked
 
 
 def odds_pill(text: str, kind: str = "") -> str:

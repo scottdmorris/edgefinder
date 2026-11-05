@@ -203,6 +203,58 @@ def test_each_suggested_slip_says_which_bets_it_is_made_of():
     assert "  +  ".join(chosen["Leg"]) == top["Slip"]
 
 
+def test_a_nearly_certain_leg_that_pays_almost_nothing_never_pads_a_slip():
+    pool = worthwhile_pool().copy()
+    padding = pool.iloc[0:1].assign(Leg="Padding Guy · 3+ points", Odds=-2000,
+                                    **{"Leg EV %": 9.0})
+    padding.index = [max(pool.index) + 1]
+    with_padding = pd.concat([pool, padding])
+    worthwhile = nba_parlay._worthwhile_legs(with_padding)
+    assert "Padding Guy · 3+ points" not in set(worthwhile["Leg"])
+    assert nba_parlay.MIN_LEG_DECIMAL > 1.0
+    for slip in nba_parlay.suggest_parlays(with_padding, min_chance=0.0)["Slip"]:
+        assert "Padding Guy" not in slip
+
+
+def test_a_leg_that_pays_a_fair_amount_is_still_allowed():
+    pool = worthwhile_pool()
+    assert (pool["Odds"].map(nba_parlay.american_to_decimal) >= nba_parlay.MIN_LEG_DECIMAL).all()
+    assert not nba_parlay._worthwhile_legs(pool).empty
+
+
+def test_a_minimum_chance_drops_slips_that_are_too_unlikely():
+    pool = worthwhile_pool()
+    assert not nba_parlay.suggest_parlays(pool, min_chance=0.10).empty
+    chance = nba_parlay.suggest_parlays(pool, min_chance=0.0)["Chance %"].iloc[0]
+    assert nba_parlay.suggest_parlays(pool, min_chance=chance / 100 + 0.01).empty
+
+
+def test_every_suggested_slip_clears_the_chance_it_was_asked_for():
+    pool = worthwhile_pool()
+    for floor in (0.05, 0.2, 0.3):
+        slips = nba_parlay.suggest_parlays(pool, min_chance=floor)
+        assert (slips["Chance %"] >= floor * 100.0 - 1e-9).all()
+
+
+def test_the_styles_run_from_safer_to_bigger_payouts_and_balanced_is_the_default():
+    assert nba_parlay.STYLES["Safer"] > nba_parlay.STYLES["Balanced"] > \
+        nba_parlay.STYLES["Bigger payouts"] > 0
+    assert nba_parlay.DEFAULT_STYLE == "Balanced"
+    assert nba_parlay.suggest_parlays(worthwhile_pool()).equals(
+        nba_parlay.suggest_parlays(worthwhile_pool(),
+                                   min_chance=nba_parlay.STYLES["Balanced"]))
+
+
+def test_a_slip_never_uses_two_legs_from_the_same_game():
+    both_ways = pd.concat([
+        ledger(mean=29.5),
+        ledger(mean=29.5, event=OTHER, player="Other Guy", pid=2)])
+    pool = nba_parlay.candidate_legs(both_ways, alt(mean=29.5), "2026-11-04", "minutes-v1")
+    for bets in nba_parlay.suggest_parlays(pool, min_chance=0.0)["bets"]:
+        chosen = pool.loc[bets]
+        assert chosen["event_id"].is_unique
+
+
 def test_with_value_in_only_one_game_there_is_nothing_to_combine():
     only_one = nba_parlay.candidate_legs(
         ledger(mean=29.5), pd.DataFrame(columns=nba_alt.COLUMNS), "2026-11-04", "minutes-v1")

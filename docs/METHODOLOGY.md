@@ -149,6 +149,12 @@ same-game legs with a Gaussian copula:
 | Assists | −0.025 | +0.014 |
 | 3-pointers | −0.002 | +0.004 |
 
+**Which slips get suggested.** Only bets that are each worth making on their
+own, one per game so they're independent, and only slips with a real chance
+of hitting: at least 35% for "Safer", 20% for "Balanced" (the default) and 8%
+for "Bigger payouts". Near-certain legs like "3+ points" are excluded, since
+they pay almost nothing and just pad a slip.
+
 All small, consistent across seasons, so for player stats alone, treating
 legs as independent is nearly right. Bets on different stats are treated as
 independent because that hasn't been measured.
