@@ -203,7 +203,7 @@ def test_the_tap_target_rules_come_last_and_ask_for_44px():
     assert start > css.index("@media (max-width: 640px)")
     for selector in ('[data-testid="stTab"]', '[data-testid="stBaseButton-pills"]',
                      '[data-testid="stBaseButton-pillsActive"]', '[data-testid="stButtonGroup"] button',
-                     ".stButton > button",
+                     ".stButton button", '[data-testid^="stBaseButton"]', '[data-baseweb="input"]',
                      ".st-key-browse-list button", '[data-testid="stRadio"] label',
                      '[data-testid="stNumberInput"] button', '[data-baseweb="select"] > div',
                      '[data-testid="stExpander"] summary'):

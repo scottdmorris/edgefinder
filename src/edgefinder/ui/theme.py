@@ -246,7 +246,8 @@ hr {{ border-color: {LINE} !important; }}
   [data-testid="stTab"] {{ min-height: 44px; }}
   [data-testid="stBaseButton-pills"], [data-testid="stBaseButton-pillsActive"],
   [data-testid="stButtonGroup"] button {{ min-height: 44px; }}
-  .stButton > button, .stDownloadButton > button {{ min-height: 44px; }}
+  .stButton button, .stDownloadButton button, [data-testid^="stBaseButton"] {{ min-height: 44px; }}
+  [data-baseweb="input"], [data-baseweb="base-input"] {{ min-height: 44px; }}
   .st-key-browse-list button {{ min-height: 44px; }}
   [data-testid="stRadio"] label {{ min-height: 44px; align-items: center; }}
   [data-testid="stNumberInput"] button {{ min-height: 44px; min-width: 44px; }}
