@@ -93,12 +93,6 @@ def test_integrity_of_an_empty_record():
         "picks": 0, "graded": 0, "after_tip": 0, "first_lock": None, "last_lock": None}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: 'Min before tip' is rounded to whole minutes before the after-tip test "
-    "(`<= 0`), so a pick locked 20 SECONDS BEFORE tip-off rounds to 0 and is counted in "
-    "integrity()['after_tip'] and labelled 'AFTER TIP-OFF'. The record then accuses a "
-    "legitimate pre-game pick of being late. Reproduce: recorded_at 23:59:40Z, "
-    "commence_time 00:00:00Z -> after_tip == 1, expected 0."))
 def test_a_pick_locked_twenty_seconds_before_tip_is_not_after_tip():
     facts = nba_record.integrity(frame(row(recorded_at="2026-11-04T23:59:40+00:00")))
     assert facts["after_tip"] == 0
@@ -210,11 +204,6 @@ def test_a_probability_of_exactly_zero_lands_in_the_first_bin():
     assert bins.loc[0, "Lines"] == 1 and bins.loc[0, "Model said"] == 0.0
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: calibration_bins uses pd.cut(include_lowest=True), which widens the first interval "
-    "to (-0.001, 0.2]; the label is built from interval.left * 100 formatted with .0f, so the "
-    "first bin is labelled '-0-20%' instead of '0-20%'. Reproduce: calibration_bins(ledger "
-    "with one settled line at model_p_over=0.1, 'ewma-v1')['Model chance'][0] == '-0-20%'."))
 def test_the_first_bin_is_labelled_zero_to_twenty_percent():
     bins = nba_record.calibration_bins(frame(settled(0.1, False)), "ewma-v1")
     assert bins.loc[0, "Model chance"] == "0-20%"

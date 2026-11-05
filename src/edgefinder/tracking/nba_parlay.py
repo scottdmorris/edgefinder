@@ -65,7 +65,8 @@ def one_in(probability: float) -> str:
     if probability <= 0.0:
         return "never"
     if probability >= LIKELY:
-        return f"{round(probability * 10)} in 10"
+        # "10 in 10" would read as a sure thing, so only a certainty may say it
+        return f"{10 if probability >= 1.0 else min(9, round(probability * 10))} in 10"
     return f"1 in {max(1, round(1.0 / probability)):,}"
 
 
@@ -104,6 +105,7 @@ def stake_outcomes(stake: float, decimal_odds: float, ev_per_unit: float) -> dic
 
 def money(amount: float, signed: bool = False) -> str:
     """'$12.50', or '+$12.50' / '-$3.00' when signed."""
+    amount = round(amount, 2) + 0.0          # a loss under half a cent is $0.00, not -$0.00
     sign = "+" if signed and amount > 0 else "-" if amount < 0 else ""
     return f"{sign}${abs(amount):,.2f}"
 

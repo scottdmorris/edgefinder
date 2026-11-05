@@ -41,10 +41,6 @@ def test_money_signed(amount, text):
     assert nba_parlay.money(amount, signed=True) == text
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: nba_parlay.money tests `amount < 0` before rounding, so a loss smaller than half a "
-    "cent is shown as '-$0.00'. money(-0.004) == '-$0.00' (a negative zero in the stake/EV "
-    "readout). Expected '$0.00'."))
 def test_money_never_shows_negative_zero():
     assert nba_parlay.money(-0.004) == "$0.00"
 
@@ -66,9 +62,6 @@ def test_a_tiny_chance_never_reads_as_one_in_zero():
     assert nba_parlay.one_in(0.9999 * 1e-9).startswith("1 in")
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: one_in rounds N in 10 to the nearest whole, so 0.96 reads '10 in 10' (and 0.999 too): "
-    "a 4% chance of losing is presented as a sure thing. one_in(0.96) == '10 in 10'."))
 def test_a_likely_but_not_certain_chance_never_reads_as_ten_in_ten():
     assert nba_parlay.one_in(0.96) != "10 in 10"
 

@@ -43,7 +43,7 @@ def locked_picks(ledger: pd.DataFrame) -> pd.DataFrame:
         "Odds": picks["pick_odds"].to_numpy(),
         "Model": picks["model_version"].to_numpy(),
         "Locked": recorded.dt.tz_convert(EASTERN).to_numpy(),
-        "Min before tip": ((tip - recorded).dt.total_seconds() / 60.0).round().to_numpy(),
+        "Min before tip": ((tip - recorded).dt.total_seconds() / 60.0).to_numpy(),
         "Status": picks["status"].to_numpy(),
         "Result": picks["result"].fillna("").to_numpy(),
         "Units": pd.to_numeric(picks["pnl_units"], errors="coerce").to_numpy(),
@@ -119,7 +119,7 @@ def calibration_bins(ledger: pd.DataFrame, model_version: str) -> pd.DataFrame:
     rows = []
     for interval, group in settled.groupby(bins, observed=True):
         rows.append({
-            "Model chance": f"{interval.left * 100:.0f}-{interval.right * 100:.0f}%",
+            "Model chance": f"{max(interval.left, 0.0) * 100:.0f}-{interval.right * 100:.0f}%",
             "Lines": len(group),
             "Model said": float(group["model_p_over"].astype(float).mean()) * 100.0,
             "Market said": float(group["fair_p_over"].astype(float).mean()) * 100.0,
