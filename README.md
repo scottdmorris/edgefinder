@@ -1,9 +1,13 @@
-# EdgeFinder
+# Ball Knowledge
 
-A local dashboard that prices MLB (and, come October, NBA) bets against
-FanDuel's lines and only recommends action when the model's price beats
-the market's — with Kelly-based stake sizing and closing-line-value
-tracking.
+Basketball player projections and prop tracking, built to answer one
+question honestly: does a points model add anything beyond FanDuel's own
+price? Every projection is paper-tracked and scored against real results
+before anyone is asked to trust it.
+
+The plan is a product for building NBA parlays on top of those
+projections. What exists today is the measurement engine and a read-only
+dashboard; the parlay builder and accounts are next (see Roadmap).
 
 ## Quick start
 
@@ -12,78 +16,31 @@ cd edgefinder
 .venv\Scripts\streamlit run app.py
 ```
 
-Runs at http://localhost:8501. No API keys required to start.
+Runs at http://localhost:8501. The dashboard only reads files the
+scheduled jobs write, so it works without an API key and never spends
+Odds API requests itself.
 
-### Optional: live FanDuel odds
+### Live FanDuel lines
 
 Get a free key at https://the-odds-api.com (500 requests/month) and put
 it in `data/odds_api_key.txt` (git-ignored) or the `ODDS_API_KEY`
-environment variable. Without it, the board shows model predictions and
-you enter FanDuel's odds manually in the Bet Evaluator.
+environment variable. The snapshot job (below) uses it.
 
 ## What's inside
 
-| Tab | What it does |
-|-----|--------------|
-| Today's Board | Every MLB game with model win %, fair odds, model total, and (with an API key) EV vs FanDuel's actual lines, ranked best-first |
-| Bet Evaluator | Price any moneyline, total, or pitcher-strikeout prop against the model; get EV and a quarter-Kelly stake |
-| Parlay Builder | **Auto-suggests parlays from the day's data**: builds a pool of the strongest legs, combines them (never two legs from one game), and ranks combos by EV when FanDuel odds are loaded or by hit probability (with fair odds to compare against FanDuel's quote) without a key. If nothing clears +EV, it says so instead of forcing a ticket. Manual builder below shows true hit probability, fair vs quoted payout, and each leg's marginal EV |
-| Bet Log | Real-bet P/L, ROI, and CLV — plus the **paper-trade record**: one click records the model's +EV picks (flat 1-unit stakes, no money), auto-settles them from final scores, and computes CLV from the line-history archive. This is the model's objective track record |
-| Soccer | EPL, La Liga, Bundesliga, Serie A, Ligue 1: Poisson attack/defense model (trained on free football-data.co.uk results) vs FanDuel three-way and goals lines, market-anchored like MLB |
-| UFC | FanDuel MMA lines with devigged market probabilities. Deliberately model-free (free MMA data is too thin to model honestly) — enter your own probability to price your read against the market |
-| NBA | Read-only view of the player-points paper tracker (see below): each line with every model's projection next to FanDuel's own probability, the scorecard and head-to-head, and how much data the scheduled jobs have collected. Never calls the Odds API |
+The dashboard has one view, the NBA player-points tracker:
 
-Everywhere a bet can be logged there is a **custom stake input** showing
-the dollar EV of your stake, with an overstake warning when you exceed
-Kelly guidance. The sidebar shows your remaining Odds API quota, and
-every odds refresh is archived to `data/line_history.csv` — powering
-the board's line-movement view and closing-line capture for CLV.
+- **Suggested bets:** positive-expected-value player-points over/unders,
+  best first, with how many models agree.
+- **X+ points ("Jaylen Brown 15+"):** a ladder of each model's chance and
+  break-even odds for any player, plus suggested X+ bets from FanDuel's
+  alternate-lines market.
+- **Lines and projections:** every line with both models' projections
+  next to FanDuel's own devigged probability.
+- **Scorecard:** each model's record and Brier score against the market's
+  on every settled line, and a head-to-head on identical lines.
 
-## The model (v1)
-
-- **Sharp anchor (Pinnacle)**: the odds fetch also pulls Pinnacle,
-  the sharpest book on the API. When Pinnacle lists a game, its
-  devigged price becomes the market anchor and the board shows a
-  **Sharp edge** column — the EV of betting FanDuel's price against
-  Pinnacle's probability, which needs no model at all and is the most
-  trustworthy signal in the app. `scripts/backtest_mlb.py` runs a free
-  walk-forward calibration backtest of the Elo model (2026 result:
-  narrowly beats a home-advantage baseline, overconfident above 60% —
-  which is why the model gets only 30% weight).
-- **Market anchoring**: for EV and suggestions, model probabilities
-  are blended 30/70 toward the devigged anchor price — the market
-  embeds injuries, lineups, and weather the model can't see, so raw
-  model edges of 20%+ are treated as data problems, not free money.
-  Games where model and market disagree by >15 points are flagged ⚠️
-  and excluded from suggestions. In-play odds are filtered out and
-  odds events are matched to games by start time (series/doubleheader
-  safe). Raise `MODEL_WEIGHT` in `pipeline.py` only after CLV tracking
-  proves the model beats closing lines.
-
-- **Win probability**: Elo ratings trained on the season's completed
-  games (K=4, 24-point home edge), shifted by the starting-pitcher ERA
-  matchup (capped logit adjustment).
-- **Totals**: expected runs from each side's scored/allowed rates plus
-  an opposing-starter ERA nudge; over/under probabilities from a
-  Poisson distribution.
-- **Strikeout props**: recency-weighted K/start over the last 10
-  starts, scaled by the opponent's strikeout-proneness (capped ±15%).
-
-### Known simplifications (roadmap)
-
-- Runs are over-dispersed vs. Poisson; a negative-binomial total would
-  be sharper.
-- No park factors, bullpen strength, lineup, or rest-day inputs yet.
-- Parlay legs are assumed independent — same-game parlays are
-  correlated and the builder warns about this.
-- The NBA game board (Elo, K=20, ~70-point home edge) isn't built yet;
-  the NBA work so far is the player-prop tracker below.
-
-## NBA player-prop tracking (paper only)
-
-A measurement pipeline for NBA player-points props, built to answer one
-question honestly: does a points model add anything beyond FanDuel's own
-price?
+## How it works
 
 - **Baselines first.** `scripts/nba_baseline_eval.py` scores four
   rolling-average predictors walk-forward over a full season (points MAE
@@ -111,19 +68,16 @@ see `scripts/nba_minutes_eval.py`). Offline, minutes-v1 beat the rolling
 average by only about 1.4% (points MAE 5.21 to 5.14, 95% CI 0.054 to
 0.095) while perfect minutes would give about 16%, so most of the
 remaining error is information nobody has before tip-off, like who is
-injured tonight. The settle report scores each model and compares them
-head to head on the lines both priced. One model failing never stops
-the other from recording.
+injured tonight. One model failing never stops the other from recording.
 
-**X+ points bets** ("Jaylen Brown 15+"): the models predict a whole
-distribution, so any total can be priced. The tab has a ladder (each
-model's chance and break-even odds for 5+ through 40+, no API requests)
-and a ledger of FanDuel's real X+ prices from the alternate-lines market,
-priced by every model and settled from box scores. An X+ bet has no under
-side, so there is no devigged market probability; the market anchor is the
-price's raw implied probability, which is the conservative direction.
-Each X+ call costs one request per game, so it runs for at most 4 games a
-night at the early snapshot.
+**X+ points bets:** the models predict a whole distribution, so any total
+can be priced. An X+ bet has no under side, so there is no devigged
+market probability; the market anchor is the price's raw implied
+probability, which is the conservative direction. Picks are limited to
+prices where the model gives at least a 35% chance and sits within 15
+points of the market, because out in the tail the model's spread is too
+wide and small disagreements look like huge fake edges. Each X+ call
+costs one request per game, so it runs for at most 4 games a night.
 
 ```powershell
 .venv\Scripts\python scripts\nba_props_snapshot.py --dry-run  # what's due; spends nothing
@@ -133,14 +87,31 @@ night at the early snapshot.
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1  # schedule both
 ```
 
+## Roadmap
+
+1. **Evidence.** A few weeks of settled results decide whether either
+   model beats the market. Nothing is sold until that's known.
+2. **Injury and lineup data.** The biggest remaining lever on minutes.
+3. **Parlay builder for props.** Legs from the same game are correlated
+   (a blowout hurts every starter's minutes), so it has to price the
+   combination, not multiply the legs.
+4. **Accounts and hosting.** Needs a real database, a hosted scheduler,
+   and a data licence that allows redistribution, since the free Odds API
+   tier is for personal use.
+
+## Earlier work
+
+The MLB board, soccer and UFC views, bet evaluator, parlay builder and
+bet log this project started as are no longer shown in the app. Their
+code is still in the repo (`src/edgefinder/pipeline.py`, `models`, `ui`).
+
 ## An honest note on profit
 
 Sportsbooks price parlays with compounding vig; most parlays are badly
--EV and the builder will show you exactly how much. The realistic path
-to profit is: bet only positive-EV singles the model finds, size with
-fractional Kelly, and judge the model by **CLV** (beating the closing
-line), not short-term wins. If average CLV stays positive over 100+
-bets, the edge is likely real; if not, the model needs work before
+-EV. The realistic path to profit is: bet only positive-EV singles a
+model finds, size small, and judge the model by **CLV** (beating the
+closing line), not short-term wins. If average CLV stays positive over
+100+ bets, the edge is likely real; if not, the model needs work before
 real money does. Never bet money you can't afford to lose.
 Problem gambling help: 1-800-GAMBLER.
 
@@ -150,8 +121,7 @@ Problem gambling help: 1-800-GAMBLER.
 .venv\Scripts\python -m pytest      # betting math, models, data layer, ledger
 ```
 
-Layout: `src/edgefinder/betting` (odds/EV/parlay/Poisson and
-negative-binomial math), `models` (Elo, MLB, props, NBA baselines),
-`data` (MLB Stats API, NBA game logs, The Odds API clients with file
-caching), `eval` (walk-forward scoring), `tracking` (bet log, paper
-ledgers), `ui` (Streamlit tabs), `pipeline.py` (board assembly).
+Layout: `src/edgefinder/betting` (odds/EV/parlay and negative-binomial
+math), `models` (NBA baselines and the minutes model), `data` (NBA game
+logs and The Odds API clients with file caching), `eval` (walk-forward
+scoring), `tracking` (paper ledgers), `ui` (Streamlit views).
