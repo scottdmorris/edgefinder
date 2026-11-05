@@ -33,6 +33,7 @@ MIN_LEG_EV = 0.02
 MODEL_NAMES = {
     "ewma-v1": "Simple: recent scoring average",
     "minutes-v1": "Smarter: projected minutes × scoring rate",
+    "context-v1": "Smartest: adds who's out, the opponent and pace",
 }
 LIKELY = 0.6               # from here a chance reads better as "N in 10" than "1 in 1"
 EVEN_BAND = 0.05          # slips within 5 cents per dollar of break-even read as "about even"

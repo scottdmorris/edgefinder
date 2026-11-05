@@ -25,7 +25,7 @@ import pandas as pd
 from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
-from ..models import nba_minutes_points, nba_points
+from ..models import nba_context_points, nba_minutes_points, nba_points
 from .nba_paper import MIN_EV_TO_RECORD, MODEL_WEIGHT
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ RUNGS = [5, 10, 15, 20, 25, 30, 35, 40]
 DISPERSIONS = {
     nba_points.MODEL_VERSION: nba_points.MODEL_DISPERSION,
     nba_minutes_points.MODEL_VERSION: nba_minutes_points.MODEL_DISPERSION,
+    nba_context_points.MODEL_VERSION: nba_context_points.MODEL_DISPERSION,
 }
 _MIN_PROB, _MAX_PROB = 0.001, 0.999
 # The model's spread was fitted around the middle of the distribution, where

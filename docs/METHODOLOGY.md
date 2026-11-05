@@ -27,7 +27,7 @@ whether they add anything beyond the sportsbook's own price.
 **1. History in.** Every player's past games: points, rebounds, assists,
 3-pointers and minutes, from NBA's own stats feed.
 
-**2. Two projections, same slot.**
+**2. Three projections, same slot.**
 - **`ewma-v1`, the baseline.** A weighted average of recent games, where
   recent ones count most and older ones fade. At the start of a season it
   leans on last season.
@@ -35,6 +35,10 @@ whether they add anything beyond the sportsbook's own price.
   minute. A machine-learning model predicts the *minutes* from rest days,
   back-to-backs, workload and recent absences; we multiply by his recent
   scoring rate.
+- **`context-v1`, the newest challenger.** The same inputs plus who else is
+  out tonight (from the injury report), how weak the opposing defense is, and
+  how fast the game should run. It is running alongside the others, not
+  replacing them, until the record says it should.
 
 **3. One number to a chance.** A player doesn't score exactly 24.4; he lands
 anywhere from 10 to 40. We use a standard curve for count data (a negative
@@ -107,6 +111,37 @@ other (points error about 5.2); this is the one in use.
 
 Why bother? Most of a player's game-to-game swing is minutes, not shooting.
 
+### Model 3: adding context (`context-v1`)
+One gradient-boosted model predicts points directly from the same inputs as
+model 2, plus three kinds of context:
+- **Who's out.** A team's recent roster is everyone who played in its last ten
+  games. Teammates on it who normally play 15+ minutes but aren't playing
+  tonight are "lost": their typical minutes and points go missing, and
+  someone has to cover them. Four numbers summarise that (minutes lost,
+  points lost, starters lost, players out).
+- **The opposing defense**, as points the opponent allows over its last ten
+  games relative to the league.
+- **Pace**, as possessions per game for both teams relative to the league.
+
+Everything is worked out only from games before the one being projected. In
+training, "out" is read from past box scores (who didn't play). Tonight it
+comes from ESPN's free injury report, using the same roster and the same
+definition, so the two match. If the report can't be fetched, the model
+carries on as if nobody were out. The injury feed is unofficial, which is
+fine for this but not something to build a paid product on.
+
+**What it bought, honestly.** Scored once on 2025-26 after choosing on
+2024-25, points error fell from 5.137 to 5.108, and the chances got better
+calibrated (log score −3.317 → −3.304). That is a real improvement (the 95%
+interval is entirely above zero) but a small one, about half a percent.
+Opponent and pace added almost nothing beyond the absences, and a direct
+points model *without* the context was slightly worse than model 2, so the gain
+comes from the new information, not from the model type.
+
+**One timing change came with it.** A projection made before the injury
+report is published can't know who is out, so the pick-making snapshot is now
+taken 2.5 to 4 hours before tip-off instead of at noon.
+
 ### From a projection to a chance
 A negative binomial distribution with the projection as its mean. Its spread
 ("dispersion") is fitted from past misses with a method-of-moments estimate,
@@ -176,16 +211,26 @@ number, it has nothing to offer.
   dominant one.
 - With *perfect* minutes the error would drop about 16%, so most of what's
   left is information nobody has before tip-off, chiefly who is injured.
+- Adding who's out, the opponent and pace (`context-v1`) cut points error a
+  further 0.6% (5.137 → 5.108, interval +0.005 to +0.051 points). Together the
+  two models close about 12% of the gap between the plain average and
+  perfect minutes. That is progress, but most of the gap remains.
+- Historical absences are read from box scores, which includes late scratches
+  and coaches' decisions that an injury report published hours before tip-off
+  can't show. So the live gain may be smaller than the offline one.
 
 **Live (paper tracking):** the tracker started on 2026-11-04 and nothing has
 settled yet. There is no live track record to report, and we say so. The
 first results land on 2026-11-05.
 
 ## What it does not do
-- **No injury or lineup information.** The biggest single gap. A star ruled
-  out changes every teammate's night.
-- **No opponent information.** Nothing about the other team's defense or
-  pace; the minutes model knows home or away but not who the opponent is.
+- **Injuries are only partly covered.** `context-v1` uses the injury report, but
+  the other two models don't, the report is an unofficial feed, and a
+  late scratch after the snapshot is invisible. Nothing yet adjusts for *how
+  much* a specific star's absence matters beyond his typical minutes.
+- **Opponent information is thin.** `context-v1` knows the opponent's recent
+  defense and pace, nothing about matchups (a big against a small lineup),
+  and `ewma-v1` and `minutes-v1` know nothing about the opponent at all.
 - **No game-level model**, so bets tied to a game total or result (a player
   over plus the game over) can't be priced.
 - **Rebounds, assists and 3-pointers use only the rolling average**, not the
@@ -214,15 +259,19 @@ out honestly: every pick is locked before the game, graded after, and
 compared to the book's own probability. We don't claim an edge before the
 record shows one.
 
-**"What would you improve first?"** Injuries and lineups, then opponent
-information. The perfect-minutes experiment shows that's where the headroom
-is.
+**"What would you improve first?"** Injuries and lineups were first, and the
+first version is built: it helped by about half a percent, which is real but
+modest. The perfect-minutes experiment says there's much more headroom, so the
+next steps are modelling how much each specific player's absence matters,
+taking the snapshot as late as the budget allows, and, once there's a live
+record, letting results tune how much weight the models get.
 
 ## Reproduce it
 
 ```powershell
 .venv\Scripts\python scripts\nba_baseline_eval.py        # the rolling baselines, walk-forward
 .venv\Scripts\python scripts\nba_minutes_eval.py         # minutes model vs baseline, with the oracle
+.venv\Scripts\python scripts\nba_context_eval.py         # who's out + opponent + pace, scored once
 .venv\Scripts\python scripts\nba_correlation_report.py   # same-game correlations
 .venv\Scripts\python scripts\nba_props_settle.py         # the live scorecard
 .venv\Scripts\python -m pytest                           # the leak-free tests among them

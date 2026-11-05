@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 
 from ..betting import correlated
-from ..data import nba_live, nba_stats
+from ..data import nba_injuries, nba_live, nba_players, nba_stats
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view
 from . import shared, style, team_colors
 
@@ -192,7 +192,7 @@ def _player_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame) -> None
     photo, name, over, under, more = st.columns([1, 3, 2, 2, 2], vertical_alignment="center")
     first = rows.iloc[0]
     photo.image(nba_parlay.headshot_url(first["player_id"]), width=44)
-    name.markdown(f"**{first['Player']}**")
+    name.markdown(f"**{first['Player']}**{injury_badge(first['Player'])}")
     main = rows[rows["Side"].isin(["Over", "Under"])]
     for column, side in ((over, "Over"), (under, "Under")):
         match = main[main["Side"] == side]
@@ -228,6 +228,25 @@ def _search(candidates: pd.DataFrame) -> None:
 
 # ---- the slip panel ---------------------------------------------------------------
 
+@st.cache_data(ttl=600, show_spinner=False)
+def injuries_by_name() -> dict[str, nba_injuries.Injury]:
+    """Today's injury report by normalised name; empty if it can't be fetched,
+    so a problem there never gets in the way of building a slip."""
+    try:
+        return nba_injuries.status_by_name(nba_injuries.fetch_injuries())
+    except nba_injuries.InjuryDataError:
+        return {}
+
+
+def injury_badge(player: str) -> str:
+    """Markdown for a small coloured badge if the player is on the report, else ''."""
+    injury = injuries_by_name().get(nba_players.normalize_name(player))
+    if injury is None:
+        return ""
+    badge = nba_injuries.label(injury)
+    return f" :red[**{badge}**]" if injury.is_out else f" :orange[{badge}]"
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def teams_by_player() -> dict[int, str]:
     """Each player's team from the cached game logs; empty if unavailable."""
@@ -261,6 +280,7 @@ def _slip_panel(candidates: pd.DataFrame, current) -> None:
             unsafe_allow_html=True)
         remove.button("✕", key=f"rm_{index}", on_click=_toggle, args=(index, candidates),
                       help=f"Remove {bet['Player']}", use_container_width=True)
+    _injury_warning(chosen)
     stake = _stake_input()
     _slip_box(summary, chosen, stake)
     st.markdown(f"**{nba_parlay.verdict(summary['ev_per_unit'])}**")
@@ -270,6 +290,17 @@ def _slip_panel(candidates: pd.DataFrame, current) -> None:
         _chance_chart(chosen, summary)
         _leg_table(chosen)
         st.caption(_correlation_note(summary))
+
+
+def _injury_warning(chosen: pd.DataFrame) -> None:
+    """Say so plainly if anyone on the slip is listed out or doubtful."""
+    report = injuries_by_name()
+    out = [name for name in chosen["Player"]
+           if (injury := report.get(nba_players.normalize_name(name))) and injury.is_out]
+    if out:
+        st.warning(f"{', '.join(out)} {'is' if len(out) == 1 else 'are'} listed out on the "
+                   "injury report. A bet on a player who doesn't play is usually voided, but "
+                   "check your book's rules before betting.")
 
 
 def _stake_input() -> float:

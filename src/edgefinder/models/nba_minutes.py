@@ -28,8 +28,9 @@ class MinutesModel:
     """Gradient-boosted minutes predictor. Handles missing features
     natively, and keeps predictions inside a real game (0-48 minutes)."""
 
-    def __init__(self, **params):
+    def __init__(self, features: list[str] | None = None, **params):
         self.params = {**DEFAULT_PARAMS, **params}
+        self.features = list(MINUTES_FEATURES if features is None else features)
         self._model: HistGradientBoostingRegressor | None = None
         self._columns: list[str] = []
         self.n_train = 0
@@ -39,7 +40,7 @@ class MinutesModel:
         # scikit-learn refuses a feature that is missing in every training
         # row, which really happens: prior_minutes is empty for all of a
         # dataset's earliest season. Such a feature is ignored.
-        self._columns = [c for c in MINUTES_FEATURES if usable[c].notna().any()]
+        self._columns = [c for c in self.features if usable[c].notna().any()]
         self._model = HistGradientBoostingRegressor(**self.params).fit(
             usable[self._columns], usable["minutes"])
         self.n_train = len(usable)

@@ -4,8 +4,10 @@ Policy, decided purely from the clock and what was already archived, so
 the job can run every half hour and stay idempotent:
 
 - early: the first MAX_GAMES games of tonight's slate (by tip-off) get one
-  snapshot, as long as tip-off is still at least MIN_EARLY_LEAD away. This
-  is the price a paper pick is made at.
+  snapshot once tip-off is between MIN_EARLY_LEAD and MAX_EARLY_LEAD away.
+  This is the price a paper pick is made at. It is taken in the last few
+  hours rather than at noon so the injury report has mostly settled: a
+  projection made before it is published can't know who is out.
 - late: each snapshotted game gets one more inside LATE_WINDOW before
   tip-off, the closest we can afford to a closing line.
 
@@ -22,6 +24,7 @@ EASTERN = ZoneInfo("America/New_York")
 DEFAULT_MAX_GAMES = 6
 LATE_WINDOW = dt.timedelta(minutes=90)
 MIN_EARLY_LEAD = dt.timedelta(minutes=150)
+MAX_EARLY_LEAD = dt.timedelta(minutes=240)
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,7 @@ def plan_snapshots(
     max_games: int = DEFAULT_MAX_GAMES,
     late_window: dt.timedelta = LATE_WINDOW,
     min_early_lead: dt.timedelta = MIN_EARLY_LEAD,
+    max_early_lead: dt.timedelta = MAX_EARLY_LEAD,
 ) -> list[SnapshotTask]:
     slate_date = now.astimezone(EASTERN).date()
     tonight = sorted(
@@ -62,7 +66,7 @@ def plan_snapshots(
         if (event_id, "early") in done:
             if (event_id, "late") not in done and dt.timedelta(0) < until_tip <= late_window:
                 tasks.append(SnapshotTask(event, "late"))
-        elif room > 0 and until_tip >= min_early_lead:
+        elif room > 0 and min_early_lead <= until_tip <= max_early_lead:
             tasks.append(SnapshotTask(event, "early"))
             room -= 1
     return tasks

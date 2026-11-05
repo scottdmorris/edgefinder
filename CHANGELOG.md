@@ -4,6 +4,30 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Injuries and opponent context (a third model, `context-v1`)
+- **Measured on past data first.** Following the same protocol as the minutes
+  model (choose on 2024-25, score 2025-26 once), adding who's out, the
+  opponent's defense and pace cut points error from 5.137 to 5.108 and
+  improved how well the chances are calibrated. Real (95% interval +0.005 to
+  +0.051 points) but small, about half a percent. Opponent and pace added
+  almost nothing beyond the absences, and a direct points model without the
+  context was slightly worse, so the gain comes from the new information.
+- **Absences defined once, used two ways.** A team's recent roster is its last
+  ten games' players; those who normally play 15+ minutes and aren't playing
+  are "lost". Training reads that from past box scores; tonight it comes from
+  ESPN's free injury report, using the same roster and definition.
+- **Runs as a challenger**, priced on the same lines as the other two models
+  and scored against them. It never replaces them until the record says so.
+  If the injury report can't be fetched it carries on as if nobody is out.
+- **Injury badges** in the bet browser (red OUT, orange DAY-TO-DAY) and a
+  warning on the slip when someone on it is listed out. A real example came up
+  immediately: a line was posted for a player who was later ruled out.
+- **The pick-making snapshot moved later.** It used to happen at noon, before
+  the injury report is published, so no model could know who was out. It is now
+  taken 2.5 to 4 hours before tip-off. A downside: if the PC is off during a
+  game's window, that game gets no early snapshot that night.
+- New: `scripts/nba_context_eval.py`, which reproduces the numbers above.
+
 ### The public record page
 - **Record tab:** every pick as it was locked, with the lock time and how
   long before tip-off, and a count of picks recorded at or after tip-off

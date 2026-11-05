@@ -30,20 +30,38 @@ def planned(tasks):
     return [(task.event["event_id"], task.phase) for task in tasks]
 
 
-def test_noon_run_takes_the_first_games_by_tipoff_up_to_the_cap():
-    tasks = plan.plan_snapshots(EVENTS, snaps(), NOON_ET, max_games=6)
-    assert planned(tasks) == [(f"g{i}", "early") for i in range(6)]
+# 5:30pm ET: g2 (8pm) is 150 minutes away, g5 (9:30pm) is 240; g0 and g1 are too close,
+# g6 and g7 too far
+EARLY_WINDOW = dt.datetime(2026, 11, 4, 22, 30, tzinfo=UTC)
+
+
+def test_nothing_is_taken_early_at_noon_because_the_injury_report_is_not_out_yet():
+    assert plan.plan_snapshots(EVENTS, snaps(), NOON_ET, max_games=6) == []
+
+
+def test_early_snapshots_are_taken_only_inside_the_window_before_tipoff():
+    tasks = plan.plan_snapshots(EVENTS, snaps(), EARLY_WINDOW, max_games=6)
+    assert planned(tasks) == [(f"g{i}", "early") for i in range(2, 6)]
+
+
+def test_the_window_includes_both_of_its_edges_and_nothing_beyond():
+    tip = plan.tip_time(SLATE[2])                                     # g2
+    for minutes, expected in ((149, False), (150, True), (240, True), (241, False)):
+        tasks = plan.plan_snapshots([SLATE[2]], snaps(), tip - dt.timedelta(minutes=minutes),
+                                    max_games=6)
+        assert (planned(tasks) == [("g2", "early")]) is expected, minutes
 
 
 def test_games_on_other_dates_are_never_planned():
-    tasks = plan.plan_snapshots(EVENTS, snaps(), NOON_ET, max_games=20)
+    tasks = plan.plan_snapshots(EVENTS, snaps(), EARLY_WINDOW, max_games=20)
     assert "tomorrow" not in {task.event["event_id"] for task in tasks}
 
 
 def test_the_cap_counts_games_already_snapshotted_today():
     done = snaps(("g0", "early"), ("g1", "early"), ("g2", "early"), ("g3", "early"))
-    tasks = plan.plan_snapshots(EVENTS, done, NOON_ET, max_games=6)
-    assert planned(tasks) == [("g4", "early"), ("g5", "early")]
+    tasks = plan.plan_snapshots(EVENTS, done, EARLY_WINDOW, max_games=6)
+    early = [pair for pair in planned(tasks) if pair[1] == "early"]    # g0 is also due its late one
+    assert early == [("g4", "early"), ("g5", "early")]
 
 
 def test_a_game_is_not_snapshotted_early_twice():
@@ -95,5 +113,6 @@ def test_tip_date_is_the_eastern_calendar_date():
 def test_the_slate_date_follows_eastern_time_not_utc():
     # 03:30Z on Nov 5 is 10:30pm ET on Nov 4: still tonight's slate
     late_game = event("late", "2026-11-05T03:30:00Z")
-    tasks = plan.plan_snapshots([late_game], snaps(), NOON_ET, max_games=6)
+    three_hours_before = dt.datetime(2026, 11, 5, 0, 30, tzinfo=UTC)    # 7:30pm ET, Nov 4
+    tasks = plan.plan_snapshots([late_game], snaps(), three_hours_before, max_games=6)
     assert planned(tasks) == [("late", "early")]

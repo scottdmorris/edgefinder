@@ -30,6 +30,37 @@ def test_the_model_learns_that_rest_and_absences_change_minutes():
     assert learned < 0.6 * naive
 
 
+def with_absences(n, seed):
+    """Same players, but now teammates being out hands them minutes: the hidden
+    truth is 0.2 extra minutes for every minute a teammate normally plays and misses."""
+    rng = np.random.default_rng(seed + 100)
+    frame = synthetic_features(n=n, seed=seed)
+    frame["lost_min"] = rng.choice([0.0, 0.0, 0.0, 20.0, 30.0, 45.0], n)
+    frame["minutes"] = np.clip(frame["minutes"] + 0.2 * frame["lost_min"], 0, 48)
+    return frame
+
+
+def test_a_model_given_extra_features_uses_them():
+    train, test = with_absences(4000, 0), with_absences(1000, 1)
+    plain = nm.MinutesModel().fit(train)
+    aware = nm.MinutesModel(features=nm.MINUTES_FEATURES + ["lost_min"]).fit(train)
+    plain_error = np.abs(plain.predict(test) - test["minutes"]).mean()
+    aware_error = np.abs(aware.predict(test) - test["minutes"]).mean()
+    assert aware_error < 0.75 * plain_error        # knowing who is out is worth a lot here
+
+
+def test_the_default_model_ignores_columns_it_was_not_told_about():
+    train = with_absences(500, 0)
+    assert nm.MinutesModel().fit(train).features == nm.MINUTES_FEATURES
+    assert "lost_min" not in nm.MinutesModel().fit(train)._columns
+
+
+def test_a_custom_feature_missing_everywhere_is_ignored_not_fatal():
+    train = with_absences(500, 0).assign(lost_min=np.nan)
+    model = nm.MinutesModel(features=nm.MINUTES_FEATURES + ["lost_min"]).fit(train)
+    assert "lost_min" not in model._columns
+
+
 def test_predictions_stay_inside_a_real_game():
     train = synthetic_features()
     extreme = synthetic_features(n=50, seed=2).assign(min_ewma_mid=200.0, min_ewma_fast=-50.0)

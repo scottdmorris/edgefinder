@@ -22,6 +22,15 @@ def rows(version="ewma-v1", predictions=PREDICTIONS):
                                   "2026-11-04", model_version=version, dispersion=7.8)
 
 
+def test_every_model_that_prices_lines_has_a_spread_for_the_ladder():
+    from edgefinder.models import nba_context_points, nba_minutes_points, nba_points
+    registered = {nba_points.MODEL_VERSION, nba_minutes_points.MODEL_VERSION,
+                  nba_context_points.MODEL_VERSION}
+    assert registered <= set(nba_alt.DISPERSIONS)
+    table = nba_alt.ladder({version: 20.0 for version in registered}, rungs=[10, 20])
+    assert len(table) == 2 and all(f"{v} chance %" in table.columns for v in registered)
+
+
 def test_the_chance_of_at_least_a_total_falls_as_the_total_rises():
     chances = [nba_alt.p_at_least(k, 20.0, 7.8) for k in (10, 15, 20, 25, 30)]
     assert chances == sorted(chances, reverse=True)
