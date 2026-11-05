@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Kalshi prediction-market prices (data client only)
+- **New `edgefinder.data.kalshi`**: reads Kalshi's public market data (no
+  account or key) for player points, rebounds, assists and 3-pointers.
+  Each "35+ points" contract becomes a row with the player, game, threshold,
+  yes/no bid and ask, spread and volume, and an `is_liquid` flag (both sides
+  quoted, spread at most 10 cents, at least 25 contracts traded).
+- **Priced like a prop line.** "N+" becomes an over at N - 0.5 at the yes
+  ask, and the no side becomes the under at the no ask, in the same shape the
+  FanDuel parser produces, tagged `book="kalshi"`.
+- **Prices are before Kalshi's trading fees**, and books are often thin and
+  wide (a 5-cent bid against a 33-cent ask is normal), so treat them as
+  indications, not as prices you can trade at.
+- Not wired into the snapshot job or the app yet; nothing changes on screen.
+
 ### Injuries and opponent context (a third model, `context-v1`)
 - **Measured on past data first.** Following the same protocol as the minutes
   model (choose on 2024-25, score 2025-26 once), adding who's out, the
