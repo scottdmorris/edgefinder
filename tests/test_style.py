@@ -178,3 +178,22 @@ def test_a_missing_logo_leaves_no_broken_image():
 def test_html_has_no_indented_lines_that_markdown_would_treat_as_code():
     html = style.slip_summary("H", "B", [("k", "v")]) + style.leg_card("u", "t", "s", "p")
     assert "\n    " not in html
+
+
+def test_the_tap_target_rules_come_after_every_other_rule_and_ask_for_44px():
+    css = style.CSS
+    block = css[css.index("@media (max-width: 900px), (pointer: coarse)"):]
+    assert css.index("@media (max-width: 900px), (pointer: coarse)") > css.index("@media (max-width: 640px)")
+    for selector in ('[data-testid="stTab"]', '[data-testid="stButtonGroup"] button',
+                     ".stButton button", ".st-key-browse-list button"):
+        assert f"{selector} {{ min-height: 44px; }}" in block
+    # nothing in the touch block may shrink a target again
+    assert "min-height: 2" not in block
+
+
+def test_all_six_tabs_fit_on_a_phone_and_hover_only_extras_are_hidden():
+    css = style.CSS
+    phone = css[css.index("@media (max-width: 640px)"):css.index("@media (max-width: 900px), (pointer")]
+    assert '[data-testid="stTab"] { padding: 8px 9px;' in phone
+    assert '[role="tablist"] { gap: 0 !important; }' in phone
+    assert '[data-testid="stElementToolbar"]' in phone and '[data-testid="stHeaderActionElements"]' in phone

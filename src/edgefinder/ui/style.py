@@ -197,6 +197,18 @@ h4 {{ font-size: 1.05rem !important; font-weight: 800 !important; margin-top: .6
   .st-key-browse-list [data-testid="stMarkdownContainer"] p {{ font-size: .8rem; line-height: 1.2; }}
   .bk-slip-big {{ font-size: 1.7rem; }}
   .bk-slip-row {{ gap: 16px; }}
+  /* all six tabs fit on one row, so none hides behind the scroll arrow */
+  [role="tablist"] {{ gap: 0 !important; }}
+  [data-testid="stTab"] {{ padding: 8px 9px; font-size: .82rem; }}
+  /* hover-only extras nobody can use with a thumb, and 16-22px targets that get hit by accident */
+  [data-testid="stElementToolbar"], [data-testid="stHeaderActionElements"] {{ display: none !important; }}
+}}
+/* anything a thumb taps is at least 44px tall (phones, and tablets with a touch screen) */
+@media (max-width: 900px), (pointer: coarse) {{
+  [data-testid="stTab"] {{ min-height: 44px; }}
+  [data-testid="stButtonGroup"] button {{ min-height: 44px; }}
+  .stButton button {{ min-height: 44px; }}
+  .st-key-browse-list button {{ min-height: 44px; }}
 }}
 </style>
 """

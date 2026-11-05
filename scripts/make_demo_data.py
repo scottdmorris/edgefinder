@@ -28,6 +28,9 @@ NAMES = {
     "MIL": ["Giannis Antetokounmpo", "Damian Lillard"], "PHI": ["Tyrese Maxey", "Joel Embiid"],
     "GSW": ["Stephen Curry", "Jimmy Butler"], "DAL": ["Anthony Davis", "Kyrie Irving"],
 }
+FULL = {"NYK": "New York Knicks", "BOS": "Boston Celtics", "LAL": "Los Angeles Lakers",
+        "DEN": "Denver Nuggets", "MIL": "Milwaukee Bucks", "PHI": "Philadelphia 76ers",
+        "GSW": "Golden State Warriors", "DAL": "Dallas Mavericks"}
 MODELS = ["ewma-v1", "minutes-v1", "context-v1"]
 
 
@@ -95,7 +98,7 @@ def ledger(today: dt.date, logs: pd.DataFrame) -> pd.DataFrame:
                 row = {
                     "recorded_at": (tip - dt.timedelta(hours=rng.randint(2, 4))).isoformat(),
                     "game_date": day.isoformat(), "event_id": f"{day}{home}",
-                    "commence_time": tip.isoformat(), "home": home, "away": away,
+                    "commence_time": tip.isoformat(), "home": FULL[home], "away": FULL[away],
                     "player": p["player_name"], "player_id": p["player_id"], "line": line,
                     "over_odds": -112, "under_odds": -108, "model_version": version,
                     "model_mean": round(mean, 2), "model_p_over": round(model_p, 4),
