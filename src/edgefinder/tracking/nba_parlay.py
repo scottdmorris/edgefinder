@@ -24,9 +24,10 @@ COLUMNS = ["Leg", "Stat", "Game", "Player", "Side", "Odds", "Model %", "Market %
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
            "away_abbr", "home_abbr"]
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
-# A leg that is nearly certain ("3+ points" at -2000) pays almost nothing and only
-# pads a slip. About -333 is the most a suggested leg may cost to back.
-MIN_LEG_DECIMAL = 1.30
+# Safe "lock" legs (say -400) may sit on a slip: each one still has to be worth betting
+# on its own. But a leg that is nearly certain ("3+ points" at -2000) pays almost nothing
+# and only pads a slip, so about -1000 is the most a suggested leg may cost to back.
+MIN_LEG_DECIMAL = 1.10
 MIN_LEG_EV = 0.02
 
 

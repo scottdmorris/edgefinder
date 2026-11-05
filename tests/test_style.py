@@ -194,3 +194,9 @@ def test_short_model_names_are_one_word_and_unknown_versions_pass_through():
     assert nba_parlay.short_model_name("minutes-v1") == "Smarter"
     assert nba_parlay.short_model_name("ewma-v1") == "Simple"
     assert nba_parlay.short_model_name("future-v9") == "future-v9"
+
+
+def test_links_and_alert_boxes_follow_the_black_palette_not_streamlits_blue():
+    assert ".stApp a, .stApp a:visited" in style.CSS
+    assert 'stAlertContainer"] {' in style.CSS
+    assert "1493FF" not in style.CSS.upper() and "3D9DF3" not in style.CSS.upper()

@@ -259,3 +259,12 @@ def test_with_value_in_only_one_game_there_is_nothing_to_combine():
     only_one = nba_parlay.candidate_legs(
         ledger(mean=29.5), pd.DataFrame(columns=nba_alt.COLUMNS), "2026-11-04", "minutes-v1")
     assert nba_parlay.suggest_parlays(only_one).empty
+
+
+def test_a_safe_lock_that_is_worth_betting_may_join_a_slip():
+    pool = worthwhile_pool().copy()
+    lock = pool.iloc[0:1].assign(Leg="Safe Guy · 5+ points", Odds=-500, **{"Leg EV %": 3.0})
+    lock.index = [max(pool.index) + 1]
+    assert "Safe Guy · 5+ points" in set(nba_parlay._worthwhile_legs(pd.concat([pool, lock]))["Leg"])
+    # -1000 is the cut-off in decimal terms: 1.10
+    assert nba_parlay.american_to_decimal(-1000) == pytest.approx(nba_parlay.MIN_LEG_DECIMAL)

@@ -4,6 +4,13 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Locks on slips, and no stray blue
+- **Safe "lock" legs may join a slip.** A suggested leg can now cost up to about
+  -1000 (it was about -333), as long as it is still worth betting on its own.
+  Nearly certain padding legs (about -2000) stay out.
+- **No leftover blue:** links, info boxes and the Record tab's profit chart now
+  follow the black palette.
+
 ### Record views count FanDuel only
 - **Kalshi rows can't pollute the record.** The Record, Players, Picks and Parlay
   screens now read `nba_paper.load_fanduel_ledger()`, so once Kalshi prices land

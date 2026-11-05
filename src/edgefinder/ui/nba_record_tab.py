@@ -80,10 +80,11 @@ def _profit_chart(locked: pd.DataFrame) -> None:
     running = running.assign(Model=running["Model"].map(nba_parlay.model_name))
     chart = alt.Chart(running).mark_line(point=True, strokeWidth=2.5).encode(
         x=alt.X("Game day:N", title=None), y=alt.Y("Units:Q", title="Units won"),
-        color=alt.Color("Model:N", legend=alt.Legend(orient="bottom", title=None)),
+        color=alt.Color("Model:N", legend=alt.Legend(orient="bottom", title=None),
+                        scale=alt.Scale(range=["#EFF3F4", "#8B98A5", "#F5B83D"])),
         tooltip=["Game day", "Model", alt.Tooltip("Units:Q", format="+.2f")]).properties(height=240)
     zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
-        color="#3b4a6b", strokeDash=[4, 4]).encode(y="y:Q")
+        color="#536471", strokeDash=[4, 4]).encode(y="y:Q")
     st.altair_chart(zero + chart, use_container_width=True)
 
 
@@ -109,7 +110,7 @@ def _calibration(ledger: pd.DataFrame) -> None:
         tooltip=["Model chance", "Who", alt.Tooltip("Chance:Q", format=".1f"), "Lines"],
     ).properties(height=240)
     st.altair_chart(chart, use_container_width=True)
-    st.caption("Green bars should match the blue ones. Small groups swing a lot, so ignore "
+    st.caption("Green bars should match the white ones. Small groups swing a lot, so ignore "
                "any group with only a few lines.")
 
 

@@ -213,6 +213,14 @@ hr {{ border-color: {LINE} !important; }}
 .bk-feed-time {{ color: {MUTED}; font-size: 0.78rem; font-weight: 700; }}
 .bk-feed-score {{ color: {MUTED}; font-size: 0.78rem; float: right; }}
 
+/* no stray blue: links and alert boxes follow the black palette */
+.stApp a, .stApp a:visited {{ color: {TEXT}; text-decoration: underline; text-decoration-color: {LINE_STRONG}; }}
+.stApp a:hover {{ color: {BUTTON}; text-decoration-color: {BUTTON}; }}
+[data-testid="stAlertContainer"] {{
+  background: {RAISED}; border: 1px solid {LINE}; border-radius: 16px; color: {TEXT};
+}}
+[data-testid="stAlertContainer"] svg {{ color: {MUTED}; fill: {MUTED}; }}
+
 /* narrow screens. These come last so they win over the rules above. */
 @media (max-width: 900px) {{
   [data-testid="stColumn"]:has(.st-key-slip-panel) {{
