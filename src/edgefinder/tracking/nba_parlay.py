@@ -124,6 +124,10 @@ def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: st
 def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str) -> list[dict]:
     day = ledger[(ledger["game_date"] == game_date)
                  & (ledger["model_version"] == model_version)]
+    # these legs are FanDuel points lines; other books and stats share the ledger
+    for column, wanted in (("stat", STAT), ("book", "fanduel")):
+        if column in day.columns:
+            day = day[day[column].fillna(wanted) == wanted]
     rows = []
     for row in day.itertuples():
         for is_over, odds, model_p, market_p in (
