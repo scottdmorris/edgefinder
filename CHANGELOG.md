@@ -4,6 +4,18 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Slips worth the stake, averages, and a model experiment
+- **Suggested slips must pay.** Each style has a minimum win per $1 (Safer $1.00,
+  Balanced $2.00, Bigger payouts $6.00) and every slip needs at least one real leg
+  (about -200 or better), so a slip of only locks is never offered. When nothing
+  qualifies, the screen says so.
+- **Player averages on bets.** The bet list and idea cards show each player's
+  season average and last-10 average beside the line.
+- **Model experiment (`scripts/nba_improve_eval.py`).** Chosen on 2024-25, scored
+  once on 2025-26: shot-attempt features and a blend with the minutes model cut
+  points error by about 0.4% (real, small). Letting the probability width depend on
+  the size of the projection improved the log score about five times as much.
+
 ### Locks on slips, and no stray blue
 - **Safe "lock" legs may join a slip.** A suggested leg can now cost up to about
   -1000 (it was about -333), as long as it is still worth betting on its own.

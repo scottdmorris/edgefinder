@@ -268,3 +268,31 @@ def test_a_safe_lock_that_is_worth_betting_may_join_a_slip():
     assert "Safe Guy · 5+ points" in set(nba_parlay._worthwhile_legs(pd.concat([pool, lock]))["Leg"])
     # -1000 is the cut-off in decimal terms: 1.10
     assert nba_parlay.american_to_decimal(-1000) == pytest.approx(nba_parlay.MIN_LEG_DECIMAL)
+
+
+def _log(player_id, season, day, pts, reb=5, ast=3, fg3m=1):
+    return {"player_id": player_id, "season": season, "game_date": pd.Timestamp(day),
+            "pts": pts, "reb": reb, "ast": ast, "fg3m": fg3m}
+
+
+def test_player_averages_are_the_season_mean_and_the_last_ten_mean():
+    # 12 games in 2026-27 scoring 10, 11, ... 21: season mean 15.5, last ten = 12..21 -> 16.5
+    rows = [_log(1, "2026-27", f"2026-11-{d:02d}", 9 + d) for d in range(1, 13)]
+    rows.append(_log(1, "2025-26", "2026-04-01", 40))          # last season: not in the average
+    averages = nba_parlay.player_averages(pd.DataFrame(rows))
+    season, recent = averages[1]["pts"]
+    assert season == pytest.approx(15.5) and recent == pytest.approx(16.5)
+
+
+def test_a_player_with_no_games_this_season_uses_the_season_he_last_played():
+    rows = [_log(1, "2026-27", "2026-11-01", 20), _log(2, "2025-26", "2026-04-01", 8),
+            _log(2, "2025-26", "2026-04-03", 12)]
+    averages = nba_parlay.player_averages(pd.DataFrame(rows))
+    assert averages[2]["pts"] == (pytest.approx(10.0), pytest.approx(10.0))
+
+
+def test_average_text_reads_simply_and_is_empty_for_unknown_players():
+    averages = {7: {"pts": (21.44, 24.0), "reb": (6.0, 7.5)}}
+    assert nba_parlay.average_text(averages, 7) == "avg 21.4 · last 10: 24.0"
+    assert nba_parlay.average_text(averages, 7, "reb") == "avg 6.0 · last 10: 7.5"
+    assert nba_parlay.average_text(averages, 99) == ""

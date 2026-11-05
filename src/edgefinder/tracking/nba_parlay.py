@@ -117,6 +117,28 @@ def player_teams(games: pd.DataFrame) -> dict[int, str]:
     return {int(row.player_id): row.team for row in latest.itertuples()}
 
 
+AVERAGE_COLUMNS = ("pts", "reb", "ast", "fg3m")
+RECENT_GAMES = 10
+
+
+def player_averages(games: pd.DataFrame) -> dict[int, dict[str, tuple[float, float]]]:
+    """Each player's per-game average this season and over his last 10 games, for
+    points, rebounds, assists and threes: {player_id: {"pts": (season, last10), ...}}.
+    A player with no games this season gets the season he last played."""
+    newest = games.groupby("player_id")["season"].transform("max")
+    season = games[games["season"] == newest].groupby("player_id")[list(AVERAGE_COLUMNS)].mean()
+    recent = (games.sort_values("game_date").groupby("player_id").tail(RECENT_GAMES)
+              .groupby("player_id")[list(AVERAGE_COLUMNS)].mean())
+    return {int(pid): {col: (float(season.at[pid, col]), float(recent.at[pid, col]))
+                       for col in AVERAGE_COLUMNS} for pid in season.index}
+
+
+def average_text(averages: dict, player_id, column: str = "pts") -> str:
+    """'avg 21.4 · last 10: 24.0', or empty when the player isn't in the logs."""
+    pair = averages.get(int(player_id), {}).get(column)
+    return "" if pair is None else f"avg {pair[0]:.1f} · last 10: {pair[1]:.1f}"
+
+
 def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: str,
                    model_version: str) -> pd.DataFrame:
     """Every over, under and X+ leg one model priced on a date."""
@@ -190,13 +212,20 @@ def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:
 # hitting. A slip multiplies its legs' chances, so a few ordinary legs shrink fast.
 STYLES = {"Safer": 0.35, "Balanced": 0.20, "Bigger payouts": 0.08}
 DEFAULT_STYLE = "Balanced"
+# A slip must also be worth the stake: the least it may win per $1 (so $10 on Safer wins
+# at least $10), and it needs one real leg, not just locks, so locks only ever help.
+MIN_PROFIT = {"Safer": 1.0, "Balanced": 2.0, "Bigger payouts": 6.0}
+REAL_LEG_DECIMAL = 1.5          # about -200: the cheapest price that counts as a real leg
 
 
 def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
-                    min_chance: float = STYLES[DEFAULT_STYLE]) -> pd.DataFrame:
+                    min_chance: float = STYLES[DEFAULT_STYLE], min_profit: float = 0.0,
+                    real_leg_decimal: float | None = None) -> pd.DataFrame:
     """Best slips built from legs that are each worth betting on their own,
     at most one leg per game so the legs really are independent, keeping only
-    slips that have at least `min_chance` of hitting. Empty if fewer than two
+    slips that have at least `min_chance` of hitting and, when given, win at least
+    `min_profit` per $1 and hold a leg paying `real_leg_decimal` or better (so a slip of
+    only safe locks is never offered). Empty if fewer than two
     games have such a leg, or nothing clears the bar.
 
     Each game offers two legs to build from: the one with the best expected
@@ -215,6 +244,11 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
                 continue                              # two legs from one game: not independent
             summary = correlated.summarise(to_legs(chosen, {}))
             if summary["joint_probability"] < min_chance:
+                continue
+            if summary["decimal_odds"] - 1.0 < min_profit:
+                continue                              # wins too little to be worth the stake
+            if real_leg_decimal is not None and not (
+                    chosen["Odds"].map(american_to_decimal) >= real_leg_decimal).any():
                 continue
             slips.append({
                 "Slip": "  +  ".join(chosen["Leg"]), "Legs": size,

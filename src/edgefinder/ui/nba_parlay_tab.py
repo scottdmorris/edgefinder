@@ -151,20 +151,29 @@ def _suggested(candidates: pd.DataFrame) -> None:
     style_name = style.choose("How much risk?", list(nba_parlay.STYLES), "slip_style",
                               default=nba_parlay.DEFAULT_STYLE)
     slips = nba_parlay.suggest_parlays(candidates, top=IDEAS_SHOWN,
-                                       min_chance=nba_parlay.STYLES[style_name])
+                                       min_chance=nba_parlay.STYLES[style_name],
+                                       min_profit=nba_parlay.MIN_PROFIT[style_name],
+                                       real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL)
     if slips.empty:
         st.info("Nothing fits that style today. It takes a bet worth making on its own in "
                 "at least two different games, and a real chance of the whole slip hitting. "
                 "Try a bigger-payout style.")
         return
     for position, idea in enumerate(slips.itertuples()):
-        legs = [(nba_parlay.headshot_url(row.player_id), row.Player, row.Leg.split(" · ")[-1]
-                 if " · " in row.Leg else row.Leg, str(row.Odds))
+        legs = [(nba_parlay.headshot_url(row.player_id), row.Player,
+                 _with_average(row.Leg.split(" · ")[-1] if " · " in row.Leg else row.Leg,
+                               row.player_id), str(row.Odds))
                 for row in candidates.loc[idea.bets].itertuples()]
         st.markdown(style.idea_card(legs, f"{idea._3:.0f}%", f"${idea.Pays + 1:,.2f}"),
                     unsafe_allow_html=True)
         st.button("Add to slip", key=f"idea_{position}", on_click=_load, args=(idea.bets,),
                   use_container_width=True)
+
+
+def _with_average(bet: str, player_id) -> str:
+    """The bet with the player's average beside it, so a line can be judged at a glance."""
+    average = nba_parlay.average_text(averages_by_player(), player_id)
+    return f"{bet} · {average}" if average else bet
 
 
 def _browse(candidates: pd.DataFrame) -> None:
@@ -187,6 +196,8 @@ def _player_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame) -> None
     first = rows.iloc[0]
     photo.image(nba_parlay.headshot_url(first["player_id"]), width=44)
     name.markdown(f"**{first['Player']}**{injury_badge(first['Player'])}")
+    if text := nba_parlay.average_text(averages_by_player(), first["player_id"]):
+        name.caption(text)
     main = rows[rows["Side"].isin(["Over", "Under"])]
     for column, side in ((over, "Over"), (under, "Under")):
         match = main[main["Side"] == side]
@@ -248,6 +259,19 @@ def teams_by_player() -> dict[int, str]:
     try:
         return nba_parlay.player_teams(
             nba_stats.load_season(nba_stats.current_season(today), today=today))
+    except nba_stats.NbaDataError:
+        return {}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def averages_by_player() -> dict:
+    """Season and last-10 averages from the cached game logs; empty if unavailable."""
+    today = dt.date.today()
+    try:
+        # two seasons, so "last 10" still means ten games early in a new season
+        games = pd.concat([nba_stats.load_season(season, today=today)
+                           for season in nba_stats.recent_seasons(today, 2)], ignore_index=True)
+        return nba_parlay.player_averages(games)
     except nba_stats.NbaDataError:
         return {}
 

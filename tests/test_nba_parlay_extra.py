@@ -354,3 +354,34 @@ def test_two_legs_from_one_game_are_never_put_on_the_same_slip():
         assert "B · Over 24.5 points" in slip
     # 25+ slip: 0.43*0.536 = 0.23048 ; 15+ slip: 0.69167*0.536 = 0.37073
     assert sorted(slips["Chance %"]) == pytest.approx([23.048, 37.073], abs=0.01)
+
+
+# ---- a slip has to be worth the stake -------------------------------------------------------------------------------
+
+def test_a_slip_that_wins_too_little_per_dollar_is_not_offered():
+    # two +100 legs pay 2 * 2 - 1 = 3.0 profit per $1 exactly
+    games = two_good_games()
+    assert len(nba_parlay.suggest_parlays(games, min_profit=3.0)) == 1
+    assert nba_parlay.suggest_parlays(games, min_profit=3.01).empty
+
+
+def test_a_slip_made_only_of_locks_is_not_offered_even_if_each_lock_is_worth_betting():
+    # at -500 each leg is decimal 1.2, so two together pay 1.2 * 1.2 - 1 = 0.44 per $1
+    games = two_good_games().assign(Odds=-500)
+    assert not nba_parlay.suggest_parlays(games).empty                        # allowed by default
+    assert nba_parlay.suggest_parlays(games, real_leg_decimal=1.5).empty      # no real leg
+
+
+def test_locks_may_help_a_slip_that_has_a_real_leg():
+    games = two_good_games()
+    games.loc[games.index[0], "Odds"] = -500          # one lock (1.2), one +100 leg (2.0)
+    slips = nba_parlay.suggest_parlays(games, real_leg_decimal=1.5)
+    assert len(slips) == 1
+    assert slips.iloc[0]["Pays"] == pytest.approx(1.2 * 2.0 - 1.0)            # 1.4 per $1
+
+
+def test_each_style_asks_for_more_profit_the_bigger_the_payout():
+    assert nba_parlay.MIN_PROFIT["Safer"] < nba_parlay.MIN_PROFIT["Balanced"] \
+        < nba_parlay.MIN_PROFIT["Bigger payouts"]
+    assert set(nba_parlay.MIN_PROFIT) == set(nba_parlay.STYLES)
+    assert nba_parlay.MIN_PROFIT["Safer"] >= 1.0            # $10 wins at least $10
