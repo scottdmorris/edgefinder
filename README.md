@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" alt="Ball Knowledge" width="320"></p>
+
 # Ball Knowledge
 
 Basketball player projections and prop tracking, built to answer one
@@ -29,7 +31,17 @@ environment variable. The snapshot job (below) uses it.
 
 ## What's inside
 
-The dashboard has two views.
+The dashboard has four views.
+
+**Players.** Search any player for their season averages, recent games,
+tonight's line with both projections, and how often they've cleared a
+number over the last 10 games and the season, charted against that line.
+
+**Live.** Your slip from the builder, tracked while the games are on:
+each bet is marked hit, alive, missed or void with a progress bar and the
+player's photo, next to tonight's scoreboard and any game's box score. It
+reads NBA's free live feed (no key, no Odds API requests) and refreshes
+every 30 seconds.
 
 **Parlay builder.** Pick legs (over, under, or X+ points) from the day's
 lines and see the chance they all hit, the break-even odds, and the

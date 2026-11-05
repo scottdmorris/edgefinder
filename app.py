@@ -11,13 +11,17 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 import streamlit as st
 
 from edgefinder.data import odds_api
-from edgefinder.ui import nba_parlay_tab, nba_tab
+from edgefinder.ui import nba_live_tab, nba_parlay_tab, nba_player_tab, nba_tab, style
 
-st.set_page_config(page_title="Ball Knowledge", page_icon="🏀", layout="wide")
+ASSETS = Path(__file__).parent / "assets"
+
+st.set_page_config(page_title="Ball Knowledge", page_icon=str(ASSETS / "logo-mark.svg"),
+                   layout="wide")
+st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "logo-mark.svg"), size="large")
 
 
 def render_sidebar() -> None:
-    st.sidebar.title("🏀 Ball Knowledge")
+    st.sidebar.title("Ball Knowledge")
     quota = odds_api.get_quota()
     if quota:
         st.sidebar.caption(
@@ -31,10 +35,16 @@ def render_sidebar() -> None:
 
 
 def main() -> None:
+    style.inject()
     render_sidebar()
-    parlay, picks = st.tabs(["🎰 Parlay builder", "🏀 Picks & tracking"])
+    parlay, live, players, picks = st.tabs(
+        ["🎰 Parlay builder", "📡 Live", "🔎 Players", "🏀 Picks & tracking"])
     with parlay:
         nba_parlay_tab.render()
+    with live:
+        nba_live_tab.render()
+    with players:
+        nba_player_tab.render()
     with picks:
         nba_tab.render()
 

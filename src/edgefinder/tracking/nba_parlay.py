@@ -15,12 +15,14 @@ from ..betting import correlated
 from ..betting.correlated import Leg
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal
+from ..data import nba_players
 from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P
 from .nba_paper import MODEL_WEIGHT
 
 STAT = "points"           # the only stat the models project so far
 COLUMNS = ["Leg", "Stat", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
-           "Leg EV %", "player_id", "event_id", "is_over", "prob"]
+           "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
+           "away_abbr", "home_abbr"]
 SUGGESTION_POOL = 14       # best legs considered when searching for slips
 MIN_LEG_EV = 0.02
 
@@ -66,6 +68,34 @@ def verdict(ev_per_dollar: float) -> str:
     return "On these numbers it's roughly break-even over time."
 
 
+def toggle_leg(slip: list[int], index: int, player_ids) -> list[int]:
+    """Tapping a price adds it; tapping it again removes it. A player can be on
+    a slip only once, so adding a second price for him replaces the first.
+    `player_ids` maps each bet's position to its player."""
+    if index in slip:
+        return [i for i in slip if i != index]
+    return [i for i in slip if player_ids[i] != player_ids[index]] + [index]
+
+
+def stake_outcomes(stake: float, decimal_odds: float, ev_per_unit: float) -> dict[str, float]:
+    """What a stake means in dollars: what comes back, the profit if every bet
+    hits, what's lost if not, and the average result per the model."""
+    if stake < 0:
+        raise ValueError("a stake can't be negative")
+    return {
+        "total_return": stake * decimal_odds,
+        "profit_if_wins": stake * (decimal_odds - 1.0),
+        "loss_if_misses": -stake,
+        "expected_profit": stake * ev_per_unit,
+    }
+
+
+def money(amount: float, signed: bool = False) -> str:
+    """'$12.50', or '+$12.50' / '-$3.00' when signed."""
+    sign = "+" if signed and amount > 0 else "-" if amount < 0 else ""
+    return f"{sign}${abs(amount):,.2f}"
+
+
 def player_teams(games: pd.DataFrame) -> dict[int, str]:
     """Each player's most recent team, from the game logs."""
     latest = games.sort_values("game_date").groupby("player_id").tail(1)
@@ -98,7 +128,7 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str) -
             side = "Over" if is_over else "Under"
             rows.append(_leg_row(
                 f"{row.player} · {side} {row.line} {STAT}", row, side, odds, model_p,
-                market_p, is_over))
+                market_p, is_over, row.line))
     return rows
 
 
@@ -109,18 +139,20 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str) -
                      & (alt_ledger["model_version"] == model_version)]
     return [
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
-                 row.over_odds, row.model_p, row.market_p, True)
+                 row.over_odds, row.model_p, row.market_p, True, row.threshold - 0.5)
         for row in day.itertuples()
     ]
 
 
-def _leg_row(label, row, side, odds, model_p, market_p, is_over) -> dict:
+def _leg_row(label, row, side, odds, model_p, market_p, is_over, line) -> dict:
     blended = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p
     return {"Leg": label, "Stat": STAT.capitalize(), "Game": f"{row.away} @ {row.home}",
             "Player": row.player,
             "Side": side, "Odds": odds, "Model %": model_p * 100.0,
             "Market %": market_p * 100.0, "prob": blended,
-            "player_id": row.player_id, "event_id": row.event_id, "is_over": is_over}
+            "player_id": row.player_id, "event_id": row.event_id, "is_over": is_over,
+            "line": line, "away_abbr": nba_players.team_abbreviation(row.away),
+            "home_abbr": nba_players.team_abbreviation(row.home)}
 
 
 def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:

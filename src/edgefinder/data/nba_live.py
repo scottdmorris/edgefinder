@@ -1,0 +1,178 @@
+"""NBA's free live feed: today's scoreboard and per-game box scores.
+
+Public data from NBA's own site, no key and no quota. It only covers games
+that are scheduled, in progress or just finished, and it can be slow or
+unavailable, so every fetch turns failure into one LiveDataError the
+screen can show instead of crashing.
+"""
+
+import re
+from dataclasses import dataclass
+
+SCHEDULED, LIVE, FINAL = 1, 2, 3
+REQUEST_TIMEOUT = 10
+_DURATION = re.compile(r"PT(?:(\d+)M)?(?:([\d.]+)S)?")
+
+
+class LiveDataError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class LiveGame:
+    game_id: str
+    status: int
+    status_text: str
+    period: int
+    clock: str
+    away: str
+    home: str
+    away_score: int
+    home_score: int
+
+
+@dataclass(frozen=True)
+class PlayerLine:
+    player_id: int
+    name: str
+    team: str
+    points: int
+    rebounds: int
+    assists: int
+    minutes: float
+    played: bool
+    on_court: bool
+
+
+@dataclass(frozen=True)
+class Play:
+    order: int
+    period: str            # "Q2", "OT1"
+    clock: str             # "4:35"
+    team: str              # tricode, or "" for a neutral event such as period end
+    text: str
+    score: str             # "CHI 28 - NYK 53"
+    away_score: int = 0
+    home_score: int = 0
+
+
+LOGO_URL = "https://cdn.nba.com/logos/nba/{team_id}/global/L/logo.svg"
+REGULATION_PERIODS = 4
+
+
+def team_ids() -> dict[str, int]:
+    """Tricode -> NBA team id, from the offline list that ships with nba_api."""
+    from nba_api.stats.static import teams
+    return {team["abbreviation"]: team["id"] for team in teams.get_teams()}
+
+
+def logo_url(tricode: str) -> str:
+    """The NBA's own logo image for a team, or '' for an unknown tricode."""
+    team_id = team_ids().get(tricode)
+    return LOGO_URL.format(team_id=team_id) if team_id else ""
+
+
+def period_label(period: int) -> str:
+    return f"Q{period}" if period <= REGULATION_PERIODS else f"OT{period - REGULATION_PERIODS}"
+
+
+QUARTER_NAMES = {1: "1st Qtr", 2: "2nd Qtr", 3: "3rd Qtr", 4: "4th Qtr"}
+
+
+def period_status(label: str) -> str:
+    """'Q3' -> '3rd Qtr', worded the way the scoreboard words it; 'OT1' stays 'OT1'."""
+    if label.startswith("Q"):
+        return QUARTER_NAMES.get(int(label[1:]), label)
+    return label
+
+
+def parse_playbyplay(payload: dict, away: str, home: str) -> list[Play]:
+    """Plays in the order they happened. Plays with no description are dropped."""
+    plays = []
+    for action in payload.get("game", {}).get("actions", []):
+        text = (action.get("description") or "").strip()
+        if not text:
+            continue
+        away_score, home_score = int(action.get("scoreAway") or 0), int(action.get("scoreHome") or 0)
+        plays.append(Play(
+            order=int(action.get("orderNumber", action.get("actionNumber", 0))),
+            period=period_label(int(action.get("period", 1))),
+            clock=clock_from_duration(action.get("clock", "")),
+            team=action.get("teamTricode") or "", text=text,
+            score=f"{away} {away_score} - {home} {home_score}",
+            away_score=away_score, home_score=home_score))
+    return sorted(plays, key=lambda play: play.order)
+
+
+def minutes_from_duration(duration: str) -> float:
+    """'PT13M51.00S' -> 13.85. Empty or malformed input is 0."""
+    match = _DURATION.fullmatch(duration or "")
+    if not match:
+        return 0.0
+    return int(match.group(1) or 0) + float(match.group(2) or 0) / 60.0
+
+
+def clock_from_duration(duration: str) -> str:
+    """'PT01M25.00S' -> '1:25'. Empty when the clock isn't running."""
+    match = _DURATION.fullmatch(duration or "")
+    if not match or not duration:
+        return ""
+    return f"{int(match.group(1) or 0)}:{int(float(match.group(2) or 0)):02d}"
+
+
+def parse_scoreboard(payload: dict) -> list[LiveGame]:
+    games = []
+    for game in payload.get("scoreboard", {}).get("games", []):
+        away, home = game["awayTeam"], game["homeTeam"]
+        games.append(LiveGame(
+            game_id=game["gameId"], status=int(game["gameStatus"]),
+            status_text=game["gameStatusText"].strip(), period=int(game.get("period", 0)),
+            clock=clock_from_duration(game.get("gameClock", "")),
+            away=away["teamTricode"], home=home["teamTricode"],
+            away_score=int(away["score"]), home_score=int(home["score"])))
+    return games
+
+
+def parse_boxscore(payload: dict) -> dict[int, PlayerLine]:
+    """Every player listed for the game, keyed by NBA player id."""
+    game = payload.get("game", {})
+    lines = {}
+    for side in ("awayTeam", "homeTeam"):
+        team = game.get(side, {})
+        for player in team.get("players", []):
+            stats = player["statistics"]
+            lines[int(player["personId"])] = PlayerLine(
+                player_id=int(player["personId"]), name=player["name"],
+                team=team["teamTricode"], points=int(stats["points"]),
+                rebounds=int(stats["reboundsTotal"]), assists=int(stats["assists"]),
+                minutes=minutes_from_duration(stats.get("minutes", "")),
+                played=player.get("played") == "1", on_court=player.get("oncourt") == "1")
+    return lines
+
+
+def fetch_games() -> list[LiveGame]:
+    """Today's games with live scores."""
+    from nba_api.live.nba.endpoints import scoreboard
+    try:
+        return parse_scoreboard(scoreboard.ScoreBoard(timeout=REQUEST_TIMEOUT).get_dict())
+    except Exception as exc:
+        raise LiveDataError(f"NBA live scores are unavailable ({type(exc).__name__})") from None
+
+
+def fetch_plays(game_id: str, away: str, home: str) -> list[Play]:
+    """One game's play-by-play, oldest first."""
+    from nba_api.live.nba.endpoints import playbyplay
+    try:
+        payload = playbyplay.PlayByPlay(game_id, timeout=REQUEST_TIMEOUT).get_dict()
+        return parse_playbyplay(payload, away, home)
+    except Exception as exc:
+        raise LiveDataError(f"The play-by-play is unavailable ({type(exc).__name__})") from None
+
+
+def fetch_box(game_id: str) -> dict[int, PlayerLine]:
+    """One game's box score."""
+    from nba_api.live.nba.endpoints import boxscore
+    try:
+        return parse_boxscore(boxscore.BoxScore(game_id, timeout=REQUEST_TIMEOUT).get_dict())
+    except Exception as exc:
+        raise LiveDataError(f"The box score is unavailable ({type(exc).__name__})") from None

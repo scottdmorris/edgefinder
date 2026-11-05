@@ -80,6 +80,60 @@ def test_an_unknown_team_never_matches_another_unknown_player():
     assert legs[0].team != legs[1].team
 
 
+def test_every_bet_carries_its_line_and_team_abbreviations_for_live_tracking():
+    table = candidates().set_index("Leg")
+    over = table.loc["Jaylen Brown · Over 24.5 points"]
+    x_plus = table.loc["Jaylen Brown · 25+ points"]
+    assert over["line"] == 24.5 and x_plus["line"] == 24.5      # 25+ is the same bar as over 24.5
+    assert (over["away_abbr"], over["home_abbr"]) == ("MIL", "BOS")
+
+
+PLAYERS = {0: "brown", 1: "brown", 2: "embiid", 3: "maxey"}
+
+
+def test_tapping_a_price_adds_it_and_tapping_again_removes_it():
+    slip = nba_parlay.toggle_leg([], 0, PLAYERS)
+    assert slip == [0]
+    assert nba_parlay.toggle_leg(slip, 0, PLAYERS) == []
+
+
+def test_a_second_price_for_the_same_player_replaces_the_first():
+    assert nba_parlay.toggle_leg([0, 2], 1, PLAYERS) == [2, 1]      # brown's over -> brown's under
+
+
+def test_prices_for_different_players_stack_up_in_the_order_added():
+    assert nba_parlay.toggle_leg(nba_parlay.toggle_leg([0], 2, PLAYERS), 3, PLAYERS) == [0, 2, 3]
+
+
+def test_toggling_never_changes_the_list_it_was_given():
+    original = [0, 2]
+    nba_parlay.toggle_leg(original, 1, PLAYERS)
+    assert original == [0, 2]
+
+
+def test_a_stake_turns_odds_into_dollars():
+    result = nba_parlay.stake_outcomes(10.0, decimal_odds=4.0, ev_per_unit=0.07)
+    assert result["total_return"] == pytest.approx(40.0)     # stake plus winnings
+    assert result["profit_if_wins"] == pytest.approx(30.0)
+    assert result["loss_if_misses"] == -10.0
+    assert result["expected_profit"] == pytest.approx(0.70)
+
+
+def test_a_zero_stake_is_fine_and_a_negative_one_is_rejected():
+    assert nba_parlay.stake_outcomes(0.0, 4.0, 0.1)["total_return"] == 0.0
+    with pytest.raises(ValueError):
+        nba_parlay.stake_outcomes(-5.0, 4.0, 0.1)
+
+
+def test_money_is_formatted_with_a_sign_only_when_asked():
+    assert nba_parlay.money(12.5) == "$12.50"
+    assert nba_parlay.money(12.5, signed=True) == "+$12.50"
+    assert nba_parlay.money(-3.0, signed=True) == "-$3.00"
+    assert nba_parlay.money(-3.0) == "-$3.00"
+    assert nba_parlay.money(0.0, signed=True) == "$0.00"
+    assert nba_parlay.money(1234.5) == "$1,234.50"
+
+
 def test_a_chance_reads_as_one_in_n():
     assert nba_parlay.one_in(0.5) == "1 in 2"
     assert nba_parlay.one_in(0.027) == "1 in 37"

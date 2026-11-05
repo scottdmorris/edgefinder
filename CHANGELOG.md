@@ -4,6 +4,38 @@ Newest first. Dates are when the work was committed.
 
 ## 2026-11-04
 
+### Sportsbook-style look, player lookup, and a logo
+- **Look:** dark navy theme with blue accents, bet-slip cards with the
+  player's photo and the price in a pill, and a highlighted slip summary.
+  Inspired by betting apps' layout; no brand's name or logo is used.
+- **Stake box:** type what you're betting and see what it wins, what comes
+  back, and the average result at that stake. Nothing is placed or saved.
+- **Tap to add:** pick a game, then tap over, under or X+ prices next to
+  each player to add them to the slip, tap again to remove. A second price
+  for the same player replaces the first. Changing the game day or
+  projection now clears the slip instead of leaving stale picks.
+- **Any game, with logos:** the Live view shows every game as a card with
+  team logos, and any game can be opened for a play-by-play feed and box
+  score. The header uses the freshest score from the feed, because NBA's
+  scoreboard can trail its play-by-play.
+- **Players tab:** search any player for photo, team, season averages, tonight's
+  line and both projections, how often they've cleared a number (last 10
+  and the season, for points, rebounds, assists or 3-pointers), a bar chart
+  against that line, and recent games.
+- **Logo:** `assets/logo.svg` and `assets/logo-mark.svg`, used in the app
+  header, favicon and README.
+
+### Live tracker
+- **Live view:** your slip (whatever is picked in the parlay builder) with
+  each bet marked hit, alive, missed, not started or void, a progress bar,
+  and the player's photo; tonight's scoreboard; and any game's box score
+  with who's on the court. Refreshes itself every 30 seconds from NBA's
+  free live feed, with no key and no Odds API requests.
+- **Settlement rules, tested:** an over or X+ bet is hit the moment the
+  player reaches the target and stays hit; an under is missed the moment he
+  reaches it and is only hit once the game ends below it; a player who
+  never plays voids the bet and drops out of the slip instead of sinking it.
+
 ### Clearer parlay builder
 - Plain language throughout: "Game day" and "Projection" instead of
   slate and model ids, a three-step how-to, and a glossary. Chances read as

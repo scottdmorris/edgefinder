@@ -16,8 +16,10 @@ import streamlit as st
 from ..betting import correlated
 from ..data import nba_stats
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view
-from . import shared
+from . import shared, style
 
+DEFAULT_STAKE = 10.0
+LEGS_KEY = "parlay_legs"
 HOW_TO = (
     "**1.** Pick a game day and a projection.  **2.** Add bets (called legs): "
     "a player to go over or under a points line, or to score a number or more.  "
@@ -36,6 +38,8 @@ GLOSSARY = """
 - **Expected profit per \\$1:** what you'd win or lose on average per dollar if you
   made this exact bet again and again, *assuming the model is right*. Long shots
   can show big expected profits while still almost never hitting.
+- **Average result at this stake:** the same number scaled to what you typed in.
+  It is an average over many repeats, not what happens on one bet.
 - **Projection:** the model's guess at how many points a player scores. Neither
   projection has been tested against real results yet.
 """
@@ -55,10 +59,11 @@ def render() -> None:
         st.markdown(GLOSSARY)
 
     left, right = st.columns(2)
-    date = left.selectbox("Game day", nba_view.game_dates(ledger), key="parlay_date")
+    date = left.selectbox("Game day", nba_view.game_dates(ledger), key="parlay_date",
+                          on_change=_clear_slip)
     versions = sorted(ledger["model_version"].dropna().unique(), reverse=True)
     version = right.selectbox("Projection", versions, key="parlay_model",
-                              format_func=nba_parlay.model_name)
+                              format_func=nba_parlay.model_name, on_change=_clear_slip)
 
     candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)
     if candidates.empty:
@@ -66,7 +71,78 @@ def render() -> None:
         return
     _suggested(candidates)
     st.divider()
+    _browse(candidates)
+    st.divider()
     _builder(candidates)
+
+
+def _clear_slip() -> None:
+    """Bets are positions in the day's table, so they mean nothing after the
+    day or projection changes."""
+    st.session_state[LEGS_KEY] = []
+
+
+def _toggle(index: int, candidates: pd.DataFrame) -> None:
+    st.session_state[LEGS_KEY] = nba_parlay.toggle_leg(
+        list(st.session_state.get(LEGS_KEY, [])), index, candidates["player_id"])
+
+
+def _browse(candidates: pd.DataFrame) -> None:
+    st.markdown("#### Add bets")
+    games = list(dict.fromkeys(candidates["Game"]))
+    game = st.selectbox("Pick a game", games, key="browse_game")
+    day = candidates[candidates["Game"] == game]
+    slip = set(st.session_state.get(LEGS_KEY, []))
+    stars_first = day.groupby("player_id")["line"].max().sort_values(ascending=False).index
+    st.caption("Tap a price to add it to your slip, tap again to remove it. "
+               "**O** is over, **U** is under, and **X+** has more totals.")
+    with st.container(height=460):
+        for player_id in stars_first:
+            _player_row(day[day["player_id"] == player_id], slip, candidates)
+    if slip and st.button("Clear my slip", key="clear_slip"):
+        _clear_slip()
+        st.rerun()
+
+
+def _player_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame) -> None:
+    photo, name, over, under, more = st.columns([1, 3, 2, 2, 2], vertical_alignment="center")
+    first = rows.iloc[0]
+    photo.image(nba_parlay.headshot_url(first["player_id"]), width=44)
+    name.markdown(f"**{first['Player']}**")
+    main = rows[rows["Side"].isin(["Over", "Under"])]
+    for column, side in ((over, "Over"), (under, "Under")):
+        match = main[main["Side"] == side]
+        if match.empty:
+            continue
+        _price_button(column, match.index[0], match.iloc[0], slip, candidates,
+                      f"{side[0]} {match.iloc[0]['line']:g}")
+    totals = rows[~rows["Side"].isin(["Over", "Under"])].sort_values("line")
+    if totals.empty:
+        return
+    with more.popover("X+", use_container_width=True):
+        for index, row in totals.iterrows():
+            _price_button(st, index, row, slip, candidates, f"{int(row['line'] + 0.5)}+")
+
+
+def _price_button(container, index: int, row: pd.Series, slip: set, candidates: pd.DataFrame,
+                  label: str) -> None:
+    container.button(
+        f"{label}  {shared.fmt_american(row['Odds'])}", key=f"add_{index}",
+        type="primary" if index in slip else "secondary", use_container_width=True,
+        on_click=_toggle, args=(index, candidates))
+
+
+def selected_legs() -> pd.DataFrame | None:
+    """The bets currently picked in the builder, for other views to track.
+    None when nothing is picked or the lines aren't available."""
+    picked = st.session_state.get("parlay_legs")
+    date, version = st.session_state.get("parlay_date"), st.session_state.get("parlay_model")
+    ledger = nba_paper.load_ledger()
+    if not picked or date is None or version is None or ledger.empty:
+        return None
+    candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)
+    chosen = candidates.reindex(picked).dropna(subset=["Leg"])
+    return None if chosen.empty else chosen
 
 
 def _suggested(candidates: pd.DataFrame) -> None:
@@ -103,9 +179,9 @@ def _teams() -> dict[int, str]:
 
 
 def _builder(candidates: pd.DataFrame) -> None:
-    st.markdown("#### Build your own")
+    st.markdown("#### Your slip")
     picked = st.multiselect(
-        "Bets (legs)", list(candidates.index), key="parlay_legs",
+        "Or search for a bet", list(candidates.index), key=LEGS_KEY,
         format_func=lambda i: _describe(candidates.loc[i]),
         help="Type a player's name to search. One bet per player.")
     if not picked:
@@ -118,10 +194,46 @@ def _builder(candidates: pd.DataFrame) -> None:
         st.error(str(error))
         return
 
+    _slip_cards(chosen)
+    stake = _stake_input()
+    _slip_box(summary, chosen, stake)
     _result(summary, chosen)
     _chance_chart(chosen, summary)
-    _leg_table(chosen)
+    with st.expander("See the numbers behind each bet"):
+        _leg_table(chosen)
     st.caption(_correlation_note(summary))
+
+
+def _slip_cards(chosen: pd.DataFrame) -> None:
+    kind = "single bet" if len(chosen) == 1 else f"{len(chosen)}-leg parlay"
+    st.markdown(f"**Your bet slip** · {kind}")
+    for bet in chosen.itertuples():
+        wager = bet.Leg.split(" · ", 1)[1]
+        st.markdown(
+            style.leg_card(nba_parlay.headshot_url(bet.player_id), bet.Player,
+                           f"{wager}  ·  {bet.Game}", shared.fmt_american(bet.Odds)),
+            unsafe_allow_html=True)
+
+
+def _stake_input() -> float:
+    return st.number_input(
+        "How much are you betting? ($)", min_value=0.0, value=DEFAULT_STAKE, step=5.0,
+        format="%.2f", key="stake",
+        help="Only used to show dollars. Nothing is placed, and nothing is saved.")
+
+
+def _slip_box(summary: dict, chosen: pd.DataFrame, stake: float) -> None:
+    result = nba_parlay.stake_outcomes(stake, summary["decimal_odds"], summary["ev_per_unit"])
+    p = summary["joint_probability"]
+    st.markdown(style.slip_summary(
+        "PARLAY" if len(chosen) > 1 else "SINGLE BET",
+        f"To win {nba_parlay.money(result['profit_if_wins'])}",
+        [("Stake", nba_parlay.money(stake)),
+         ("Total return", nba_parlay.money(result["total_return"])),
+         ("Chance it hits", f"{p * 100:.1f}%  ({nba_parlay.one_in(p)})"),
+         ("Average result at this stake",
+          nba_parlay.money(result["expected_profit"], signed=True))]),
+        unsafe_allow_html=True)
 
 
 def _result(summary: dict, chosen: pd.DataFrame) -> None:
