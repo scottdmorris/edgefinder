@@ -50,6 +50,23 @@ Newest first. Dates are when the work was committed.
 - **Parlay legs stay FanDuel points.** The over/under leg builder now ignores
   other books and stats in the shared ledger.
 
+### Plain-English stat questions (logic only, no screen yet)
+- New `tracking/nba_questions.py` answers questions like "How often has
+  Brunson scored over 24 in his last 10?", "Did Jokic get 10+ rebounds this
+  season?" and "Brown points under 19.5 at home". Code counts the games; there
+  is no language model, and an answer is never guessed.
+- Questions become a `Query` (player, stat, over/under/at-least/at-most, line,
+  last N games or this season, home/away) that a future language-model parser
+  could also produce. Anything unclear gets a message saying what was missing
+  or ambiguous: "Johnson" asks which Johnson, a misspelling offers suggestions
+  but is never answered, and opponents, averages, playoffs, other stats and
+  predictions are refused with a list of what can be asked.
+- "Over 24" means strictly more than 24; "24+" and "at least 24" include it. A
+  whole-number line landed on exactly is a push, neither over nor under, the
+  same as the player lookup's hit rate.
+- Numbers must be digits ("20", not "twenty"). No window means this season,
+  and there is no quiet fall-back to last season.
+
 ### Injuries and opponent context (a third model, `context-v1`)
 - **Measured on past data first.** Following the same protocol as the minutes
   model (choose on 2024-25, score 2025-26 once), adding who's out, the
