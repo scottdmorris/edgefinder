@@ -241,7 +241,7 @@ def suggestions(ledger: pd.DataFrame, game_date: str, top: int = 10) -> pd.DataF
     best = (best.sort_values(["Agree", "pick_ev"], ascending=False)
             .drop_duplicates(["event_id", "player"]).head(top))
     return pd.DataFrame({
-        "Bet": best["player"] + " " + best["threshold"].astype(int).astype(str) + "+ points",
+        "Bet": best["player"] + " · " + best["threshold"].astype(int).astype(str) + "+ points",
         "Game": best["away"] + " @ " + best["home"],
         "Odds": best["over_odds"].to_numpy(),
         "Model projects": best["model_mean"].to_numpy(),

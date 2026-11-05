@@ -25,6 +25,10 @@ def render() -> None:
                 "tonight's FanDuel lines are posted.")
         return
     st.subheader("Parlay builder")
+    st.caption(
+        "Every leg here is a **player points** bet: over, under, or X+ points. "
+        "Rebounds, assists and other stats aren't projected yet."
+    )
     left, right = st.columns(2)
     date = left.selectbox("Slate", nba_view.game_dates(ledger), key="parlay_date")
     versions = sorted(ledger["model_version"].dropna().unique(), reverse=True)
@@ -92,7 +96,7 @@ def _builder(candidates: pd.DataFrame) -> None:
     value.metric("EV per $1", f"{summary['ev_per_unit']:+.2f}")
 
     st.dataframe(
-        chosen[["Leg", "Game", "Odds", "Model %", "Market %", "Blended %", "Leg EV %"]]
+        chosen[["Leg", "Stat", "Game", "Odds", "Model %", "Market %", "Blended %", "Leg EV %"]]
         .assign(Odds=lambda t: t["Odds"].map(shared.fmt_american)),
         use_container_width=True, hide_index=True, column_config={
             col: st.column_config.NumberColumn(format="%.1f")

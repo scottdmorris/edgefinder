@@ -79,7 +79,8 @@ def test_suggestions_list_picked_sides_best_first_with_model_agreement():
     assert list(table.columns) == ["Bet", "Game", "Odds", "Model projects", "EV %", "Agree"]
     # the two models disagree on Cade (32 vs 20 against 24.5), so both sides are listed
     bets = set(table["Bet"])
-    assert {"Over 24.5 Cade Cunningham", "Under 24.5 Cade Cunningham"} <= bets
+    assert {"Cade Cunningham · Over 24.5 points",
+            "Cade Cunningham · Under 24.5 points"} <= bets
     assert (table["Agree"] == 1).all()
     assert (table["EV %"] > 0).all()
     assert table["EV %"].is_monotonic_decreasing

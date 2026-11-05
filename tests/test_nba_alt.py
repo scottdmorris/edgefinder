@@ -134,7 +134,7 @@ def test_the_summary_counts_only_graded_picks():
 def test_suggestions_list_picks_best_first_and_merge_agreeing_models():
     ledger = pd.DataFrame(rows("ewma-v1") + rows("minutes-v1"))
     table = nba_alt.suggestions(ledger, "2026-11-04")
-    assert list(table["Bet"]) == ["Jaylen Brown 25+ points"]
+    assert list(table["Bet"]) == ["Jaylen Brown · 25+ points"]
     assert table.iloc[0]["Agree"] == 2
 
 

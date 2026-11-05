@@ -34,19 +34,22 @@ def candidates(main=None, extra=None):
 
 def test_each_line_gives_an_over_and_an_under_leg_plus_its_x_plus_leg():
     table = candidates()
-    assert set(table["Leg"]) == {"Over 24.5 Jaylen Brown", "Under 24.5 Jaylen Brown",
-                                 "Jaylen Brown 25+"}
+    assert set(table["Leg"]) == {"Jaylen Brown · Over 24.5 points",
+                                 "Jaylen Brown · Under 24.5 points",
+                                 "Jaylen Brown · 25+ points"}
+    assert set(table["Stat"]) == {"Points"}
 
 
 def test_over_and_under_probabilities_cover_the_whole_line():
     table = candidates().set_index("Leg")
-    over, under = table.loc["Over 24.5 Jaylen Brown"], table.loc["Under 24.5 Jaylen Brown"]
+    over = table.loc["Jaylen Brown · Over 24.5 points"]
+    under = table.loc["Jaylen Brown · Under 24.5 points"]
     assert over["Model %"] + under["Model %"] == pytest.approx(100.0)
     assert over["prob"] + under["prob"] == pytest.approx(1.0)
 
 
 def test_a_leg_is_priced_between_the_model_and_the_market():
-    row = candidates().set_index("Leg").loc["Over 24.5 Jaylen Brown"]
+    row = candidates().set_index("Leg").loc["Jaylen Brown · Over 24.5 points"]
     low, high = sorted([row["Model %"], row["Market %"]])
     assert low <= row["Blended %"] <= high
     assert row["Blended %"] == pytest.approx(0.3 * row["Model %"] + 0.7 * row["Market %"])

@@ -18,7 +18,8 @@ from ..betting.odds_math import american_to_decimal
 from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P
 from .nba_paper import MODEL_WEIGHT
 
-COLUMNS = ["Leg", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
+STAT = "points"           # the only stat the models project so far
+COLUMNS = ["Leg", "Stat", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
            "Leg EV %", "player_id", "event_id", "is_over", "prob"]
 SUGGESTION_POOL = 14       # best legs considered when searching for slips
 MIN_LEG_EV = 0.02
@@ -55,7 +56,8 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str) -
                 (False, row.under_odds, 1 - row.model_p_over, 1 - row.fair_p_over)):
             side = "Over" if is_over else "Under"
             rows.append(_leg_row(
-                f"{side} {row.line} {row.player}", row, side, odds, model_p, market_p, is_over))
+                f"{row.player} · {side} {row.line} {STAT}", row, side, odds, model_p,
+                market_p, is_over))
     return rows
 
 
@@ -65,7 +67,7 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str) -
     day = alt_ledger[(alt_ledger["game_date"] == game_date)
                      & (alt_ledger["model_version"] == model_version)]
     return [
-        _leg_row(f"{row.player} {int(row.threshold)}+", row, f"{int(row.threshold)}+",
+        _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
                  row.over_odds, row.model_p, row.market_p, True)
         for row in day.itertuples()
     ]
@@ -73,7 +75,8 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str) -
 
 def _leg_row(label, row, side, odds, model_p, market_p, is_over) -> dict:
     blended = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p
-    return {"Leg": label, "Game": f"{row.away} @ {row.home}", "Player": row.player,
+    return {"Leg": label, "Stat": STAT.capitalize(), "Game": f"{row.away} @ {row.home}",
+            "Player": row.player,
             "Side": side, "Odds": odds, "Model %": model_p * 100.0,
             "Market %": market_p * 100.0, "prob": blended,
             "player_id": row.player_id, "event_id": row.event_id, "is_over": is_over}
