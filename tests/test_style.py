@@ -202,7 +202,8 @@ def test_the_tap_target_rules_come_last_and_ask_for_44px():
     block = css[start:]
     assert start > css.index("@media (max-width: 640px)")
     for selector in ('[data-testid="stTab"]', '[data-testid="stBaseButton-pills"]',
-                     '[data-testid="stBaseButton-pillsActive"]', ".stButton > button",
+                     '[data-testid="stBaseButton-pillsActive"]', '[data-testid="stButtonGroup"] button',
+                     ".stButton > button",
                      ".st-key-browse-list button", '[data-testid="stRadio"] label',
                      '[data-testid="stNumberInput"] button', '[data-baseweb="select"] > div',
                      '[data-testid="stExpander"] summary'):
@@ -216,6 +217,7 @@ def test_all_six_tabs_fit_a_phone_and_hover_only_extras_are_hidden():
     phone = css[css.index("@media (max-width: 640px)"):css.index("@media (max-width: 900px), (pointer")]
     assert '[data-testid="stTab"] { padding: 8px 8px;' in phone
     assert '[role="tablist"] { gap: 0 !important; }' in phone
+    assert '[data-testid="stTab"] [role="img"] { display: none !important; }' in phone   # icons off: text fits
     assert '[data-testid="stElementToolbar"]' in phone and '[data-testid="stHeaderActionElements"]' in phone
 
 

@@ -237,13 +237,15 @@ hr {{ border-color: {LINE} !important; }}
   /* all six tabs fit on one row, so none hides behind the scroll arrow */
   [role="tablist"] {{ gap: 0 !important; }}
   [data-testid="stTab"] {{ padding: 8px 8px; font-size: .8rem; }}
+  [data-testid="stTab"] [role="img"] {{ display: none !important; }}
   /* hover-only extras: tiny targets nobody can use with a thumb */
   [data-testid="stElementToolbar"], [data-testid="stHeaderActionElements"] {{ display: none !important; }}
 }}
 /* anything a thumb taps is at least 44px tall (phones, and touch tablets) */
 @media (max-width: 900px), (pointer: coarse) {{
   [data-testid="stTab"] {{ min-height: 44px; }}
-  [data-testid="stBaseButton-pills"], [data-testid="stBaseButton-pillsActive"] {{ min-height: 44px; }}
+  [data-testid="stBaseButton-pills"], [data-testid="stBaseButton-pillsActive"],
+  [data-testid="stButtonGroup"] button {{ min-height: 44px; }}
   .stButton > button, .stDownloadButton > button {{ min-height: 44px; }}
   .st-key-browse-list button {{ min-height: 44px; }}
   [data-testid="stRadio"] label {{ min-height: 44px; align-items: center; }}
