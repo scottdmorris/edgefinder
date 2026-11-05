@@ -8,16 +8,16 @@ and never calls the Odds API, so looking costs no requests.
 import pandas as pd
 import streamlit as st
 
-from ..data import nba_props, odds_api
-from ..tracking import nba_paper, nba_view
-from . import nba_alt_tab, shared
+from ..data import nba_live, nba_props, odds_api
+from ..tracking import nba_paper, nba_parlay, nba_view
+from . import nba_alt_tab, nba_parlay_tab, shared, style, team_colors
 
 GAP_SORT = "Biggest gap between projection and line"
 GAME_SORT = "Game"
 
 
 def render() -> None:
-    st.subheader("NBA player points: paper tracking")
+    st.subheader("Model picks")
     ledger = nba_paper.load_ledger()
     if ledger.empty:
         st.info(
@@ -26,11 +26,8 @@ def render() -> None:
             "`scripts/nba_props_snapshot.py` by hand."
         )
         return
-    st.caption(
-        "Paper only: no money is staked. Models project each player's "
-        "points, and the real question is whether any of them beats "
-        "FanDuel's own probability, not whether a single pick looks good."
-    )
+    st.caption("Paper only: no money is staked. The real question is whether either model "
+               "beats FanDuel's own odds, not whether one pick looks good.")
     _suggestions(ledger)
     st.divider()
     nba_alt_tab.render(ledger)
@@ -43,34 +40,35 @@ def render() -> None:
 
 
 def _suggestions(ledger: pd.DataFrame) -> None:
-    st.markdown("#### Suggested bets (paper only)")
-    dates = nba_view.game_dates(ledger)
-    date = st.selectbox("Slate", dates, key="nba_suggest_date")
+    st.markdown("#### Bets the models like")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_suggest_date")
     table = nba_view.suggestions(ledger, date)
     if table.empty:
-        st.info("No model sees positive expected value on this slate.")
+        st.info("No model sees positive expected value on this day.")
         return
-    shown = table.assign(Odds=table["Odds"].map(shared.fmt_american))
-    st.dataframe(shown, use_container_width=True, hide_index=True, column_config={
-        "Model projects": st.column_config.NumberColumn(format="%.1f"),
-        "EV %": st.column_config.NumberColumn(format="%+.1f"),
-        "Agree": st.column_config.NumberColumn(help="How many models pick this side"),
-    })
-    st.warning(
-        "Read this before betting real money: these are untested. Neither "
-        "model has been scored against real results yet, and they can't see "
-        "injuries or lineups, which is usually why a projection sits far from "
-        "the line. Treat them as paper bets. If you do bet, keep it small. "
-        "The first scores arrive after tonight's games settle. Moneylines "
-        "aren't covered for the NBA yet."
-    )
+    st.markdown(style.notice(
+        "Untested: neither model has been scored against real results yet, and they can't "
+        "see injuries or lineups, which is usually why a projection sits far from the line. "
+        "Treat these as paper bets."), unsafe_allow_html=True)
+    teams = nba_parlay_tab.teams_by_player()
+    left, right = st.columns(2)
+    for position, pick in enumerate(table.to_dict("records")):
+        team = teams.get(pick["player_id"], "")
+        player, wager = pick["Bet"].split(" · ", 1)
+        agree = "both models" if pick["Agree"] > 1 else "one model"
+        (left if position % 2 == 0 else right).markdown(style.leg_card(
+            nba_parlay.headshot_url(pick["player_id"]), player, f"{wager}  ·  {pick['Game']}",
+            shared.fmt_american(pick["Odds"]), compact=True,
+            detail=f"Model projects {pick['Model projects']:.1f}  ·  "
+                   f"edge {pick['EV %']:+.1f}%  ·  {agree}",
+            accent=team_colors.team_color(team) if team else "",
+            logo=nba_live.logo_url(team) if team else ""), unsafe_allow_html=True)
 
 
 def _tonights_lines(ledger: pd.DataFrame) -> None:
-    st.markdown("#### Lines and projections")
-    dates = nba_view.game_dates(ledger)
-    left, middle, right = st.columns([1, 2, 2])
-    date = left.selectbox("Game date", dates)
+    st.markdown("#### Every line, with both projections")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_lines_date")
+    middle, right = st.columns([2, 2])
     sort = middle.radio("Sort by", [GAP_SORT, GAME_SORT], horizontal=True)
     picks_only = right.checkbox("Only lines where a model picks a side", value=False)
 

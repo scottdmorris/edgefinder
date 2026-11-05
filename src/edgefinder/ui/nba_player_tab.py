@@ -14,7 +14,7 @@ import streamlit as st
 
 from ..data import nba_live, nba_stats
 from ..tracking import nba_paper, nba_parlay, nba_player_lookup as lookup
-from . import shared
+from . import shared, style, team_colors
 
 HISTORY_SEASONS = 2
 CHART_GAMES = 15
@@ -56,16 +56,12 @@ def render() -> None:
 def _profile(history: pd.DataFrame, player_id: int, row: pd.Series) -> None:
     games = lookup.player_games(history, player_id)
     season = lookup.current_season_games(games)
-    photo, title = st.columns([1, 3], vertical_alignment="center")
-    photo.image(nba_parlay.headshot_url(player_id), width=150)
-    with title:
-        st.markdown(f"## {row['player_name']}")
-        logo = nba_live.logo_url(row["team"])
-        if logo:
-            st.image(logo, width=34)
-        st.caption(f"{row['team']}  ·  {lookup.season_averages(season).get('season', '')}  ·  "
-                   f"{len(season)} games")
-    _averages(season)
+    color = team_colors.team_color(row["team"])
+    st.markdown(style.player_banner(
+        row["player_name"], nba_parlay.headshot_url(player_id), nba_live.logo_url(row["team"]),
+        f"{row['team']}  ·  {lookup.season_averages(season).get('season', '')}  ·  "
+        f"{len(season)} games", color), unsafe_allow_html=True)
+    _averages(season, color)
     _tonight(player_id)
     st.divider()
     _hit_rate(games, season, player_id)
@@ -73,10 +69,11 @@ def _profile(history: pd.DataFrame, player_id: int, row: pd.Series) -> None:
     st.dataframe(lookup.recent_games(games, 10), use_container_width=True, hide_index=True)
 
 
-def _averages(season: pd.DataFrame) -> None:
+def _averages(season: pd.DataFrame, color: str) -> None:
     averages = lookup.season_averages(season)
     for column, (label, stat) in zip(st.columns(len(SEASON_STATS)), SEASON_STATS):
-        column.metric(label, f"{averages[stat]:.1f}")
+        column.markdown(style.stat_tile(label, f"{averages[stat]:.1f}", color),
+                        unsafe_allow_html=True)
 
 
 def _tonight(player_id: int) -> None:

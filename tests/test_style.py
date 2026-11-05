@@ -1,3 +1,5 @@
+import re
+
 from edgefinder.ui import style
 
 
@@ -79,6 +81,89 @@ def test_timeout_dots_show_how_many_are_left_and_never_go_out_of_range():
     assert style.dots(3, 7) == "●●●○○○○"
     assert style.dots(0, 7) == "○○○○○○○"
     assert style.dots(9, 7) == "●●●●●●●" and style.dots(-2, 7) == "○○○○○○○"
+
+
+def test_the_narrow_screen_rules_come_last_so_they_override_the_base_rules():
+    css = style.CSS
+    assert css.index("@media (max-width: 900px)") > css.index('stColumn"]:has(.st-key-slip-panel)')
+    assert css.index("@media (max-width: 640px)") > css.index(".st-key-browse-list button {")
+    assert css.rstrip().endswith("</style>")
+    # nothing but the closing tag may follow the last media block
+    assert "{" not in css[css.rindex("}") + 1:]
+
+
+def test_stickiness_is_set_on_the_wrapper_that_can_actually_travel():
+    # the keyed container's own parent is only as tall as the bar, so sticky must be put
+    # on that wrapper, and on the whole column for the side-by-side slip
+    css = style.CSS
+    assert 'stLayoutWrapper"]:has(> .st-key-slip-bar)' in css
+    assert 'stColumn"]:has(.st-key-slip-panel)' in css
+    assert "align-self: flex-start" in css
+    column_rule = re.search(r'stColumn"\]:has\(\.st-key-slip-panel\) \{([^}]*)\}', css).group(1)
+    assert "padding-bottom" in column_rule        # so the last card isn't clipped
+
+
+def test_a_team_color_shows_on_the_card_edge_and_the_logo_beside_the_name():
+    html = style.leg_card("p.png", "Jalen Brunson", "Over 24.5", "-106", accent="#F58426",
+                          logo="https://cdn.nba.com/logos/knicks.svg")
+    assert "border-left-color:#F58426" in html
+    assert 'class="bk-tiny-logo"' in html and "knicks.svg" in html
+
+
+def test_the_player_is_a_plain_cutout_with_nothing_behind_or_around_him():
+    for html in (style.leg_card("p.png", "t", "s", "p", accent="#F58426"),
+                 style.leader_card("p.png", "t", "PHI", "Points", 20, accent="#F58426"),
+                 style.player_banner("n", "p.png", "", "s", "#F58426")):
+        assert "gradient(160deg" not in html and "border-radius:50%" not in html
+        assert '<img class="bk-photo' in html or '<img class="bk-banner-photo"' in html
+    rule = re.search(r"(?m)^\.bk-photo \{([^}]*)\}", style.CSS).group(1)
+    assert "border-radius" not in rule and "background" not in rule
+    assert "object-fit: contain" in rule
+    assert "border-radius: 50%" not in style.CSS
+
+
+def test_a_status_colour_wins_over_the_team_color_on_the_card_edge():
+    html = style.leg_card("p.png", "t", "s", "Hit", kind="hit", accent="#F58426")
+    assert "border-left-color" not in html and 'class="bk-card hit"' in html
+
+
+def test_a_bad_color_value_is_ignored_instead_of_reaching_the_page():
+    for bad in ('red" onerror="x', "#12", "url(javascript:x)", "<b>"):
+        html = style.leg_card("p.png", "t", "s", "p", accent=bad)
+        assert "onerror" not in html and "javascript" not in html and "linear-gradient" not in html
+        assert "<b>" not in html and "border-left-color" not in html
+
+
+def test_a_game_card_colors_each_teams_edge_and_works_without_colors():
+    colored = style.game_card("CHI", "NYK", "a.svg", "b.svg", 28, 53, "Q2", "live",
+                              "#CE1141", "#F58426")
+    assert "border-left-color:#CE1141" in colored and "border-left-color:#F58426" in colored
+    plain = style.game_card("CHI", "NYK", "a.svg", "b.svg", 28, 53, "Q2", "live")
+    assert "border-left-color" not in plain
+
+
+def test_comparison_bars_use_each_teams_color_with_defaults_when_none_given():
+    colored = style.compare_bar("Rebounds", "13", "10", 0.57, "away", "#CE1141", "#F58426")
+    assert "background:#CE1141" in colored and "background:#F58426" in colored
+    assert "background:" in style.compare_bar("Rebounds", "13", "10", 0.57, "away")
+
+
+def test_the_player_banner_shows_name_logo_and_team_tint_safely():
+    html = style.player_banner("Jalen <Brunson>", "p.png", "logo.svg", "NYK · 7 games", "#F58426")
+    assert "Jalen &lt;Brunson&gt;" in html and "<Brunson>" not in html
+    assert "rgba(245,132,38" in html and "logo.svg" in html and "NYK · 7 games" in html
+    assert "rgba(20,147,255" in style.player_banner("n", "p", "", "s", "not a color")
+
+
+def test_a_stat_tile_shows_its_number_and_label():
+    html = style.stat_tile("Points", "24.6", "#F58426")
+    assert "24.6" in html and "Points" in html and "border-top-color:#F58426" in html
+
+
+def test_a_notice_and_a_footer_escape_their_text():
+    assert "&lt;b&gt;" in style.notice("<b>careful</b>") and "<b>" not in style.notice("<b>")
+    html = style.footer(["line <one>", "line & two"])
+    assert "line &lt;one&gt;<br>line &amp; two" in html
 
 
 def test_the_empty_slip_message_is_escaped_and_shown():

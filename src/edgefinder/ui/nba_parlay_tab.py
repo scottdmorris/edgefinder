@@ -18,9 +18,9 @@ import pandas as pd
 import streamlit as st
 
 from ..betting import correlated
-from ..data import nba_stats
+from ..data import nba_live, nba_stats
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view
-from . import shared, style
+from . import shared, style, team_colors
 
 DEFAULT_STAKE = 10.0
 LEGS_KEY = "parlay_legs"
@@ -55,11 +55,11 @@ def render() -> None:
         st.info("No lines recorded yet. The scheduled job fills this in once "
                 "tonight's FanDuel lines are posted.")
         return
-    st.subheader("Parlay builder")
-    st.markdown(HOW_TO)
-    st.caption("Every bet here is a **player points** bet. Rebounds, assists and "
-               "other stats aren't projected yet.")
-    with st.expander("What do these words mean?"):
+    st.subheader("Build a parlay")
+    st.caption("Player points bets. Tap a price to add it, tap again to remove it.")
+    with st.expander("How this works, and what the words mean"):
+        st.markdown(HOW_TO)
+        st.caption("Rebounds, assists and 3-pointers aren't bettable here yet.")
         st.markdown(GLOSSARY)
 
     date = style.choose("Game day", nba_view.game_dates(ledger), "parlay_date",
@@ -109,7 +109,7 @@ def _current_slip(candidates: pd.DataFrame):
         return None
     chosen = candidates.loc[picked]
     try:
-        return chosen, correlated.summarise(nba_parlay.to_legs(chosen, _teams()))
+        return chosen, correlated.summarise(nba_parlay.to_legs(chosen, teams_by_player()))
     except ValueError as error:
         st.error(str(error))
         return None
@@ -129,20 +129,21 @@ def selected_legs() -> pd.DataFrame | None:
 
 
 def _slip_bar(current) -> None:
-    """One line, always at the top, so the slip is never out of sight."""
-    if current is None:
-        st.markdown("🧾 **Your slip is empty.** Tap a price below to add a bet.")
-        return
-    chosen, summary = current
-    stake = st.session_state.get("stake", DEFAULT_STAKE)
-    wins = nba_parlay.stake_outcomes(stake, summary["decimal_odds"], summary["ev_per_unit"])
-    word = "bet" if len(chosen) == 1 else "bets"
-    left, right = st.columns([6, 1], vertical_alignment="center")
-    left.markdown(
-        f"🧾 **Slip · {len(chosen)} {word}** · "
-        f"\\${stake:,.2f} to win **{nba_parlay.money(wins['profit_if_wins'])}** · "
-        f"{summary['joint_probability'] * 100:.1f}% to hit")
-    right.button("Clear", key="clear_top", on_click=_clear_slip, use_container_width=True)
+    """One line that stays pinned while you scroll, so the slip is never out of sight."""
+    with st.container(key="slip-bar"):
+        if current is None:
+            st.markdown("🧾 **Your slip is empty.** Tap a price below to add a bet.")
+            return
+        chosen, summary = current
+        stake = st.session_state.get("stake", DEFAULT_STAKE)
+        wins = nba_parlay.stake_outcomes(stake, summary["decimal_odds"], summary["ev_per_unit"])
+        word = "bet" if len(chosen) == 1 else "bets"
+        left, right = st.columns([5, 2], vertical_alignment="center")
+        left.markdown(
+            f"🧾 **{len(chosen)} {word}** · \\${stake:,.0f} to win "
+            f"**{nba_parlay.money(wins['profit_if_wins'])}** · "
+            f"{summary['joint_probability'] * 100:.1f}% to hit")
+        right.button("Clear", key="clear_top", on_click=_clear_slip, use_container_width=True)
 
 
 # ---- browsing ---------------------------------------------------------------------
@@ -178,7 +179,7 @@ def _browse(candidates: pd.DataFrame) -> None:
     stars_first = day.groupby("player_id")["line"].max().sort_values(ascending=False).index
     st.caption("Tap a price to add it, tap it again to remove it. "
                "**O** is over, **U** is under, and **X+** has more totals.")
-    with st.container(height=440):
+    with st.container(height=440, key="browse-list"):
         for player_id in stars_first:
             _player_row(day[day["player_id"] == player_id], slip, candidates)
 
@@ -224,7 +225,7 @@ def _search(candidates: pd.DataFrame) -> None:
 # ---- the slip panel ---------------------------------------------------------------
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _teams() -> dict[int, str]:
+def teams_by_player() -> dict[int, str]:
     """Each player's team from the cached game logs; empty if unavailable."""
     today = dt.date.today()
     try:
@@ -238,18 +239,21 @@ def _slip_panel(candidates: pd.DataFrame, current) -> None:
     if current is None:
         st.markdown("#### Your slip")
         st.markdown(
-            style.empty_slip("Your slip is empty", "Tap a price on the left to add a bet."),
+            style.empty_slip("Your slip is empty", "Tap a price to add a bet."),
             unsafe_allow_html=True)
         return
     chosen, summary = current
     kind = "single bet" if len(chosen) == 1 else f"{len(chosen)}-leg parlay"
     st.markdown(f"#### Your slip · {kind}")
+    teams = teams_by_player()
     for index, bet in chosen.iterrows():
+        team = teams.get(int(bet["player_id"]), "")
         card, remove = st.columns([10, 2], vertical_alignment="center")
         card.markdown(
             style.leg_card(nba_parlay.headshot_url(bet["player_id"]), bet["Player"],
                            bet["Leg"].split(" · ", 1)[1], shared.fmt_american(bet["Odds"]),
-                           compact=True),
+                           compact=True, accent=team_colors.team_color(team) if team else "",
+                           logo=nba_live.logo_url(team) if team else ""),
             unsafe_allow_html=True)
         remove.button("✕", key=f"rm_{index}", on_click=_toggle, args=(index, candidates),
                       help=f"Remove {bet['Player']}", use_container_width=True)

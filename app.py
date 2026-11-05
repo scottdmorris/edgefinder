@@ -18,30 +18,25 @@ from edgefinder.ui import (
 ASSETS = Path(__file__).parent / "assets"
 
 st.set_page_config(page_title="Ball Knowledge", page_icon=str(ASSETS / "logo-mark.svg"),
-                   layout="wide")
+                   layout="wide", initial_sidebar_state="collapsed")
 st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "logo-mark.svg"), size="large")
 
+TABS = [":material/receipt_long: Parlay", ":material/sensors: Live",
+        ":material/search: Players", ":material/insights: Picks", ":material/info: About"]
 
-def render_sidebar() -> None:
-    st.sidebar.title("Ball Knowledge")
+
+def render_footer() -> None:
+    lines = ["Paper tracking only: no money is staked, and no model wins every night. "
+             "Never stake money you can't afford to lose. Problem gambling help: 1-800-GAMBLER."]
     quota = odds_api.get_quota()
     if quota:
-        st.sidebar.caption(
-            f"📡 Odds API requests left this month: **{quota['remaining']}**"
-        )
-    st.sidebar.caption(
-        "Paper tracking only: no money is staked, and no model wins every "
-        "night. Never stake money you can't afford to lose. "
-        "Problem gambling help: 1-800-GAMBLER."
-    )
+        lines.append(f"Odds API requests left this month: {quota['remaining']}")
+    st.markdown(style.footer(lines), unsafe_allow_html=True)
 
 
 def main() -> None:
     style.inject()
-    render_sidebar()
-    parlay, live, players, picks, about = st.tabs(
-        ["🎰 Parlay builder", "📡 Live", "🔎 Players", "🏀 Picks & tracking",
-         "ℹ️ How it works"])
+    parlay, live, players, picks, about = st.tabs(TABS)
     with parlay:
         nba_parlay_tab.render()
     with live:
@@ -52,6 +47,7 @@ def main() -> None:
         nba_tab.render()
     with about:
         about_tab.render()
+    render_footer()
 
 
 if __name__ == "__main__":

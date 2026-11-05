@@ -14,7 +14,7 @@ import streamlit as st
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_live
 from ..tracking import nba_parlay, nba_slip_tracker
-from . import nba_game_center, nba_parlay_tab, style
+from . import nba_game_center, nba_parlay_tab, style, team_colors
 
 REFRESH_SECONDS = 30
 STATE_NAMES = {nba_live.SCHEDULED: "upcoming", nba_live.LIVE: "live", nba_live.FINAL: "final"}
@@ -85,12 +85,16 @@ def _slip(games: list[nba_live.LiveGame]) -> None:
     st.markdown(style.slip_summary(
         "YOUR SLIP", word, [("Bets hit", f"{hits} of {len(progress)}"),
                             *_stake_facts(chosen)]), unsafe_allow_html=True)
+    teams = nba_parlay_tab.teams_by_player()
     for bet in progress.itertuples():
         kind, word = BADGES[bet.Status]
         player, wager = bet.Leg.split(" · ", 1)
+        team = teams.get(bet.player_id, "")
         st.markdown(style.leg_card(
             nba_parlay.headshot_url(bet.player_id), player, f"{wager}  ·  {bet.Game}", word,
-            kind=kind, progress=bet.Progress, detail=bet.Detail), unsafe_allow_html=True)
+            kind=kind, progress=bet.Progress, detail=bet.Detail,
+            accent=team_colors.team_color(team) if team else "",
+            logo=nba_live.logo_url(team) if team else ""), unsafe_allow_html=True)
 
 
 def _stake_facts(chosen: pd.DataFrame) -> list[tuple[str, str]]:
@@ -116,7 +120,8 @@ def _card(game: nba_live.LiveGame) -> str:
     status = f"{game.status_text} {game.clock}".strip() if running else game.status_text
     return style.game_card(game.away, game.home, nba_live.logo_url(game.away),
                            nba_live.logo_url(game.home), game.away_score, game.home_score,
-                           status, STATE_NAMES.get(game.status, "upcoming"))
+                           status, STATE_NAMES.get(game.status, "upcoming"),
+                           team_colors.team_color(game.away), team_colors.team_color(game.home))
 
 
 def _game_detail(games: list[nba_live.LiveGame]) -> None:

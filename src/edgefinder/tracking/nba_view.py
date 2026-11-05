@@ -68,6 +68,7 @@ def suggestions(ledger: pd.DataFrame, game_date: str, top: int = 10) -> pd.DataF
     best = best.merge(agree.reset_index(), on=KEY + ["pick_side"])
     best = best.sort_values(["Agree", "pick_ev"], ascending=False).head(top)
     return pd.DataFrame({
+        "player_id": best["player_id"].astype(int).to_numpy(),
         "Bet": best["player"] + " · " + best["pick_side"].str.capitalize() + " "
                + best["line"].astype(str) + " points",
         "Game": best["away"] + " @ " + best["home"],

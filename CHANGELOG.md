@@ -4,6 +4,32 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Visual audit: cleaner, prettier, works on a phone
+- **Team colors and logos everywhere they fit.** Players are shown as plain
+  cutouts standing on the card, with no circle or backdrop behind them. Team
+  identity comes from the colored edge of the card and the team logo beside
+  the name. Game cards, the shot chart, the team comparison bars and the
+  leader cards use team colors too, and two teams with similar colors (two
+  greens, two reds) are automatically told apart. The colors are display
+  values tuned for a dark background, not official brand colors.
+- **Player pages** get a banner (the player standing on a wash of the team's
+  color, with the logo and season) and big stat tiles.
+- **Phone layout fixed.** The browse list used to explode each player into five
+  stacked rows; it is now one compact row with pill-shaped over, under and X+
+  buttons. The slip summary stays pinned to the top while you scroll, and the
+  slip column stays in view beside the list on a wide screen. Found and fixed
+  two CSS bugs on the way: phone rules placed above the base rules were being
+  overridden, and sticky positioning needs to sit on the wrapper that can
+  travel.
+- **Cleaner chrome:** no sidebar, no Deploy bar, short tab names with proper
+  icons that all fit on a phone. The responsible-gambling note and the
+  Odds API count moved to a footer so they are still always visible.
+- **Picks tab restyled** to match: bet cards instead of a table, a slim
+  "untested" notice instead of a yellow warning box, chips instead of
+  dropdowns, and a plainer title.
+- **Less text up front** on the Parlay tab (the how-to and glossary are one
+  collapsed section), and smaller headings on the in-app How it works page.
+
 ### Game center, modeled on how sports apps show a live game
 - **Open any game** from the Live tab for Stats, Plays and Box score tabs
   under a score header with team logos, timeouts left and bonus status.

@@ -8,16 +8,15 @@ import pandas as pd
 import streamlit as st
 
 from ..tracking import nba_alt, nba_view
-from . import shared
+from . import shared, style
 
 
 def render(ledger: pd.DataFrame) -> None:
     st.markdown("#### X+ points: chance of a player reaching a total")
-    dates = nba_view.game_dates(ledger)
-    left, right = st.columns(2)
-    date = left.selectbox("Slate", dates, key="nba_alt_date")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_alt_date")
     players = sorted(ledger.loc[ledger["game_date"] == date, "player"].unique())
-    player = right.selectbox("Player", players, key="nba_alt_player")
+    player = st.selectbox("Player", players, key="nba_alt_player",
+                          help="Type to search.")
     table = nba_alt.ladder(nba_alt.player_means(ledger, date, player))
     st.dataframe(_display(table), use_container_width=True, hide_index=True,
                  column_config=_config(table))

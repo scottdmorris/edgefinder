@@ -9,12 +9,12 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from ..data import nba_live
 from ..data.nba_live import GameDetail, LiveGame
 from ..tracking import nba_game_view as view
 from ..tracking import nba_parlay
-from . import style
+from . import style, team_colors
 
-AWAY_COLOR, HOME_COLOR = "#1493FF", "#F5B83D"
 COURT_COLOR = "#3b4a6b"
 FEED_LENGTH = 14
 ALL_PERIODS = "All"
@@ -50,28 +50,35 @@ def _shot_chart(game: LiveGame, detail: GameDetail) -> None:
     shots = view.shots_in_period(detail.shots, None if choice == ALL_PERIODS else choice)
 
     away, home = (view.shot_summary(shots, team) for team in (game.away, game.home))
+    colors = team_colors.matchup_colors(game.away, game.home)
     st.markdown(
-        f"<span style='color:{AWAY_COLOR}'>●</span> **{game.away}** "
-        f"{away['made']}-{away['attempts']} "
-        f"&nbsp;&nbsp;&nbsp; <span style='color:{HOME_COLOR}'>●</span> **{game.home}** "
-        f"{home['made']}-{home['attempts']} "
-        f"&nbsp;&nbsp;&nbsp; <span style='opacity:.65'>● made &nbsp; ✕ missed</span>",
+        f"{_team_tag(game.away, colors[0])} {away['made']}-{away['attempts']}"
+        f"&nbsp;&nbsp;&nbsp;&nbsp; {_team_tag(game.home, colors[1])} "
+        f"{home['made']}-{home['attempts']}"
+        f"&nbsp;&nbsp;&nbsp;&nbsp; <span style='opacity:.65'>● made &nbsp; ✕ missed</span>",
         unsafe_allow_html=True)
-    st.altair_chart(_court_chart(shots, game), use_container_width=True)
+    st.altair_chart(_court_chart(shots, game, colors), use_container_width=True)
+
+
+def _team_tag(code: str, color: str) -> str:
+    """The team's logo and name, with a small swatch of the color its shots are drawn in."""
+    logo = nba_live.logo_url(code)
+    image = f"<img src='{logo}' width='18' style='vertical-align:-3px'> " if logo else ""
+    return f"<span style='color:{color}'>●</span> {image}**{code}**"
 
 
 def _period_label(period: int) -> str:
     return f"Q{period}" if period <= 4 else f"OT{period - 4}"
 
 
-def _court_chart(shots, game: LiveGame) -> alt.Chart:
+def _court_chart(shots, game: LiveGame, colors: tuple[str, str]) -> alt.Chart:
     axis_free = {"axis": None, "scale": alt.Scale(domain=[0, 100], nice=False)}
     court = alt.Chart(view.court_lines()).mark_line(color=COURT_COLOR, strokeWidth=1.4).encode(
         x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free),
         detail="line:N", order="order:Q")
     table = view.shot_table(shots)
     color = alt.Color("Team:N", legend=None, scale=alt.Scale(
-        domain=[game.away, game.home], range=[AWAY_COLOR, HOME_COLOR]))
+        domain=[game.away, game.home], range=list(colors)))
     tooltip = ["Player", "Team", "Result", "Distance (ft)", "Period"]
     made = alt.Chart(table[table["Result"] == "Made"]).mark_circle(size=70, opacity=0.9).encode(
         x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free), color=color, tooltip=tooltip)
@@ -87,12 +94,14 @@ def _team_comparison(game: LiveGame, detail: GameDetail) -> None:
     if not rows:
         return
     st.markdown("**Team stats**")
+    away_color, home_color = team_colors.matchup_colors(game.away, game.home)
     st.markdown(
-        f"<div style='display:flex;justify-content:space-between;font-weight:700'>"
-        f"<span style='color:{AWAY_COLOR}'>{game.away}</span>"
-        f"<span style='color:{HOME_COLOR}'>{game.home}</span></div>", unsafe_allow_html=True)
+        f"<div style='display:flex;justify-content:space-between'>"
+        f"<span>{_team_tag(game.away, away_color)}</span>"
+        f"<span>{_team_tag(game.home, home_color)}</span></div>", unsafe_allow_html=True)
     st.markdown("".join(
-        style.compare_bar(r["label"], r["away_text"], r["home_text"], r["away_share"], r["ahead"])
+        style.compare_bar(r["label"], r["away_text"], r["home_text"], r["away_share"],
+                          r["ahead"], away_color, home_color)
         for r in rows), unsafe_allow_html=True)
 
 
@@ -104,8 +113,10 @@ def _leaders(game: LiveGame, detail: GameDetail) -> None:
                 continue
             value = {"Points": player.points, "Rebounds": player.rebounds,
                      "Assists": player.assists}[stat]
-            st.markdown(style.leader_card(nba_parlay.headshot_url(player.player_id), player.name,
-                                          team, stat, value), unsafe_allow_html=True)
+            st.markdown(style.leader_card(
+                nba_parlay.headshot_url(player.player_id), player.name, team, stat, value,
+                accent=team_colors.team_color(team), logo=nba_live.logo_url(team)),
+                unsafe_allow_html=True)
 
 
 def _play_feed(detail: GameDetail) -> None:

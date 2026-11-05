@@ -76,7 +76,9 @@ def test_a_date_with_nothing_recorded_gives_an_empty_table():
 
 def test_suggestions_list_picked_sides_best_first_with_model_agreement():
     table = nba_view.suggestions(ledger(), "2026-11-04")
-    assert list(table.columns) == ["Bet", "Game", "Odds", "Model projects", "EV %", "Agree"]
+    assert list(table.columns) == ["player_id", "Bet", "Game", "Odds", "Model projects",
+                                   "EV %", "Agree"]
+    assert set(table["player_id"]) == {1}                   # so the card can show his photo
     # the two models disagree on Cade (32 vs 20 against 24.5), so both sides are listed
     bets = set(table["Bet"])
     assert {"Cade Cunningham · Over 24.5 points",

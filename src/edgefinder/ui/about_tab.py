@@ -19,8 +19,8 @@ def load_doc(path: Path) -> str:
 
 
 def render() -> None:
-    st.subheader("About")
-    tabs = st.tabs(list(DOCS))
-    for tab, path in zip(tabs, DOCS.values()):
-        with tab:
-            st.markdown(load_doc(path))
+    with st.container(key="about"):
+        tabs = st.tabs(list(DOCS))
+        for tab, path in zip(tabs, DOCS.values()):
+            with tab:
+                st.markdown(load_doc(path))
