@@ -266,6 +266,14 @@ next steps are modelling how much each specific player's absence matters,
 taking the snapshot as late as the budget allows, and, once there's a live
 record, letting results tune how much weight the models get.
 
+**"Can I ask it questions in plain English?"** For one kind of question,
+yes: how often a player went over, under or reached a number in points,
+rebounds, assists or 3-pointers ("Brunson over 24 in his last 10"). It is
+counting, not modelling: a rule-based reader turns the question into a
+structured query and code tallies the games in the log, with no language
+model involved. If the question is ambiguous (two Johnsons) or outside that
+scope, it says so instead of guessing.
+
 ## Reproduce it
 
 ```powershell
