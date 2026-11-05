@@ -122,7 +122,7 @@ def _bar_chart(games: pd.DataFrame, stat: str, stat_name: str, line: float) -> N
         x=alt.X("Game:N", sort=None, title=None, axis=alt.Axis(labelAngle=-60)),
         y=alt.Y(f"{stat_name}:Q"),
         color=alt.Color("Result:N", legend=None, scale=alt.Scale(
-            domain=["Over", "Under", "Push"], range=["#1493FF", "#46557A", "#8FA0BC"])),
+            domain=["Over", "Under", "Push"], range=["#EFF3F4", "#536471", "#8B98A5"])),
         tooltip=["Game", stat_name, "Result"])
     rule = alt.Chart(pd.DataFrame({"line": [line]})).mark_rule(
         color="#F5B83D", strokeDash=[6, 4], size=2).encode(y=alt.Y("line:Q", title=stat_name))

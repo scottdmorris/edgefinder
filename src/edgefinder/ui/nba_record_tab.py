@@ -105,7 +105,7 @@ def _calibration(ledger: pd.DataFrame) -> None:
         xOffset="Who:N", y=alt.Y("Chance:Q", title="%", scale=alt.Scale(domain=[0, 100])),
         color=alt.Color("Who:N", legend=alt.Legend(orient="bottom", title=None),
                         scale=alt.Scale(domain=["Model said", "Market said", "Actually happened"],
-                                        range=["#1493FF", "#8FA0BC", "#1DB954"])),
+                                        range=["#EFF3F4", "#8B98A5", "#00BA7C"])),
         tooltip=["Model chance", "Who", alt.Tooltip("Chance:Q", format=".1f"), "Lines"],
     ).properties(height=240)
     st.altair_chart(chart, use_container_width=True)

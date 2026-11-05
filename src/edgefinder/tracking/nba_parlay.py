@@ -47,6 +47,14 @@ def headshot_url(player_id) -> str:
     return HEADSHOT_URL.format(player_id=int(player_id))
 
 
+SHORT_MODEL_NAMES = {"ewma-v1": "Simple", "minutes-v1": "Smarter", "context-v1": "Smartest"}
+
+
+def short_model_name(version: str) -> str:
+    """One-word chip label for a model version; unknown versions pass through."""
+    return SHORT_MODEL_NAMES.get(version, version)
+
+
 def model_name(version: str) -> str:
     """Plain-language name for a model version; unknown versions pass through."""
     return MODEL_NAMES.get(version, version)

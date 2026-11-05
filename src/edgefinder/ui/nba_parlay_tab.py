@@ -56,17 +56,15 @@ def render() -> None:
                 "tonight's FanDuel lines are posted.")
         return
     st.subheader("Build a parlay")
-    st.caption("Player points bets. Tap a price to add it, tap again to remove it.")
-    with st.expander("How this works, and what the words mean"):
-        st.markdown(HOW_TO)
-        st.caption("Rebounds, assists and 3-pointers aren't bettable here yet.")
-        st.markdown(GLOSSARY)
-
     date = style.choose("Game day", nba_view.game_dates(ledger), "parlay_date",
                         on_change=_clear_slip)
     versions = sorted(ledger["model_version"].dropna().unique(), reverse=True)
-    version = style.choose("Projection", versions, "parlay_model",
-                           format_func=nba_parlay.model_name, on_change=_clear_slip)
+    version = style.choose("Model", versions, "parlay_model",
+                           format_func=nba_parlay.short_model_name, on_change=_clear_slip)
+    with st.expander("How this works"):
+        st.markdown(HOW_TO)
+        st.markdown(GLOSSARY)
+        st.caption("Points only for now. " + nba_parlay.model_name(version))
 
     candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)
     if candidates.empty:
@@ -160,17 +158,13 @@ def _suggested(candidates: pd.DataFrame) -> None:
                 "Try a bigger-payout style.")
         return
     for position, idea in enumerate(slips.itertuples()):
-        text, action = st.columns([5, 2], vertical_alignment="center")
-        text.markdown(
-            f"**{idea.Slip.replace('  +  ', '  +  ')}**  \n"
-            f"{idea._3:.1f}% to hit ({nba_parlay.one_in(idea._3 / 100)}) · "
-            f"\\$1 pays \\${idea.Pays + 1:,.2f}")
-        action.button("Add to slip", key=f"idea_{position}", on_click=_load, args=(idea.bets,),
-                      use_container_width=True)
-    st.caption("**Safer** slips are about a coin flip or better and pay less; **Bigger payouts** "
-               "hit around 1 time in 12 and pay a lot more. Every bet is worth making on its "
-               "own and comes from a different game. A parlay multiplies the chances, so a "
-               "model that's a little too confident gets a lot more wrong here.")
+        legs = [(nba_parlay.headshot_url(row.player_id), row.Player, row.Leg.split(" · ")[-1]
+                 if " · " in row.Leg else row.Leg, str(row.Odds))
+                for row in candidates.loc[idea.bets].itertuples()]
+        st.markdown(style.idea_card(legs, f"{idea._3:.0f}%", f"${idea.Pays + 1:,.2f}"),
+                    unsafe_allow_html=True)
+        st.button("Add to slip", key=f"idea_{position}", on_click=_load, args=(idea.bets,),
+                  use_container_width=True)
 
 
 def _browse(candidates: pd.DataFrame) -> None:

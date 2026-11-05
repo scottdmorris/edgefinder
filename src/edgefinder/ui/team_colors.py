@@ -5,7 +5,7 @@ primaries are so dark (navy, black) that they would disappear on this
 background, so those use their lighter accent instead.
 """
 
-DEFAULT = "#1493FF"
+DEFAULT = "#EFF3F4"
 WHITE = "#F4F7FB"
 _CLASH_DISTANCE = 90.0      # colors closer than this (in RGB) read as the same team
 

@@ -86,7 +86,7 @@ def test_timeout_dots_show_how_many_are_left_and_never_go_out_of_range():
 def test_the_narrow_screen_rules_come_last_so_they_override_the_base_rules():
     css = style.CSS
     assert css.index("@media (max-width: 900px)") > css.index('stColumn"]:has(.st-key-slip-panel)')
-    assert css.index("@media (max-width: 640px)") > css.index(".st-key-browse-list button {")
+    assert css.index("@media (max-width: 640px)") > css.index(".bk-slip-big {")
     assert css.rstrip().endswith("</style>")
     # nothing but the closing tag may follow the last media block
     assert "{" not in css[css.rindex("}") + 1:]
@@ -152,7 +152,7 @@ def test_the_player_banner_shows_name_logo_and_team_tint_safely():
     html = style.player_banner("Jalen <Brunson>", "p.png", "logo.svg", "NYK · 7 games", "#F58426")
     assert "Jalen &lt;Brunson&gt;" in html and "<Brunson>" not in html
     assert "rgba(245,132,38" in html and "logo.svg" in html and "NYK · 7 games" in html
-    assert "rgba(20,147,255" in style.player_banner("n", "p", "", "s", "not a color")
+    assert "rgba(239,243,244" in style.player_banner("n", "p", "", "s", "not a color")
 
 
 def test_a_stat_tile_shows_its_number_and_label():
@@ -178,3 +178,19 @@ def test_a_missing_logo_leaves_no_broken_image():
 def test_html_has_no_indented_lines_that_markdown_would_treat_as_code():
     html = style.slip_summary("H", "B", [("k", "v")]) + style.leg_card("u", "t", "s", "p")
     assert "\n    " not in html
+
+
+def test_an_idea_card_lists_each_leg_and_the_chance_and_payout_safely():
+    html = style.idea_card([("a.png", "A.J. <Green>", "10+ points", "+120"),
+                            ("b.png", "Jaylen Brown", "16+ points", "-110")], "20%", "$6.12")
+    assert html.count('class="bk-leg"') == 2
+    assert "A.J. &lt;Green&gt;" in html and "<Green>" not in html
+    assert "<b>20%</b> to hit" in html and "<b>$6.12</b> back on $1" in html
+
+
+def test_short_model_names_are_one_word_and_unknown_versions_pass_through():
+    from edgefinder.tracking import nba_parlay
+    assert nba_parlay.short_model_name("context-v1") == "Smartest"
+    assert nba_parlay.short_model_name("minutes-v1") == "Smarter"
+    assert nba_parlay.short_model_name("ewma-v1") == "Simple"
+    assert nba_parlay.short_model_name("future-v9") == "future-v9"

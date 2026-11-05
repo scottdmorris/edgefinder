@@ -4,6 +4,15 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Black look, like X
+- **New look:** pure black, hairline dividers, white pill buttons, white accent
+  instead of blue, status colours kept (green hit, amber alive, red missed).
+  The CSS moved to its own file, `ui/theme.py`.
+- **Less text on the Parlay screen:** one-word model chips (Simple, Smarter,
+  Smartest), the explanations collapsed into one "How this works" section,
+  and suggested slips shown as cards (player photo, bet, odds, chance and
+  payout) instead of a run-on line.
+
 ### Injuries and opponent context (a third model, `context-v1`)
 - **Measured on past data first.** Following the same protocol as the minutes
   model (choose on 2024-25, score 2025-26 once), adding who's out, the
