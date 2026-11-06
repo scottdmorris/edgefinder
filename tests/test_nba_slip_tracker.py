@@ -136,3 +136,30 @@ def test_the_game_text_shows_the_score_and_clock_for_a_live_game():
     assert tracker.game_text(game()) == "MIL 40 - BOS 50  ·  2nd Qtr 3:10"
     assert "BOS" in tracker.game_text(game(SCHEDULED)) and "@" in tracker.game_text(game(SCHEDULED))
     assert tracker.game_text(None) == "no live game"
+
+
+def test_a_rebounds_bet_counts_rebounds_not_points():
+    player = PlayerLine(player_id=1, name="P", team="BOS", points=30, rebounds=6, assists=2,
+                        minutes=30.0, played=True, on_court=True, threes=1)
+    progress = tracker.leg_progress(True, 9.5, LIVE, player, stat="rebounds")
+    assert progress.status == ALIVE and progress.have == 6
+    assert "rebounds" in progress.detail
+
+
+@pytest.mark.parametrize("stat, have", [("points", 30), ("rebounds", 6), ("assists", 2),
+                                        ("threes", 1)])
+def test_each_stat_is_read_from_its_own_box_score_column(stat, have):
+    player = PlayerLine(player_id=1, name="P", team="BOS", points=30, rebounds=6, assists=2,
+                        minutes=30.0, played=True, on_court=True, threes=1)
+    assert tracker.leg_progress(True, 0.5, LIVE, player, stat=stat).have == have
+
+
+def test_a_slip_tracks_each_bet_by_its_own_stat():
+    chosen = bets({**bet("A reb", 1, True, 7.5), "stat_key": "rebounds"},
+                  {**bet("B pts", 2, True, 7.5), "stat_key": "points"})
+    box = {1: PlayerLine(player_id=1, name="A", team="BOS", points=20, rebounds=3, assists=0,
+                         minutes=20.0, played=True, on_court=True),
+           2: line(20, pid=2)}
+    result = tracker.track_slip(chosen, [game()], lambda gid: box)
+    assert list(result["Status"]) == [ALIVE, HIT]
+    assert list(result["Have"]) == [3, 20]

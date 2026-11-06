@@ -77,7 +77,7 @@ def test_progress_text_counts_the_points_still_needed():
     over = tracker.leg_progress(True, 24.5, LIVE, player(20))
     assert over.have == 20 and over.target == 25 and "needs 5 more" in over.detail
     under = tracker.leg_progress(False, 24.5, LIVE, player(20))
-    assert "can score 4 more" in under.detail           # 24 is the most that still wins
+    assert "can add 4 more" in under.detail             # 24 is the most that still wins
 
 
 # ---- the whole slip ------------------------------------------------------------------------------------------

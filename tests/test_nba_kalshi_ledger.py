@@ -148,15 +148,16 @@ def test_a_liquid_market_becomes_a_hand_checked_ledger_row():
     assert row["pick_side"] is None and row["pick_ev"] is None
 
 
-def test_a_big_enough_edge_is_marked_as_a_pick_by_the_fanduel_rule():
+def test_an_edge_far_from_kalshi_s_price_is_not_a_pick_however_big():
     rows = rows_of(market("KXNBAPTS", "MIN", "HOU", "DURANT", "Kevin Durant", 25))
     projections = {"e2": {"points": {"Kevin Durant": {"player_id": 1, "mean": 38.0}}}}
     (row,) = ledger_mod.build_kalshi_ledger_rows(
         rows, EVENTS, projections, RECORDED_AT, model_version=VERSION)
-    # model 0.8165; blend = 0.3 * 0.8165 + 0.7 * 0.5572 = 0.6349; EV = 0.6349 * 1.7246 - 1 = +9.5%
+    # model 0.8165 vs Kalshi 0.5572 would be +9.5% EV, but a 26-point disagreement is far past
+    # the 15-point guardrail: the model is missing something, so nothing is picked
     assert row["model_p_over"] == pytest.approx(0.8165, abs=1e-3)
-    assert (row["pick_side"], row["pick_odds"]) == ("over", -138)
-    assert row["pick_ev"] == pytest.approx(0.095, abs=2e-3)
+    assert row["fair_p_over"] == pytest.approx(0.5572, abs=1e-3)
+    assert row["pick_side"] is None and row["pick_ev"] is None
 
 
 def test_the_row_key_is_event_player_line_model_stat_book():

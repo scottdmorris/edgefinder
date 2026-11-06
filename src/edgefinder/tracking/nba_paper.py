@@ -57,6 +57,26 @@ def tipped_off(recorded_at: str, commence_time: str) -> bool:
     return moment(recorded_at) >= moment(commence_time)
 
 
+# The model's spread was fitted around the middle of the distribution, where
+# the over/under lines sit. Out in the tail (35+ for a 22-point scorer at
+# +1700) it is too wide, which turns a small disagreement into a huge fake
+# edge. A price needs at least this model chance to count as a pick, which
+# keeps picks to rungs near the range the model was checked on.
+MIN_MODEL_P = 0.35
+# A model far from the market is usually missing something (a new role, an
+# injury), not finding free money, so a gap this big is excluded as a data
+# problem, the same rule the MLB board uses.
+MAX_DISAGREEMENT = 0.15
+# These apply to ladder books (Kalshi), where every rung is priced and the long shots far out
+# on it are where the model's tail is weakest. FanDuel's main lines sit near 50% already.
+GUARDED_BOOKS = frozenset({"kalshi"})
+
+
+def passes_guardrails(model_p: float, market_p: float) -> bool:
+    """The side's model chance is high enough, and not far from the market's."""
+    return model_p >= MIN_MODEL_P and abs(model_p - market_p) <= MAX_DISAGREEMENT
+
+
 def build_ledger_rows(
     event: dict,
     lines: list[dict],
@@ -95,6 +115,10 @@ def build_ledger_rows(
         side, odds, ev = (("over", over_odds, ev_over) if ev_over >= ev_under
                           else ("under", under_odds, ev_under))
         is_pick = ev >= MIN_EV_TO_RECORD
+        if is_pick and book in GUARDED_BOOKS:
+            side_model = model_over if side == "over" else 1 - model_over
+            side_market = fair_over if side == "over" else 1 - fair_over
+            is_pick = passes_guardrails(side_model, side_market)
         rows.append({column: None for column in COLUMNS} | {
             "recorded_at": recorded_at, "game_date": game_date,
             "event_id": event["event_id"], "commence_time": event["commence_time"],

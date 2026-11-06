@@ -22,6 +22,10 @@ from ..data.nba_live import FINAL, LIVE, LiveGame, PlayerLine
 
 HIT, ALIVE, MISSED, NOT_STARTED, VOID = "Hit", "Alive", "Missed", "Not started", "Didn't play"
 
+# what each stat counts in the live box score, and what to call it
+COUNTED = {"points": ("points", "points"), "rebounds": ("rebounds", "rebounds"),
+           "assists": ("assists", "assists"), "threes": ("threes", "3-pointers")}
+
 
 @dataclass(frozen=True)
 class Progress:
@@ -32,13 +36,14 @@ class Progress:
 
 
 def target_points(line: float) -> int:
-    """Fewest points that beat a half-point line: 24.5 -> 25."""
+    """Fewest counted that beat a half-point line: 24.5 -> 25."""
     return math.floor(line) + 1
 
 
 def leg_progress(is_over: bool, line: float, game_status: int,
-                 player: PlayerLine | None) -> Progress:
+                 player: PlayerLine | None, stat: str = "points") -> Progress:
     target = target_points(line)
+    column, unit = COUNTED.get(stat, COUNTED["points"])
     if game_status < LIVE:
         return Progress(NOT_STARTED, None, target, "game hasn't started")
     if player is None or not player.played:
@@ -46,19 +51,19 @@ def leg_progress(is_over: bool, line: float, game_status: int,
             return Progress(VOID, None, target, "didn't play, so the bet is void")
         return Progress(ALIVE, 0, target, "hasn't entered the game yet")
 
-    have, final = player.points, game_status == FINAL
+    have, final = int(getattr(player, column)), game_status == FINAL
     if is_over:
         if have >= target:
-            return Progress(HIT, have, target, f"{have} points, needed {target}")
+            return Progress(HIT, have, target, f"{have} {unit}, needed {target}")
         if final:
             return Progress(MISSED, have, target, f"finished with {have}, needed {target}")
-        return Progress(ALIVE, have, target, f"{have} so far, needs {target - have} more")
+        return Progress(ALIVE, have, target, f"{have} {unit} so far, needs {target - have} more")
     if have >= target:
         return Progress(MISSED, have, target, f"already at {have}, over the line")
     if final:
         return Progress(HIT, have, target, f"finished with {have}, under the line")
     return Progress(ALIVE, have, target,
-                    f"{have} so far, can score {target - 1 - have} more and still win")
+                    f"{have} {unit} so far, can add {target - 1 - have} more and still win")
 
 
 def slip_status(statuses: list[str]) -> str:
@@ -96,7 +101,8 @@ def track_slip(chosen: pd.DataFrame, games: list[LiveGame], fetch_box) -> pd.Dat
             if game.game_id not in boxes:
                 boxes[game.game_id] = fetch_box(game.game_id)
             player = boxes[game.game_id].get(int(bet.player_id))
-        rows.append(_row(bet, game, leg_progress(bool(bet.is_over), bet.line, game.status, player)))
+        rows.append(_row(bet, game, leg_progress(bool(bet.is_over), bet.line, game.status, player,
+                                                  getattr(bet, "stat_key", "points"))))
     return pd.DataFrame(rows)
 
 

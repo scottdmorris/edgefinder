@@ -51,6 +51,10 @@ version is the Record tab; regenerate this table with
   hash-chained log, audited against the ledger, with a published fingerprint.
 - **Live game center.** Scoreboard, shot chart on the home team's floor, box
   score, timeouts, fouls, and your slip tracked bet by bet.
+- **A real web app.** A FastAPI service over the same Python, and a React,
+  TypeScript and Tailwind front end that works on a phone: a sportsbook-style
+  props list, a slip priced as you build it, a live game center that refreshes
+  every 10 seconds, player lookup and the full record.
 - **Built to run unattended**, with job heartbeats, retries, and an app notice
   when snapshots fall behind.
 
@@ -73,8 +77,10 @@ flowchart LR
     L --> C[(Hash-chained log)]
     ST[Settle job<br>9:00 AM] --> L
     ST --> C
+    L --> API[FastAPI service]
+    NB --> API
+    API --> WEB[React web app]
     L --> APP[Streamlit app]
-    NB --> APP
     C --> V[verify_record.py] --> D[record/DIGESTS.md<br>published fingerprint]
 ```
 
@@ -86,7 +92,19 @@ python -m venv .venv
 .venv\Scripts\streamlit run app.py
 ```
 
-Runs at http://localhost:8501. The app only reads files the scheduled jobs
+Runs at http://localhost:8501. The newer web app is a FastAPI service plus a
+React front end, served together on one port:
+
+```powershell
+cd web; npm install; npm run build; cd ..     # once, and after front-end changes
+.venv\Scripts\uvicorn edgefinder.api.app:app --app-dir src --port 8000
+```
+
+Then open http://localhost:8000 (the API is documented at
+http://localhost:8000/api/docs). For front-end work, `npm run dev` in `web/`
+serves the app with hot reload and passes `/api` through to port 8000.
+
+Both apps only read files the scheduled jobs
 write, so it works without an API key and never spends Odds API requests. To
 record live FanDuel lines, get a free key at https://the-odds-api.com (500
 requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
@@ -98,10 +116,12 @@ requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
 .venv\Scripts\python scripts\nba_props_settle.py               # grade picks, print the report
 .venv\Scripts\python scripts\verify_record.py                  # check the log and the ledger
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # schedule both jobs
-.venv\Scripts\python -m pytest                                 # about 1,300 tests
+.venv\Scripts\python -m pytest                                 # about 1,400 tests
 ```
 
-## The six views
+## The views
+
+The web app has the first five; the Streamlit app has all six.
 
 - **Parlay.** Every prop for a game day as stacked Points, Rebounds, Assists and
   3-pointer sections, filterable by game, in a list or grid. Suggested slips per
@@ -110,7 +130,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # sched
 - **Live.** Scoreboard with a "+3" pop when a team scores, any game's shot
   chart, box score and plays, and your slip tracked while the games are on.
 - **Players.** Search a player: averages, recent games, tonight's lines and both
-  projections, and how often he has cleared a number.
+  projections, and how often they have cleared a number.
 - **Picks.** Suggested bets, X+ points ladders, and every line next to the
   market's devigged probability.
 - **Record.** Whether the log is intact, whether the price moved our way after
@@ -197,13 +217,17 @@ to lose. Problem gambling help: 1-800-GAMBLER.
 
 ```powershell
 .venv\Scripts\python -m pytest
+cd web; npm run build      # type-checks the front end, then builds it
 ```
 
 Layout: `src/edgefinder/betting` (odds, expected value, the negative binomial
 and correlated-parlay math), `models` (baselines, minutes, context and shot
 models, correlations), `data` (NBA, Kalshi and Odds API clients, job health),
 `eval` (walk-forward scoring), `tracking` (ledgers, grading, the pick chain),
-`ui` (Streamlit views and the theme). See [CHANGELOG.md](CHANGELOG.md) for what
+`ui` (Streamlit views and the theme), `api` (the FastAPI service the web app
+reads). The front end is in `web/` (Vite, React, TypeScript, Tailwind): `lib`
+for the typed API client, the slip and polling, then `components` and
+`screens`. See [CHANGELOG.md](CHANGELOG.md) for what
 changed and why.
 
 ## License

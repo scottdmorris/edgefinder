@@ -4,6 +4,41 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A real web app
+- **FastAPI service** (`src/edgefinder/api`) over the same Python the Streamlit app uses, so
+  the two can't disagree: `/api/board`, `/api/ideas` and `/api/slip` for the Parlay screen,
+  `/api/live`, `/api/live/{game}` and `/api/live/track` for Live, `/api/players`, `/api/picks`
+  and `/api/record`. Short caches keep a page of taps from re-reading files, and NBA's live
+  feed is read at most every 8 seconds however many people are watching. Documented at
+  `/api/docs`.
+- **React, TypeScript and Tailwind front end** (`web/`), built by Vite and served by the same
+  server on one port. Five screens:
+  - **Parlay:** the props list (pick a number on a sideways strip, then Yes or No), price gaps
+    and suggested slips. The slip is priced as you build it; it sits beside the props on a wide
+    screen and is a bottom bar on a phone, and it survives a reload.
+  - **Live:** a score strip of every game, a header in both teams' colors with timeouts, fouls
+    and the bonus, the score popping when it changes, the shot chart on the home team's floor,
+    team stats, leaders, the play-by-play (new plays flash in) and the box score. Your slip is
+    tracked bet by bet. It all refreshes every 10 seconds and pauses while the tab is hidden.
+  - **Players:** a search that ignores accents, the season at a glance, tonight's line, and how
+    often the player has cleared any number (the hit rate updates as the line moves).
+  - **Picks:** what each model would bet, and every line with each model's projection.
+  - **Record:** the tamper log, each model's record and calibration, running profit, the record
+    split by price source and stat, closing-line value, and every pick as locked.
+- **Tests:** the API is covered against a made-up ledger and live feed (no files, no network),
+  including a check that the server never hands out files outside the built app.
+
+### Fixes
+- **Live slip tracking counted points for every bet.** A rebounds, assists or 3-pointers bet
+  was judged on the player's points. Each bet now counts its own stat, and the progress text
+  says which ("6 rebounds so far, needs 4 more").
+- **Kalshi picks now pass the same guardrails as X+ picks:** the model must give the side at
+  least 35% and sit within 15 points of Kalshi's price. Kalshi's ladders price every rung, and
+  most early Kalshi picks were long shots far out on them. On the 177 Kalshi picks already
+  graded, the rule would have dropped 103 that went 14-89 (-63.1 units) and kept 74 that went
+  35-39 (-0.7). That was measured on the same picks that prompted the change, so it is not an
+  independent test. Picks already locked are unchanged; FanDuel picks are unaffected.
+
 ### Honest chances by player role
 - **Measured** (`scripts/nba_calibration_by_line.py`, 2025-26, never seen in training): when the
   older models gave a bench player (under 18 minutes) a 70%+ chance, it came true about 70% of

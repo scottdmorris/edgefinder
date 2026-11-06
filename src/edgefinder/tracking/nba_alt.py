@@ -27,7 +27,9 @@ from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
 from ..models import nba_context_points, nba_context_v2, nba_minutes_points, nba_points
-from .nba_paper import MIN_EV_TO_RECORD, MODEL_WEIGHT, tipped_off
+from .nba_paper import (  # noqa: F401 - MIN_MODEL_P/MAX_DISAGREEMENT re-exported
+    MAX_DISAGREEMENT, MIN_EV_TO_RECORD, MIN_MODEL_P, MODEL_WEIGHT, tipped_off,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,16 +42,6 @@ DISPERSIONS = {
     nba_context_v2.MODEL_VERSION: nba_context_v2.MODEL_DISPERSION,
 }
 _MIN_PROB, _MAX_PROB = 0.001, 0.999
-# The model's spread was fitted around the middle of the distribution, where
-# the over/under lines sit. Out in the tail (35+ for a 22-point scorer at
-# +1700) it is too wide, which turns a small disagreement into a huge fake
-# edge. A price needs at least this model chance to count as a pick, which
-# keeps picks to rungs near the range the model was checked on.
-MIN_MODEL_P = 0.35
-# A model far from the market is usually missing something (a new role, an
-# injury), not finding free money, so a gap this big is excluded as a data
-# problem, the same rule the MLB board uses.
-MAX_DISAGREEMENT = 0.15
 
 
 def is_pick(ev: float, model_p: float, market_p: float) -> bool:

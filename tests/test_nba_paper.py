@@ -305,8 +305,8 @@ def test_a_stat_the_game_logs_dont_cover_is_left_pending_not_guessed():
 def test_summary_can_be_limited_to_one_stat_and_book():
     points = build([line()], {"Cade Cunningham": prediction(mean=32.0)})
     rebounds = nba_paper.build_ledger_rows(
-        EVENT, [line(point=8.5)], {"Cade Cunningham": prediction(mean=14.0)}, RECORDED_AT,
-        GAME_DATE, stat="rebounds", book="kalshi")
+        EVENT, [line(point=8.5, over=110, under=-140)], {"Cade Cunningham": prediction(mean=10.0)},
+        RECORDED_AT, GAME_DATE, stat="rebounds", book="kalshi")
     ledger = ledger_with(points + rebounds)
     assert nba_paper.summary(ledger)["picks"] == 2
     assert nba_paper.summary(ledger, stat="rebounds")["picks"] == 1

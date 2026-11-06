@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* The black, X-like palette the Streamlit app uses, as Tailwind colors (bg-raised, text-muted…) */
+@theme {
+  --color-ink: #000000;
+  --color-raised: #16181c;
+  --color-raised-2: #1d2025;
+  --color-line: #2f3336;
+  --color-line-strong: #536471;
+  --color-text: #e7e9ea;
+  --color-muted: #71767b;
+  --color-button: #eff3f4;
+  --color-button-text: #0f1419;
+  --color-good: #00ba7c;
+  --color-warn: #f5b83d;
+  --color-bad: #f4212e;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html, body { background: var(--color-ink); color: var(--color-text); }
+body { -webkit-font-smoothing: antialiased; }
+
+@keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1) } 50% { opacity: .35; transform: scale(.7) } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+.live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+.rise { animation: rise .25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .rise { animation: none; }
+  * { transition: none !important; }
+}
+
+/* sideways strips (the line picker) scroll without showing a bar */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* live: a score that just changed, a shot or play that just arrived, a bet whose status flipped */
+@keyframes score-pop { 0% { transform: scale(1) } 30% { transform: scale(1.25); color: var(--color-good) } 100% { transform: scale(1) } }
+@keyframes shot-pop { 0% { transform: scale(3); opacity: 0 } 60% { opacity: 1 } 100% { transform: scale(1) } }
+@keyframes flash { 0% { background: color-mix(in srgb, var(--color-good) 22%, transparent) } 100% { background: transparent } }
+@keyframes ticker { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+.score-pop { animation: score-pop .9s ease-out; display: inline-block }
+.shot-pop { animation: shot-pop .7s ease-out both; transform-box: fill-box; transform-origin: center }
+.flash { animation: flash 2.4s ease-out }
+.ticker { animation: ticker .3s ease-out both }
+
+@media (prefers-reduced-motion: reduce) {
+  .score-pop, .shot-pop, .flash, .ticker { animation: none }
+}
