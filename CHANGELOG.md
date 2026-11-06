@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A tamper-evident record
+- **Append-only pick log with a hash chain** (`tracking/pick_chain.py`). Every ledger row and
+  every result is also written to `data/nba_paper_log.chain.jsonl`, each entry fingerprinted
+  together with the one before it. The 659 rows and 154 results already in the ledger were
+  imported once and are marked as such.
+- **Audit on the Record tab.** "Has anything been changed?" shows whether the log is intact,
+  how many ledger rows match it, and the latest fingerprint, and warns if a published
+  fingerprint no longer matches. Edited, deleted and never-logged rows are named.
+- **Publishing.** `python scripts/verify_record.py --write-digest` adds the day's fingerprint
+  to `record/DIGESTS.md`; committing and pushing it gives an independent timestamp.
+- **Safe to fail.** Chain problems are logged and never stop a snapshot or a settle; a row it
+  misses shows up in the audit as never logged.
+
 ### Game filter, a faster slip search, and phone polish
 - **Filter the Parlay tab by game.** The Game chips sit above the suggested slips and filter
   both them and the prop list. Choosing one game gives same-game slips (different players,

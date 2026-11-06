@@ -168,6 +168,30 @@ What this does **not** show: that it beats FanDuel. These are measurements
 against past games, not against posted lines. The live record is where that is
 tested, and `context-v2` starts at zero graded picks like everything else.
 
+### A record you do not have to take on trust
+The ledger is a spreadsheet, and anyone with the file can edit it. So every row and every
+result is also written to a second, append-only log (`data/nba_paper_log.chain.jsonl`).
+Each entry carries a SHA-256 fingerprint of its own contents **and the previous entry's
+fingerprint**, so changing, deleting or reordering anything in the past breaks every
+fingerprint after it. The Record tab walks the log and compares it with the ledger: edited
+rows, deleted rows, rows that were never logged, and results that differ from the one logged
+are all named.
+
+**What it proves, and what it doesn't.** On its own it proves little: whoever can edit the
+ledger can also rebuild the whole log. What makes it trustworthy is publishing the *latest
+fingerprint* somewhere the operator cannot rewrite. `python scripts/verify_record.py
+--write-digest` adds a line (date, number of entries, fingerprint) to `record/DIGESTS.md`;
+once that is committed to the public repository, the commit time is a timestamp the operator
+does not control, and any later log must still contain that fingerprint at that entry number.
+A log that was cut short or rewritten cannot reproduce it. To let a stranger check it, the
+log and the ledger have to be shared, and until then only the operator can run the check.
+
+**What it does not cover.** The 813 entries that existed when the log began (5 Nov 2026) were
+imported, not witnessed, and are marked so; only entries after that were logged as they
+happened. The time on an entry is the clock of the machine that wrote it. Closing prices
+arrive after the fact and are not part of the log. The X+ ledger is not chained yet. A pick
+is no longer written at all if its game has started.
+
 ### From a projection to a chance
 A negative binomial distribution with the projection as its mean. Its spread
 ("dispersion") is fitted from past misses with a method-of-moments estimate,

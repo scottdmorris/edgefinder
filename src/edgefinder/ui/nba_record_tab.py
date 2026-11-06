@@ -6,11 +6,15 @@ refuses to say the models beat the market until there are enough graded
 lines to mean something.
 """
 
+import datetime as dt
+from pathlib import Path
+
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from ..tracking import nba_alt, nba_paper, nba_parlay, nba_record
+from ..data.nba_snapshot_plan import EASTERN
+from ..tracking import nba_alt, nba_paper, nba_parlay, nba_record, pick_chain
 from . import shared, style
 
 
@@ -24,6 +28,7 @@ def render() -> None:
                "result is filled in later, and the lock time below shows it.")
     locked = nba_record.locked_picks(ledger)
     _status(nba_record.integrity(ledger))
+    _chain_status()
     _closing_value(nba_paper.load_ledger())
     _models(ledger)
     _profit_chart(locked)
@@ -45,6 +50,51 @@ def _status(report: dict) -> None:
                    f"{report['last_lock']:%b %d, %I:%M %p} ET. "
                    + ("Every pick was recorded before its game started."
                       if clean else "Some picks were recorded after tip-off: ignore those."))
+
+
+DIGESTS = Path(__file__).resolve().parents[3] / "record" / "DIGESTS.md"
+
+
+def _chain_status() -> None:
+    """Is the record tamper-evident right now? Walks the chain and compares it to the ledger."""
+    chain = pick_chain.chain_path_for(nba_paper.LEDGER_PATH)
+    verified = pick_chain.verify(chain)
+    if not verified.entries:
+        st.caption("The tamper-evident log starts with the next recorded pick.")
+        return
+    audit = pick_chain.audit(nba_paper.load_ledger(), chain)
+    sound = verified.intact and audit.clean
+    st.markdown("#### Has anything been changed?")
+    chained, rows, head = st.columns(3)
+    chained.markdown(style.stat_tile("Log", "Intact" if verified.intact else "BROKEN",
+                                     style.GREEN if verified.intact else style.RED),
+                     unsafe_allow_html=True)
+    rows.markdown(style.stat_tile("Rows matching the log", f"{audit.matched} of {audit.rows}",
+                                  style.GREEN if audit.clean else style.RED),
+                  unsafe_allow_html=True)
+    head.markdown(style.stat_tile("Latest fingerprint", verified.head[:10]),
+                  unsafe_allow_html=True)
+    began = dt.datetime.fromisoformat(verified.first_at).astimezone(EASTERN)
+    st.caption(
+        f"Every pick and result is written to an append-only log where each entry carries a "
+        f"fingerprint of the one before it, so changing the past breaks everything after. "
+        f"{verified.imported} entries were imported when the log began ({began:%b %d}); the "
+        f"rest were logged as they happened.")
+    checks = pick_chain.check_published(chain, DIGESTS)
+    if not checks:
+        st.caption("No fingerprint has been published yet. Until one is, this log proves "
+                   "nothing to an outsider, since whoever runs it could rebuild it.")
+    elif all(ok for _, _, ok in checks):
+        date, count, _ = checks[-1]
+        st.caption(f"{len(checks)} published fingerprint{'s' if len(checks) != 1 else ''}, "
+                   f"the latest from {date} (entry {count}), still match this log.")
+    else:
+        st.warning("A published fingerprint does NOT match this log: it has been changed or "
+                   "cut short since it was published.")
+    for problem in (verified.problems + audit.problems)[:5]:
+        st.warning(problem)
+    if not sound:
+        st.warning("The record does not match its log. Do not trust the numbers above.")
 
 
 def _closing_value(ledger: pd.DataFrame) -> None:

@@ -28,9 +28,11 @@ def build_report(today: dt.date) -> str:
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
     settled = nba_paper.settle(ledger, games, nba_props.load_snapshots(), today,
                                nba_kalshi_ledger.load_snapshots())
+    logged = nba_paper.log_settlements(ledger, settled)
     nba_paper.save_ledger(settled)
 
-    lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"]
+    lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"
+             f"  ({logged} results added to the pick chain)"]
     versions = sorted(settled["model_version"].dropna().unique())
     for version in versions:
         lines += ["", *version_block(settled, version)]

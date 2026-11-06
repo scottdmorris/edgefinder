@@ -26,6 +26,7 @@ from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
 from ..models import nba_stat_model
+from . import pick_chain
 from ..models.nba_points import MODEL_DISPERSION, MODEL_VERSION
 
 LEDGER_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_paper_log.csv"
@@ -153,6 +154,8 @@ def append_rows(rows: list[dict], path: Path | None = None) -> int:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
+    chain = pick_chain.chain_path_for(path)
+    _chain_safely("start the pick chain", pick_chain.ensure_started, chain, existing)
     if not is_new:
         _upgrade_file(path)
     with path.open("a", newline="", encoding="utf-8") as handle:
@@ -160,7 +163,28 @@ def append_rows(rows: list[dict], path: Path | None = None) -> int:
         if is_new:
             writer.writeheader()
         writer.writerows(fresh)
+    _chain_safely("log the new rows", pick_chain.record_picks, chain, fresh)
     return len(fresh)
+
+
+def log_settlements(before: pd.DataFrame, after: pd.DataFrame, path: Path | None = None) -> int:
+    """Log the results a settle run filled in (call before saving the settled ledger).
+    Returns how many were logged; a failure is reported but never stops the settle."""
+    chain = pick_chain.chain_path_for(path or LEDGER_PATH)
+    _chain_safely("start the pick chain", pick_chain.ensure_started, chain, before)
+    return _chain_safely("log the results", pick_chain.record_settlements, chain, before,
+                         after) or 0
+
+
+def _chain_safely(what: str, action, *args):
+    """The chain is a record-keeping layer: its failure must never lose a pick or a result.
+    A row it misses shows up in the audit as never logged."""
+    try:
+        return action(*args)
+    except Exception:       # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).exception("could not %s", what)
+        return None
 
 
 def _row_key(row: dict) -> tuple:
