@@ -20,12 +20,13 @@ import streamlit as st
 from ..betting import correlated
 from ..data import nba_injuries, nba_live, nba_players, nba_stats
 from ..models import nba_stat_model
-from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view
+from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
 from . import shared, style, team_colors
 
 DEFAULT_STAKE = 10.0
 LEGS_KEY = "parlay_legs"
 IDEAS_SHOWN = 3
+GAPS_SHOWN = 5
 HOW_TO = (
     "**1.** Pick a game day and a projection.  **2.** Tap a price to add a bet to your "
     "slip (tap it again to remove it).  **3.** Read the slip: how likely it is that "
@@ -87,6 +88,7 @@ def render() -> None:
     shown, single_game = _game_filter(candidates)
     browse, slip = st.columns([5, 4], gap="large")
     with browse:
+        _price_gap_section(date, book, shown, candidates)
         _suggested(candidates, shown, single_game)
         _browse(shown, candidates, book)
         _search(candidates)
@@ -167,6 +169,47 @@ def _slip_bar(current) -> None:
 
 
 # ---- browsing ---------------------------------------------------------------------
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _price_gaps(date: str) -> pd.DataFrame:
+    """Every gap between FanDuel and Kalshi that day; remembered between taps."""
+    return price_gaps.find_gaps(nba_paper.load_ledger(), nba_alt.load_ledger(), date)
+
+
+def _price_gap_section(date: str, book: str, shown: pd.DataFrame,
+                       candidates: pd.DataFrame) -> None:
+    """Bets this book prices well above the other market's fair chance, biggest first."""
+    gaps = _price_gaps(date)
+    gaps = gaps[(gaps["Book"] == book) & gaps["Game"].isin(set(shown["Game"]))].head(GAPS_SHOWN)
+    if gaps.empty:
+        return
+    other = "Kalshi" if book == "fanduel" else "FanDuel"
+    st.markdown("#### Where the prices disagree")
+    st.caption(f"Bets priced above {other}'s fair chance for the same thing. This is the other "
+               "market's view, not our model's"
+               + ("; Kalshi prices are before its fees" if book == "kalshi" else "")
+               + ". Prices are from the last snapshot and may have moved.")
+    slip = set(st.session_state.get(LEGS_KEY, []))
+    short = {g: f"{r.away_abbr} @ {r.home_abbr}" for g, r in
+             candidates.drop_duplicates("Game").set_index("Game").iterrows()}
+    for position, row in gaps.iterrows():
+        card, action = st.columns([4, 1], vertical_alignment="center")
+        mine, theirs = BOOK_NAMES.get(book, book), row["Reference"]
+        estimate = " (est.)" if row["How"] == "estimated" else ""
+        card.markdown(style.leg_card(
+            nba_parlay.headshot_url(row["player_id"]), row["Player"],
+            f"{row['Bet']} pts · {shared.fmt_american(row['Odds'])} · "
+            f"{short.get(row['Game'], row['Game'])}",
+            f"+{row['Edge %']:.1f}%",
+            detail=f"{theirs} {row['Reference %']:.0f}%{estimate} vs {mine}'s "
+                   f"{row['Price says %']:.0f}%", compact=True),
+            unsafe_allow_html=True)
+        index = price_gaps.candidate_index(candidates, row)
+        if index is not None:
+            action.button("✓ On slip" if index in slip else "Add", key=f"gap_{position}",
+                          type="primary" if index in slip else "secondary",
+                          use_container_width=True, on_click=_toggle, args=(index, candidates))
+
 
 def _game_filter(candidates: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     """Chips to look at one game, or all of them. Returns the legs to show (they keep their

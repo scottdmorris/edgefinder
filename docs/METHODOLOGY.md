@@ -192,6 +192,16 @@ happened. The time on an entry is the clock of the machine that wrote it. Closin
 arrive after the fact and are not part of the log. The X+ ledger is not chained yet. A pick
 is no longer written at all if its game has started.
 
+### When the two markets disagree
+FanDuel (a sportsbook) and Kalshi (an exchange) price many of the same bets. The Parlay screen
+flags bets one prices well above the other's fair chance, measured as the expected profit per $1
+*if the other market is right*. FanDuel's "25+" ladder matches Kalshi's "25+" contracts exactly;
+FanDuel's main lines usually sit between Kalshi's numbers, so they are priced from a curve fitted
+to the player's Kalshi ladder and marked as estimated. This needs no model of ours: it is the
+idea from Kaunitz, Zhong and Kreiner (2017) of betting a book when it strays from the market's
+own consensus. It is only as good as the reference market, Kalshi's books can be thin, its prices
+are before fees, and both prices come from the same snapshot and may have moved since.
+
 ### From a projection to a chance
 A negative binomial distribution with the projection as its mean. Its spread
 ("dispersion") is fitted from past misses with a method-of-moments estimate,

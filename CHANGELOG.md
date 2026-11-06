@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Where FanDuel and Kalshi disagree
+- **A price-gap flag** (`tracking/price_gaps.py`) on the Parlay screen: bets one market prices
+  well above the other's fair chance for the same thing, biggest first, with an Add button.
+  The gap is the expected profit per $1 IF the other market is right (at least 3%; anything
+  over 30% is treated as a stale price and dropped).
+- **How bets are matched:** FanDuel's X+ ladder and Kalshi's contracts line up exactly on the
+  same number; FanDuel's main over/under is compared exactly when it sits on a Kalshi number, and
+  otherwise priced from a curve fitted to the player's Kalshi ladder, labelled "est.". It also
+  works the other way (Kalshi paying more than FanDuel's fair chance), noting Kalshi's fees.
+- **No model of ours involved**: it uses the other market as the reference, after "Beating the
+  bookies with their own numbers" (Kaunitz et al., 2017).
+- First night (2026-11-05): 7 gaps, 3 won, about break-even at a flat stake. Far too few to judge.
+
 ### A cleaner Live screen
 - **Score strip.** Every game is one chip with its live score ("MIA 87-103 GSW · Q4 7:25"),
   games on now first. Tap one to open it. The separate card list that repeated each game is gone.
