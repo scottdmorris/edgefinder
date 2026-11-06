@@ -22,7 +22,8 @@ BUTTON_TEXT = "#0F1419"
 CSS = f"""
 <style>
 .stApp {{ background: {BG}; }}
-.block-container {{ padding-top: 3.4rem; padding-bottom: 5rem; max-width: 1180px; }}
+.block-container {{ padding-top: 1.1rem; padding-bottom: 5rem; max-width: 1180px; }}
+header[data-testid="stHeader"] {{ display: none; }}
 h1, h2, h3, h4 {{ letter-spacing: -0.02em; font-weight: 800; }}
 h2 {{ font-size: 1.6rem !important; }}
 h4 {{ font-size: 1.1rem !important; margin-top: .8rem; }}
@@ -39,9 +40,41 @@ hr {{ border-color: {LINE} !important; }}
 .st-key-about table {{ font-size: 0.88rem; }}
 
 /* tabs: quiet text, the current one white, a blue bar under it */
-.stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {LINE}; }}
-.stTabs [data-baseweb="tab"] {{ font-weight: 500; padding: 14px 16px; color: {MUTED}; }}
-.stTabs [aria-selected="true"] {{ color: {TEXT}; font-weight: 800; }}
+/* navigation: a pill bar, the open view filled white (Streamlit 1.59: role=tablist + stTab) */
+.stTabs [role="tablist"] {{ gap: 4px; border-bottom: 0; background: {RAISED};
+  padding: 5px; border-radius: 999px; width: fit-content; max-width: 100%; overflow-x: auto;
+  border: 1px solid {LINE}; margin-bottom: 18px; }}
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"],
+.stTabs .react-aria-SelectionIndicator {{ display: none; }}
+.stTabs [data-testid="stTab"] {{ font-weight: 600; padding: 9px 16px; color: {MUTED};
+  border-radius: 999px; transition: background .15s ease, color .15s ease; }}
+.stTabs [data-testid="stTab"]:hover {{ color: {TEXT}; }}
+.stTabs [data-testid="stTab"][aria-selected="true"] {{ color: {BUTTON_TEXT} !important;
+  background: {BUTTON}; font-weight: 800; }}
+.stTabs [data-testid="stTab"][aria-selected="true"] * {{ color: {BUTTON_TEXT} !important; }}
+
+/* the top bar */
+.bk-appbar {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 4px 2px 16px; }}
+.bk-appbar-brand {{ display: flex; align-items: center; gap: 10px; }}
+.bk-appbar-logo {{ width: 34px; height: 34px; }}
+.bk-appbar-name {{ font-weight: 900; font-size: 1.3rem; letter-spacing: -.01em; }}
+.bk-appbar-chips {{ display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }}
+.bk-chip {{ font-size: .78rem; font-weight: 700; padding: 6px 12px; border-radius: 999px;
+  background: {RAISED}; border: 1px solid {LINE}; color: {MUTED}; white-space: nowrap; }}
+.bk-chip.live {{ color: {GREEN}; border-color: rgba(0,186,124,.45); }}
+.bk-chip.live::before {{ content: ""; display: inline-block; width: 7px; height: 7px;
+  margin-right: 6px; border-radius: 999px; background: {GREEN}; vertical-align: 1px;
+  animation: bk-pulse 1.6s ease-in-out infinite; }}
+.bk-chip.warn {{ color: {AMBER}; border-color: rgba(245,184,61,.45); }}
+
+/* a row of big numbers */
+.bk-strip {{ display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 16px; }}
+.bk-strip-cell {{ flex: 1 1 110px; padding: 12px 14px; border-radius: 16px;
+  background: {RAISED}; border: 1px solid {LINE}; }}
+.bk-strip-cell b {{ display: block; font-size: 1.5rem; font-weight: 900; line-height: 1.1; }}
+.bk-strip-cell span {{ font-size: .74rem; color: {MUTED}; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; }}
 [data-testid="stTab"] {{ font-weight: 500; color: {MUTED}; }}
 [data-testid="stTab"][aria-selected="true"] {{ color: {TEXT}; font-weight: 800; }}
 
@@ -200,7 +233,7 @@ hr {{ border-color: {LINE} !important; }}
   100% {{ color: inherit; transform: scale(1); }}
 }}
 @media (prefers-reduced-motion: reduce) {{
-  .bk-pop, .bk-team.scored b, .bk-feed.new, .bk-card.flash, .bk-hero-team.scored .bk-hero-score,
+  .bk-pop, .bk-team.scored b, .bk-feed.new, .bk-card.flash, .bk-shot.fresh, .bk-chip.live::before, .bk-hero-team.scored .bk-hero-score,
   .bk-hero.live .bk-hero-badge::before {{ animation: none; }}
   .bk-card, .bk-idea, .bk-game {{ transition: none; }}
 }}
@@ -276,6 +309,16 @@ hr {{ border-color: {LINE} !important; }}
   to {{ opacity: 1; transform: none; }} }}
 @keyframes bk-glow {{ 0% {{ background: rgba(0,186,124,.22); }} 100% {{ background: transparent; }} }}
 
+/* the shot chart */
+.bk-court {{ margin: 6px 0 14px; }}
+.bk-court svg {{ display: block; width: 100%; height: auto; border-radius: 18px;
+  background: #0B0D10; border: 1px solid {LINE}; }}
+.bk-court-team {{ font-weight: 800; font-size: 26px; letter-spacing: .05em; }}
+.bk-shot.fresh {{ animation: bk-shot-in .9s ease-out; transform-box: fill-box;
+  transform-origin: center; }}
+@keyframes bk-shot-in {{ 0% {{ transform: scale(2.6); opacity: 0; }}
+  60% {{ transform: scale(.9); opacity: 1; }} 100% {{ transform: scale(1); }} }}
+
 /* no stray blue: links and alert boxes follow the black palette */
 .stApp a, .stApp a:visited {{ color: {TEXT}; text-decoration: underline; text-decoration-color: {LINE_STRONG}; }}
 .stApp a:hover {{ color: {BUTTON}; text-decoration-color: {BUTTON}; }}
@@ -291,6 +334,12 @@ hr {{ border-color: {LINE} !important; }}
   }}
 }}
 @media (max-width: 640px) {{
+  .stTabs [role="tablist"] {{ padding: 3px; gap: 0; }}
+  .stTabs [data-testid="stTab"] {{ padding: 7px 9px; font-size: .78rem; }}
+  .bk-appbar-name {{ font-size: 1.1rem; }}
+  .bk-appbar-logo {{ width: 28px; height: 28px; }}
+  .bk-strip-cell {{ flex-basis: 40%; padding: 10px 12px; }}
+  .bk-strip-cell b {{ font-size: 1.25rem; }}
   .bk-hero {{ padding: 14px 10px; gap: 6px; }}
   .bk-hero-logo {{ width: 40px; height: 40px; }}
   .bk-hero-score {{ font-size: 2.2rem; }}

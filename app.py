@@ -20,7 +20,6 @@ ASSETS = Path(__file__).parent / "assets"
 
 st.set_page_config(page_title="Ball Knowledge", page_icon=str(ASSETS / "logo-mark.svg"),
                    layout="wide", initial_sidebar_state="collapsed")
-st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "logo-mark.svg"), size="large")
 
 TABS = [":material/receipt_long: Parlay", ":material/sensors: Live",
         ":material/search: Players", ":material/insights: Picks",
@@ -29,6 +28,31 @@ TABS = [":material/receipt_long: Parlay", ":material/sensors: Live",
 
 def _now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
+
+
+def _logo_src() -> str:
+    """The logo mark inlined, so the top bar needs no extra request."""
+    import base64
+    try:
+        data = (ASSETS / "logo-mark.svg").read_bytes()
+    except OSError:
+        return ""
+    return "data:image/svg+xml;base64," + base64.b64encode(data).decode("ascii")
+
+
+def render_app_bar() -> None:
+    """Logo and name, with what is happening right now: games on, and when lines were checked."""
+    chips = []
+    try:
+        live = [g for g in nba_live_tab._games() if g.status == nba_live_tab.nba_live.LIVE]
+        if live:
+            chips.append((f"{len(live)} live", "live"))
+    except Exception:       # noqa: BLE001 - the bar must never stop the app
+        pass
+    snapshot = job_health.snapshot_health(job_health.load(), _now())
+    chips.append((snapshot.text.replace("Lines last checked ", "Lines "),
+                  "" if snapshot.level == "ok" else "warn"))
+    st.markdown(style.app_bar(_logo_src(), "Ball Knowledge", chips), unsafe_allow_html=True)
 
 
 def render_health_notice() -> None:
@@ -52,6 +76,7 @@ def render_footer() -> None:
 
 def main() -> None:
     style.inject()
+    render_app_bar()
     render_health_notice()
     parlay, live, players, picks, record, about = st.tabs(TABS)
     with parlay:

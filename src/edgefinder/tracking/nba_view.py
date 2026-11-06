@@ -16,6 +16,25 @@ def game_dates(ledger: pd.DataFrame) -> list[str]:
     return sorted(ledger["game_date"].dropna().unique(), reverse=True)
 
 
+def short_game(game: str) -> str:
+    """'Miami Heat @ Golden State Warriors' -> 'MIA @ GSW'; anything else is returned as is."""
+    from ..data import nba_players
+    if " @ " not in game:
+        return game
+    away, home = game.split(" @ ", 1)
+    codes = [nba_players.team_abbreviation(away), nba_players.team_abbreviation(home)]
+    return f"{codes[0]} @ {codes[1]}" if all(codes) else game
+
+
+def day_label(game_date: str, today) -> str:
+    """A game day as people say it: 'Today', 'Yesterday', 'Tomorrow', else 'Wed, Nov 4'."""
+    import datetime as _dt
+    day = _dt.date.fromisoformat(game_date)
+    names = {0: "Today", -1: "Yesterday", 1: "Tomorrow"}
+    offset = (day - today).days
+    return names.get(offset, f"{day:%a}, {day:%b} {day.day}")
+
+
 def lines_for_date(ledger: pd.DataFrame, game_date: str) -> pd.DataFrame:
     """One row per line on a date, with every model's projection,
     probability and pick side by side next to the market's own devigged

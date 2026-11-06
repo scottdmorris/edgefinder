@@ -554,3 +554,15 @@ def test_the_slips_shown_carry_the_exact_numbers_not_the_quick_ranking_ones():
         assert row["Chance %"] == exact["joint_probability"] * 100.0     # identical, not close
         assert row["EV %"] == exact["ev_per_unit"] * 100.0
         assert row["Pays"] == exact["decimal_odds"] - 1.0
+
+
+def test_a_bench_players_lock_is_left_out_of_suggestions_but_not_his_other_legs():
+    # good_game legs are 62% model chance: not a lock, so a bench player keeps them
+    games = two_good_games()
+    assert len(nba_parlay.suggest_parlays(games, bench=frozenset({1}))) == 1
+    # make player 1's leg a 72% "lock" (the market at 62%, inside the 15-point disagreement
+    # guard): as a bench player he is out, and with one game left there is no slip
+    locked = games.copy()
+    locked.loc[locked["player_id"] == 1, ["Model %", "Market %"]] = [72.0, 62.0]
+    assert nba_parlay.suggest_parlays(locked, bench=frozenset({1})).empty
+    assert len(nba_parlay.suggest_parlays(locked, bench=frozenset())) == 1   # starters: allowed

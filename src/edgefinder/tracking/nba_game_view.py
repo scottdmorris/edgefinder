@@ -5,6 +5,7 @@ comparison rows, leaders and the quarter-by-quarter table.
 """
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -59,6 +60,17 @@ def court_lines() -> pd.DataFrame:
     rows = [(x / COURT_LENGTH * 100.0, y / COURT_WIDTH * 100.0, name, order)
             for name, points in lines.items() for order, (x, y) in enumerate(points)]
     return pd.DataFrame(rows, columns=["x", "y", "line", "order"])
+
+
+def to_ends(shots: list[Shot], away: str, home: str) -> list[Shot]:
+    """Every shot drawn at its team's own end, the way game apps show it: the away team at the
+    left basket, the home team at the right. Teams switch ends at halftime, so a shot at the
+    other end is turned around the center of the court (both coordinates flipped)."""
+    placed = []
+    for shot in shots:
+        wrong_end = (shot.team == away and shot.x > 50) or (shot.team == home and shot.x < 50)
+        placed.append(replace(shot, x=100 - shot.x, y=100 - shot.y) if wrong_end else shot)
+    return placed
 
 
 def shots_in_period(shots: list[Shot], period: int | None) -> list[Shot]:

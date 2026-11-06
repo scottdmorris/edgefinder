@@ -191,6 +191,81 @@ def game_hero(away: str, home: str, away_logo: str, home_logo: str, away_score: 
     )
 
 
+COURT_W, COURT_H = 940, 500          # 94 x 50 feet, drawn at 10 units a foot
+
+
+def _pts(points) -> str:
+    return " ".join(f"{x * COURT_W / 100:.1f},{y * COURT_H / 100:.1f}" for x, y in points)
+
+
+def court_svg(lines: dict[str, list[tuple[float, float]]], shots: list[dict], home_color: str,
+              logo: str = "", labels: dict[str, tuple[str, str]] | None = None) -> str:
+    """The shot chart as a drawing that keeps the court's shape at any width.
+
+    `lines` are the court markings on a 0-100 scale (the same scale the shots use). Each shot is
+    {"x", "y", "made", "color", "label", "fresh"}: a make is a solid dot, a miss a cross, and a
+    fresh shot (new since the last refresh) pops in. The home team's color fills the paint and
+    the center circle, with its logo at center court. `labels` puts a team's code at the end it
+    attacks: {"left": (code, color), "right": (code, color)}."""
+    home = _hex(home_color) or BLUE
+    parts = [f'<rect width="{COURT_W}" height="{COURT_H}" rx="18" fill="url(#bk-floor)"/>']
+    for name, points in lines.items():
+        if name.endswith("paint"):
+            parts.append(f'<polygon points="{_pts(points)}" fill="{rgba(home, 0.32)}"/>')
+        elif name == "center circle":
+            parts.append(f'<polygon points="{_pts(points)}" fill="{rgba(home, 0.20)}"/>')
+    if logo:
+        size = 110
+        parts.append(f'<image href="{escape(logo, quote=True)}" x="{COURT_W / 2 - size / 2}" '
+                     f'y="{COURT_H / 2 - size / 2}" width="{size}" height="{size}" opacity="0.9"/>')
+    for name, points in lines.items():
+        width = 3 if name == "boundary" else 2
+        parts.append(f'<polyline points="{_pts(points)}" fill="none" stroke="rgba(231,233,234,.55)" '
+                     f'stroke-width="{width}" stroke-linejoin="round"/>')
+    for side, (code, color) in (labels or {}).items():
+        x = 46 if side == "left" else COURT_W - 46
+        parts.append(f'<text x="{x}" y="34" text-anchor="middle" class="bk-court-team" '
+                     f'fill="{_hex(color) or "#E7E9EA"}">{escape(code)}</text>')
+    for shot in shots:
+        cx, cy = shot["x"] * COURT_W / 100, shot["y"] * COURT_H / 100
+        color = _hex(shot.get("color", "")) or "#E7E9EA"
+        fresh = " fresh" if shot.get("fresh") else ""
+        title = f"<title>{escape(shot.get('label', ''))}</title>"
+        if shot["made"]:
+            parts.append(f'<g class="bk-shot{fresh}"><circle cx="{cx:.1f}" cy="{cy:.1f}" r="8" '
+                         f'fill="{color}" stroke="#000" stroke-width="2"/>{title}</g>')
+        else:
+            d = 6
+            parts.append(f'<g class="bk-shot miss{fresh}" stroke="{color}" stroke-width="3" '
+                         f'stroke-linecap="round" opacity=".85">'
+                         f'<line x1="{cx - d:.1f}" y1="{cy - d:.1f}" x2="{cx + d:.1f}" y2="{cy + d:.1f}"/>'
+                         f'<line x1="{cx - d:.1f}" y1="{cy + d:.1f}" x2="{cx + d:.1f}" y2="{cy - d:.1f}"/>'
+                         f'{title}</g>')
+    gradient = (f'<defs><radialGradient id="bk-floor" cx="50%" cy="50%" r="70%">'
+                f'<stop offset="0%" stop-color="{rgba(home, 0.28)}"/>'
+                f'<stop offset="100%" stop-color="#0B0D10"/></radialGradient></defs>')
+    return (f'<div class="bk-court"><svg viewBox="0 0 {COURT_W} {COURT_H}" role="img" '
+            f'aria-label="Shot chart">{gradient}{"".join(parts)}</svg></div>')
+
+
+def app_bar(logo_src: str, title: str, chips: list[tuple[str, str]]) -> str:
+    """The app's top bar: the logo and name on the left, status chips on the right. Each chip is
+    (text, kind) where kind is "" or "live" (green, with a pulsing dot) or "warn"."""
+    mark = f'<img class="bk-appbar-logo" src="{escape(logo_src, quote=True)}" alt="">' if logo_src else ""
+    pills = "".join(f'<span class="bk-chip {escape(kind)}">{escape(text)}</span>'
+                    for text, kind in chips)
+    return (f'<div class="bk-appbar"><div class="bk-appbar-brand">{mark}'
+            f'<span class="bk-appbar-name">{escape(title)}</span></div>'
+            f'<div class="bk-appbar-chips">{pills}</div></div>')
+
+
+def stat_strip(items: list[tuple[str, str]]) -> str:
+    """A row of big numbers with small labels, e.g. [("2", "games"), ("7", "price gaps")]."""
+    cells = "".join(f'<div class="bk-strip-cell"><b>{escape(value)}</b><span>{escape(label)}</span></div>'
+                    for value, label in items)
+    return f'<div class="bk-strip">{cells}</div>'
+
+
 def compare_bar(label: str, away_text: str, home_text: str, away_share: float,
                 ahead: str, away_color: str = "", home_color: str = "") -> str:
     """One team-stat row: the number for each side, the label between them, and

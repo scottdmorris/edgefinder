@@ -16,7 +16,7 @@ from ..betting.correlated import Leg
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_players
-from ..models import nba_stat_model
+from ..models import nba_recalibration, nba_stat_model
 from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P
 from .nba_paper import MODEL_WEIGHT
 
@@ -128,7 +128,12 @@ def player_teams(games: pd.DataFrame) -> dict[int, str]:
     return {int(row.player_id): row.team for row in latest.itertuples()}
 
 
-AVERAGE_COLUMNS = ("pts", "reb", "ast", "fg3m")
+AVERAGE_COLUMNS = ("pts", "reb", "ast", "fg3m", "minutes")
+# Measured on 2025-26 (scripts/nba_calibration_by_line.py): when the older models gave a bench
+# player (under 18 minutes a game) a 70%+ chance, it came true about 70% of the time, not the
+# 83% they said. So such "locks" are never suggested, though they can still be added by hand.
+BENCH_MINUTES = 18.0
+LOCK_CHANCE = 0.70
 RECENT_GAMES = 10
 
 
@@ -136,12 +141,19 @@ def player_averages(games: pd.DataFrame) -> dict[int, dict[str, tuple[float, flo
     """Each player's per-game average this season and over his last 10 games, for
     points, rebounds, assists and threes: {player_id: {"pts": (season, last10), ...}}.
     A player with no games this season gets the season he last played."""
+    columns = [c for c in AVERAGE_COLUMNS if c in games.columns]
     newest = games.groupby("player_id")["season"].transform("max")
-    season = games[games["season"] == newest].groupby("player_id")[list(AVERAGE_COLUMNS)].mean()
+    season = games[games["season"] == newest].groupby("player_id")[columns].mean()
     recent = (games.sort_values("game_date").groupby("player_id").tail(RECENT_GAMES)
-              .groupby("player_id")[list(AVERAGE_COLUMNS)].mean())
+              .groupby("player_id")[columns].mean())
     return {int(pid): {col: (float(season.at[pid, col]), float(recent.at[pid, col]))
-                       for col in AVERAGE_COLUMNS} for pid in season.index}
+                       for col in columns} for pid in season.index}
+
+
+def bench_players(averages: dict, max_minutes: float = BENCH_MINUTES) -> frozenset[int]:
+    """Players averaging under `max_minutes` over their last 10 games."""
+    return frozenset(pid for pid, stats in averages.items()
+                     if "minutes" in stats and stats["minutes"][1] < max_minutes)
 
 
 def average_text(averages: dict, player_id, column: str = "pts") -> str:
@@ -233,13 +245,16 @@ def version_for(available: list[str], wanted: str) -> str:
 
 
 def all_candidates(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: str,
-                   model_version: str, book: str, found: dict) -> pd.DataFrame:
+                   model_version: str, book: str, found: dict,
+                   minutes: dict[int, float] | None = None,
+                   curves: dict | None = None) -> pd.DataFrame:
     """Every leg a source offers that day, across all stats, as one table (points first,
     then rebounds, assists, threes), so one slip can mix them. Each stat uses the chosen
     model when it priced that stat and the baseline when it didn't."""
     frames = [
         candidate_legs(ledger, alt_ledger, game_date,
-                       version_for(found[book][stat], model_version), stat, book)
+                       version_for(found[book][stat], model_version), stat, book,
+                       minutes, curves)
         for stat in nba_stat_model.STATS if stat in found.get(book, {})]
     frames = [f for f in frames if not f.empty]
     if not frames:
@@ -248,12 +263,24 @@ def all_candidates(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: st
 
 
 def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: str,
-                   model_version: str, stat: str = STAT, book: str = BOOK) -> pd.DataFrame:
+                   model_version: str, stat: str = STAT, book: str = BOOK,
+                   minutes: dict[int, float] | None = None,
+                   curves: dict | None = None) -> pd.DataFrame:
     """Every over, under and X+ leg one model priced on a date, for one stat and one
-    price source. X+ legs exist only for FanDuel points."""
-    rows = _over_under_rows(ledger, game_date, model_version, stat, book)
+    price source. X+ legs exist only for FanDuel points.
+
+    With `minutes` (each player's average over his last 10 games), a points leg's model chance
+    is corrected for how often that model's chances came true for players in that role
+    (models/nba_recalibration.py); `curves` replaces the saved corrections, for tests."""
+    def model_over(row, chance: float) -> float:
+        if minutes is None or stat != STAT:
+            return float(chance)
+        return nba_recalibration.calibrate(model_version, chance,
+                                           minutes.get(int(row.player_id)), curves)
+
+    rows = _over_under_rows(ledger, game_date, model_version, stat, book, model_over)
     if stat == STAT and book == BOOK:
-        rows += _x_plus_rows(alt_ledger, game_date, model_version)
+        rows += _x_plus_rows(alt_ledger, game_date, model_version, model_over)
     if not rows:
         return pd.DataFrame(columns=COLUMNS)
     table = pd.DataFrame(rows)
@@ -265,7 +292,7 @@ def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: st
 
 
 def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str,
-                     stat: str = STAT, book: str = BOOK) -> list[dict]:
+                     stat: str = STAT, book: str = BOOK, model_over=None) -> list[dict]:
     day = ledger[(ledger["game_date"] == game_date)
                  & (ledger["model_version"] == model_version)]
     # other books and stats share the ledger; each leg comes from exactly one of them
@@ -275,9 +302,10 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str,
     noun = nba_stat_model.STATS[stat].label.lower()
     rows = []
     for row in day.itertuples():
+        p_over = model_over(row, row.model_p_over) if model_over else row.model_p_over
         for is_over, odds, model_p, market_p in (
-                (True, row.over_odds, row.model_p_over, row.fair_p_over),
-                (False, row.under_odds, 1 - row.model_p_over, 1 - row.fair_p_over)):
+                (True, row.over_odds, p_over, row.fair_p_over),
+                (False, row.under_odds, 1 - p_over, 1 - row.fair_p_over)):
             side = "Over" if is_over else "Under"
             rows.append(_leg_row(
                 f"{row.player} · {side} {row.line} {noun}", row, side, odds, model_p,
@@ -285,14 +313,16 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str,
     return rows
 
 
-def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str) -> list[dict]:
+def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str,
+                 model_over=None) -> list[dict]:
     if alt_ledger.empty:
         return []
     day = alt_ledger[(alt_ledger["game_date"] == game_date)
                      & (alt_ledger["model_version"] == model_version)]
     return [
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
-                 row.over_odds, row.model_p, row.market_p, True, row.threshold - 0.5, STAT)
+                 row.over_odds, model_over(row, row.model_p) if model_over else row.model_p,
+                 row.market_p, True, row.threshold - 0.5, STAT)
         for row in day.itertuples()
     ]
 
@@ -334,7 +364,8 @@ REAL_LEG_DECIMAL = 1.5          # about -200: the cheapest price that counts as 
 def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
                     min_chance: float = STYLES[DEFAULT_STYLE], min_profit: float = 0.0,
                     real_leg_decimal: float | None = None,
-                    one_per_game: bool = True) -> pd.DataFrame:
+                    one_per_game: bool = True,
+                    bench: frozenset[int] = frozenset()) -> pd.DataFrame:
     """Best slips built from legs that are each worth betting on their own,
     at most one leg per game so the legs really are independent, keeping only
     slips that have at least `min_chance` of hitting and, when given, win at least
@@ -350,6 +381,10 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
     players in that game instead, one bet each, priced with the measured same-game
     correlations; the pool is each player's best leg and his likeliest worthwhile one."""
     good = _worthwhile_legs(candidates)
+    if bench:                                      # bench players' "locks" are overrated
+        overrated = good["player_id"].astype(int).isin(bench) & (
+            good["Model %"] >= LOCK_CHANCE * 100.0)
+        good = good[~overrated]
     key = "event_id" if one_per_game else "player_id"
     best_value = good.sort_values("Leg EV %", ascending=False).drop_duplicates(key)
     likeliest = good.sort_values("prob", ascending=False).drop_duplicates(key)

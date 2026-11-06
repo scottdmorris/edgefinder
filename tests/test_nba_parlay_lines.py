@@ -102,3 +102,18 @@ def test_a_stat_the_chosen_model_did_not_price_falls_back_to_the_baseline():
     assert nba_parlay.version_for(["ewma-v1", "minutes-v1"], "minutes-v1") == "minutes-v1"
     assert nba_parlay.version_for(["ewma-v1"], "minutes-v1") == "ewma-v1"
     assert nba_parlay.version_for(["context-v1", "minutes-v1"], "ewma-v1") == "context-v1"
+
+
+# ---- bench players' locks are not suggested ------------------------------------------------------------
+
+def test_bench_players_are_the_ones_averaging_under_18_minutes_lately():
+    averages = {1: {"minutes": (30.0, 17.9)}, 2: {"minutes": (12.0, 18.0)}, 3: {"pts": (5.0, 5.0)}}
+    assert nba_parlay.bench_players(averages) == frozenset({1})    # 18.0 exactly is not bench
+
+
+def test_minutes_join_the_averages_when_the_game_logs_have_them():
+    games = pd.DataFrame({"player_id": [1, 1], "season": ["2026-27"] * 2,
+                          "game_date": pd.to_datetime(["2026-11-01", "2026-11-03"]),
+                          "pts": [10, 20], "reb": [1, 3], "ast": [0, 2], "fg3m": [0, 1],
+                          "minutes": [12.0, 16.0]})
+    assert nba_parlay.player_averages(games)[1]["minutes"] == (14.0, 14.0)

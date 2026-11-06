@@ -4,16 +4,21 @@ suggested X+ bets from FanDuel's real prices once they've been recorded.
 Read-only. It never calls the Odds API.
 """
 
+import datetime as dt
+
 import pandas as pd
 import streamlit as st
 
+from ..data.nba_snapshot_plan import EASTERN
 from ..tracking import nba_alt, nba_view
 from . import shared, style
 
 
 def render(ledger: pd.DataFrame) -> None:
     st.markdown("#### X+ points: chance of a player reaching a total")
-    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_alt_date")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_alt_date",
+                        format_func=lambda d: nba_view.day_label(
+                            d, dt.datetime.now(EASTERN).date()))
     players = sorted(ledger.loc[ledger["game_date"] == date, "player"].unique())
     player = st.selectbox("Player", players, key="nba_alt_player",
                           help="Type to search.")
@@ -48,7 +53,7 @@ def _suggested(date: str) -> None:
         "Agree": st.column_config.NumberColumn(help="How many models pick this price"),
     })
     st.caption(
-        "Untested, like the other suggestions. X+ prices have no under side, so "
+        "Not proven yet, like the other suggestions. X+ prices have no under side, so "
         "the market's own number includes the book's cut and the model has to "
         "clear that to show up here."
     )

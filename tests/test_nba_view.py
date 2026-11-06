@@ -143,3 +143,19 @@ def test_the_scorecard_has_one_row_per_model_with_results_and_brier_scores():
 def test_the_scorecard_for_an_unsettled_ledger_shows_zero_lines_scored():
     table = nba_view.scorecard(ledger())
     assert (table["Lines scored"] == 0).all()
+
+
+def test_a_game_day_reads_the_way_people_say_it():
+    import datetime as dt
+    today = dt.date(2026, 11, 6)
+    assert nba_view.day_label("2026-11-06", today) == "Today"
+    assert nba_view.day_label("2026-11-05", today) == "Yesterday"
+    assert nba_view.day_label("2026-11-07", today) == "Tomorrow"
+    assert nba_view.day_label("2026-11-04", today) == "Wed, Nov 4"
+
+
+def test_a_game_reads_as_team_codes():
+    assert nba_view.short_game("Miami Heat @ Golden State Warriors") == "MIA @ GSW"
+    assert nba_view.short_game("Nowhere FC @ Golden State Warriors") == \
+        "Nowhere FC @ Golden State Warriors"
+    assert nba_view.short_game("tbd") == "tbd"

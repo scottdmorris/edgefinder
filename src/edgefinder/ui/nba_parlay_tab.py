@@ -19,6 +19,7 @@ import streamlit as st
 
 from ..betting import correlated
 from ..data import nba_injuries, nba_live, nba_players, nba_stats
+from ..data.nba_snapshot_plan import EASTERN
 from ..models import nba_stat_model
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
 from . import shared, style, team_colors
@@ -58,33 +59,40 @@ def render() -> None:
                 "tonight's lines are posted.")
         return
     st.subheader("Build a parlay")
-    date = style.choose("Game day", nba_view.game_dates(ledger), "parlay_date",
-                        on_change=_clear_slip)
+    today = dt.datetime.now(EASTERN).date()
+    day_col, book_col, model_col = st.columns([4, 3, 4])
+    with day_col:
+        date = style.choose("Game day", nba_view.game_dates(ledger), "parlay_date",
+                            format_func=lambda d: nba_view.day_label(d, today),
+                            on_change=_clear_slip)
     found = nba_parlay.sources(ledger, date)
     if not found:
         st.info("No lines were recorded on that day.")
         return
-    book = style.choose("Prices", nba_parlay.books_on(found), "parlay_book",
-                        format_func=lambda b: BOOK_NAMES.get(b, b), on_change=_clear_slip)
-    version = style.choose("Model", nba_parlay.model_versions(found, book), "parlay_model",
-                           format_func=nba_parlay.short_model_name, on_change=_clear_slip)
-    with st.expander("How this works"):
-        st.markdown(HOW_TO)
-        st.markdown(GLOSSARY)
-        st.caption(nba_parlay.model_name(version) + ". A stat this model didn't price uses "
-                   "the Simple one.")
+    with book_col:
+        book = style.choose("Prices", nba_parlay.books_on(found), "parlay_book",
+                            format_func=lambda b: BOOK_NAMES.get(b, b), on_change=_clear_slip)
+    with model_col:
+        version = style.choose("Model", nba_parlay.model_versions(found, book), "parlay_model",
+                               format_func=nba_parlay.short_model_name, on_change=_clear_slip)
     if book == "kalshi":
         st.markdown(style.notice("Kalshi prices are before fees, and its markets are thin."),
                     unsafe_allow_html=True)
 
     candidates = nba_parlay.all_candidates(ledger, nba_alt.load_ledger(), date, version, book,
-                                           found)
+                                           found, recent_minutes())
     if candidates.empty:
         st.info("This projection didn't price any lines on that day.")
         return
     current = _current_slip(candidates)
     _slip_bar(current)
 
+    gaps = _price_gaps(date)
+    st.markdown(style.stat_strip([
+        (str(candidates["Game"].nunique()), "games"),
+        (str(candidates[["player_id", "stat_key"]].drop_duplicates().shape[0]), "player props"),
+        (str(int((gaps["Book"] == book).sum())) if not gaps.empty else "0", "price gaps"),
+        (BOOK_NAMES.get(book, book), "prices from")]), unsafe_allow_html=True)
     shown, single_game = _game_filter(candidates)
     browse, slip = st.columns([5, 4], gap="large")
     with browse:
@@ -94,6 +102,12 @@ def render() -> None:
         _search(candidates)
     with slip, st.container(key="slip-panel"):
         _slip_panel(candidates, current)
+    with st.expander("How this works"):
+        st.markdown(HOW_TO)
+        st.markdown(GLOSSARY)
+        st.caption(nba_parlay.model_name(version) + ". A stat this model didn't price uses "
+                   "the Simple one. Each model's chances are corrected for how often they came "
+                   "true for players in the same role (bench, rotation, starter).")
 
 
 BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
@@ -145,24 +159,23 @@ def selected_legs() -> pd.DataFrame | None:
     if book not in found:
         return None
     candidates = nba_parlay.all_candidates(ledger, nba_alt.load_ledger(), date, version, book,
-                                           found)
+                                           found, recent_minutes())
     chosen = candidates.reindex(picked).dropna(subset=["Leg"])
     return None if chosen.empty else chosen
 
 
 def _slip_bar(current) -> None:
     """One line that stays pinned while you scroll, so the slip is never out of sight."""
+    if current is None:
+        return                         # the slip panel already says it is empty
     with st.container(key="slip-bar"):
-        if current is None:
-            st.markdown("🧾 **Your slip is empty.** Tap a price below to add a bet.")
-            return
         chosen, summary = current
         stake = st.session_state.get("stake", DEFAULT_STAKE)
         wins = nba_parlay.stake_outcomes(stake, summary["decimal_odds"], summary["ev_per_unit"])
         word = "bet" if len(chosen) == 1 else "bets"
         left, right = st.columns([5, 2], vertical_alignment="center")
         left.markdown(
-            f"🧾 **{len(chosen)} {word}** · \\${stake:,.0f} to win "
+            f"**{len(chosen)} {word}** · \\${stake:,.0f} to win "
             f"**{nba_parlay.money(wins['profit_if_wins'])}** · "
             f"{summary['joint_probability'] * 100:.1f}% to hit")
         right.button("Clear", key="clear_top", on_click=_clear_slip, use_container_width=True)
@@ -225,14 +238,15 @@ def _game_filter(candidates: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
 
 
 @st.cache_data(show_spinner=False, max_entries=64)
-def _slips(pool: pd.DataFrame, style_name: str, one_per_game: bool) -> pd.DataFrame:
+def _slips(pool: pd.DataFrame, style_name: str, one_per_game: bool,
+           bench: frozenset[int] = frozenset()) -> pd.DataFrame:
     """The suggested slips for these legs and this style. Remembered, because every tap on a
     price reruns the screen and the same legs would otherwise be searched all over again."""
     return nba_parlay.suggest_parlays(pool, top=IDEAS_SHOWN,
                                       min_chance=nba_parlay.STYLES[style_name],
                                       min_profit=nba_parlay.MIN_PROFIT[style_name],
                                       real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL,
-                                      one_per_game=one_per_game)
+                                      one_per_game=one_per_game, bench=bench)
 
 
 def _suggested(candidates: pd.DataFrame, shown: pd.DataFrame | None = None,
@@ -241,7 +255,8 @@ def _suggested(candidates: pd.DataFrame, shown: pd.DataFrame | None = None,
     style_name = style.choose("How much risk?", list(nba_parlay.STYLES), "slip_style",
                               default=nba_parlay.DEFAULT_STYLE)
     pool = candidates if shown is None else shown
-    slips = _slips(pool, style_name, not single_game)
+    slips = _slips(pool, style_name, not single_game,
+                   nba_parlay.bench_players(averages_by_player()))
     if single_game:
         st.caption("One game: these bets move together, and the chance accounts for that.")
     if slips.empty:
@@ -436,6 +451,13 @@ def averages_by_player() -> dict:
         return nba_parlay.player_averages(games)
     except nba_stats.NbaDataError:
         return {}
+
+
+def recent_minutes() -> dict[int, float]:
+    """Each player's average minutes over his last 10 games, which sets his role for the
+    correction to the model's chances."""
+    return {pid: stats["minutes"][1] for pid, stats in averages_by_player().items()
+            if "minutes" in stats}
 
 
 def _slip_panel(candidates: pd.DataFrame, current) -> None:

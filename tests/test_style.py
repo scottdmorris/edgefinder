@@ -222,7 +222,7 @@ def test_the_basket_animation_is_defined_and_switched_off_for_reduced_motion():
     assert "@keyframes bk-rise" in css and "@keyframes bk-flash" in css
     assert "prefers-reduced-motion: reduce" in css
     block = css[css.index("prefers-reduced-motion: reduce"):]
-    assert "animation: none" in block[:200]
+    assert "animation: none" in block[:600]
 
 
 def test_the_tap_target_rules_come_last_and_ask_for_44px():
@@ -307,3 +307,21 @@ def test_every_animation_is_switched_off_for_reduced_motion():
     for name in (".bk-feed.new", ".bk-card.flash", ".bk-hero-badge::before", ".bk-pop"):
         assert name in block, name
     assert "animation: none" in block and "transition: none" in block
+
+
+def test_the_top_bar_shows_the_name_and_status_chips_safely():
+    html = style.app_bar("logo.svg", "Ball Knowledge", [("2 live", "live"), ("<b>x</b>", "warn")])
+    assert "Ball Knowledge" in html and 'src="logo.svg"' in html
+    assert 'class="bk-chip live">2 live<' in html and 'class="bk-chip warn"' in html
+    assert "<b>x</b>" not in html
+
+
+def test_a_stat_strip_shows_each_number_with_its_label():
+    html = style.stat_strip([("2", "games"), ("7", "price gaps")])
+    assert html.count("bk-strip-cell") == 2 and "<b>7</b><span>price gaps</span>" in html
+
+
+def test_streamlits_own_header_is_hidden_and_the_open_view_is_a_white_pill():
+    css = style.CSS
+    assert 'header[data-testid="stHeader"] { display: none; }' in css
+    assert '.stTabs [role="tablist"]' in css and '[data-testid="stTab"][aria-selected="true"]' in css

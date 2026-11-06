@@ -5,10 +5,13 @@ with each model's projection, the scorecard, and how much data exists)
 and never calls the Odds API, so looking costs no requests.
 """
 
+import datetime as dt
+
 import pandas as pd
 import streamlit as st
 
 from ..data import nba_live, nba_props, odds_api
+from ..data.nba_snapshot_plan import EASTERN
 from ..tracking import nba_paper, nba_parlay, nba_view
 from . import nba_alt_tab, nba_parlay_tab, shared, style, team_colors
 
@@ -26,8 +29,8 @@ def render() -> None:
             "`scripts/nba_props_snapshot.py` by hand."
         )
         return
-    st.caption("Paper only: no money is staked. The real question is whether either model "
-               "beats FanDuel's own odds, not whether one pick looks good.")
+    st.caption("Paper only: no money is staked. The question is whether any model beats "
+               "FanDuel's own odds over many bets, not whether one pick looks good.")
     _suggestions(ledger)
     st.divider()
     nba_alt_tab.render(ledger)
@@ -39,17 +42,22 @@ def render() -> None:
     _collection(ledger)
 
 
+def _day(game_date: str) -> str:
+    return nba_view.day_label(game_date, dt.datetime.now(EASTERN).date())
+
+
 def _suggestions(ledger: pd.DataFrame) -> None:
     st.markdown("#### Bets the models like")
-    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_suggest_date")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_suggest_date",
+                        format_func=_day)
     table = nba_view.suggestions(ledger, date)
     if table.empty:
         st.info("No model sees positive expected value on this day.")
         return
     st.markdown(style.notice(
-        "Untested: neither model has been scored against real results yet, and they can't "
-        "see injuries or lineups, which is usually why a projection sits far from the line. "
-        "Treat these as paper bets."), unsafe_allow_html=True)
+        "Not proven yet: only a few nights are graded (see Record). A projection far from the "
+        "line usually means the model is missing news, not that it found an edge."),
+        unsafe_allow_html=True)
     teams = nba_parlay_tab.teams_by_player()
     left, right = st.columns(2)
     for position, pick in enumerate(table.to_dict("records")):
@@ -57,7 +65,7 @@ def _suggestions(ledger: pd.DataFrame) -> None:
         player, wager = pick["Bet"].split(" · ", 1)
         agree = "both models" if pick["Agree"] > 1 else "one model"
         (left if position % 2 == 0 else right).markdown(style.leg_card(
-            nba_parlay.headshot_url(pick["player_id"]), player, f"{wager}  ·  {pick['Game']}",
+            nba_parlay.headshot_url(pick["player_id"]), player, f"{wager}  ·  {nba_view.short_game(pick['Game'])}",
             shared.fmt_american(pick["Odds"]), compact=True,
             detail=f"Model projects {pick['Model projects']:.1f}  ·  "
                    f"edge {pick['EV %']:+.1f}%  ·  {agree}",
@@ -67,7 +75,8 @@ def _suggestions(ledger: pd.DataFrame) -> None:
 
 def _tonights_lines(ledger: pd.DataFrame) -> None:
     st.markdown("#### Every line, with both projections")
-    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_lines_date")
+    date = style.choose("Game day", nba_view.game_dates(ledger), "nba_lines_date",
+                        format_func=_day)
     middle, right = st.columns([2, 2])
     sort = middle.radio("Sort by", [GAP_SORT, GAME_SORT], horizontal=True)
     picks_only = right.checkbox("Only lines where a model picks a side", value=False)

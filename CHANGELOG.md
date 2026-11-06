@@ -4,6 +4,33 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Honest chances by player role
+- **Measured** (`scripts/nba_calibration_by_line.py`, 2025-26, never seen in training): when the
+  older models gave a bench player (under 18 minutes) a 70%+ chance, it came true about 70% of
+  the time, not the 83% they said; rotation players were about 6 points too high; starters were
+  honest. `context-v2` was close already.
+- **Corrected** (`models/nba_recalibration.py`, fitted by `scripts/nba_recalibration_fit.py`):
+  a curve per model and role from what the model said to what happened, fitted on 2024-25 and
+  checked once on 2025-26 (bench locks: said 84%, corrected to 72%, happened 71%). The Parlay
+  builder prices points legs with the corrected chance; the ledger keeps each model's raw
+  numbers, so the record still judges the models as they are.
+- **Bench players' locks are no longer suggested** in slips (they can still be added by hand).
+
+### A cleaner app
+- **An app shell:** a top bar with the logo, the name and status chips (games live now, when
+  lines were last checked), pill navigation with the open view in white, and Streamlit's own
+  header hidden. All six views fit one row on a phone.
+- **Parlay:** Game day, Prices and Model on one row, days as "Yesterday" or "Wed, Nov 4", a
+  summary strip (games, player props, price gaps, prices from), no empty slip bar, and "How
+  this works" moved to the bottom.
+- **The court, redrawn** as a drawing that keeps its shape at any width: a dark floor glowing in
+  the home team's color, the paint and center circle in that color, the logo at center court,
+  makes as dots and misses as crosses, new shots popping in, and each team shown at its own end
+  (second-half shots are turned around, the way game apps do it). Team names in the Team stats
+  header no longer show stray asterisks.
+- **Picks:** honest wording (several nights are being graded; a projection far from the line
+  usually means missing news), friendly dates and short team codes.
+
 ### The price gaps get a record of their own
 - **Logged before tip-off.** Each snapshot that records prices writes that night's
   FanDuel-vs-Kalshi gaps to `data/price_gap_log.csv`: one row per bet, at the first price seen,
