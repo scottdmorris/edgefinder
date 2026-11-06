@@ -78,10 +78,10 @@ hr {{ border-color: {LINE} !important; }}
 }}
 .st-key-slip-bar {{ padding: 8px 0 6px; border-bottom: 1px solid {LINE}; }}
 /* rows of buttons stay on one line, even on a phone */
-.st-key-browse-list [data-testid="stHorizontalBlock"],
+[class*="st-key-browse-list"] [data-testid="stHorizontalBlock"],
 .st-key-slip-panel [data-testid="stHorizontalBlock"],
 .st-key-slip-bar [data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: .5rem; }}
-.st-key-browse-list [data-testid="stColumn"],
+[class*="st-key-browse-list"] [data-testid="stColumn"],
 .st-key-slip-panel [data-testid="stColumn"],
 .st-key-slip-bar [data-testid="stColumn"] {{ min-width: 0 !important; }}
 .bk-note {{
@@ -213,6 +213,9 @@ hr {{ border-color: {LINE} !important; }}
 .bk-feed-time {{ color: {MUTED}; font-size: 0.78rem; font-weight: 700; }}
 .bk-feed-score {{ color: {MUTED}; font-size: 0.78rem; float: right; }}
 
+.bk-chance {{ font-size: 1.5rem; font-weight: 800; line-height: 1.1; text-align: right; }}
+.bk-chance span {{ display: block; font-size: 0.72rem; font-weight: 600; color: {MUTED}; }}
+
 /* no stray blue: links and alert boxes follow the black palette */
 .stApp a, .stApp a:visited {{ color: {TEXT}; text-decoration: underline; text-decoration-color: {LINE_STRONG}; }}
 .stApp a:hover {{ color: {BUTTON}; text-decoration-color: {BUTTON}; }}
@@ -229,10 +232,10 @@ hr {{ border-color: {LINE} !important; }}
 }}
 @media (max-width: 640px) {{
   .block-container {{ padding: 3.2rem .8rem 5rem; }}
-  .st-key-browse-list button {{ padding: .2rem .15rem; min-height: 2.2rem; }}
-  .st-key-browse-list button p {{ font-size: .72rem; line-height: 1.15; }}
-  .st-key-browse-list [data-testid="stImage"] img {{ width: 30px !important; }}
-  .st-key-browse-list [data-testid="stMarkdownContainer"] p {{ font-size: .8rem; line-height: 1.2; }}
+  [class*="st-key-browse-list"] button {{ padding: .2rem .15rem; min-height: 2.2rem; }}
+  [class*="st-key-browse-list"] button p {{ font-size: .72rem; line-height: 1.15; }}
+  [class*="st-key-browse-list"] [data-testid="stImage"] img {{ width: 30px !important; }}
+  [class*="st-key-browse-list"] [data-testid="stMarkdownContainer"] p {{ font-size: .8rem; line-height: 1.2; }}
   .bk-slip-big {{ font-size: 1.7rem; }}
   .bk-slip-row {{ gap: 16px; }}
   .stTabs [data-baseweb="tab"] {{ padding: 12px 10px; }}

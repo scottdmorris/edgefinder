@@ -19,6 +19,7 @@ import streamlit as st
 
 from ..betting import correlated
 from ..data import nba_injuries, nba_live, nba_players, nba_stats
+from ..models import nba_stat_model
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view
 from . import shared, style, team_colors
 
@@ -50,23 +51,33 @@ GLOSSARY = """
 
 
 def render() -> None:
-    ledger = nba_paper.load_fanduel_ledger()
+    ledger = nba_paper.load_ledger()
     if ledger.empty:
         st.info("No lines recorded yet. The scheduled job fills this in once "
-                "tonight's FanDuel lines are posted.")
+                "tonight's lines are posted.")
         return
     st.subheader("Build a parlay")
     date = style.choose("Game day", nba_view.game_dates(ledger), "parlay_date",
                         on_change=_clear_slip)
-    versions = sorted(ledger["model_version"].dropna().unique(), reverse=True)
-    version = style.choose("Model", versions, "parlay_model",
+    found = nba_parlay.sources(ledger, date)
+    if not found:
+        st.info("No lines were recorded on that day.")
+        return
+    book = style.choose("Prices", nba_parlay.books_on(found), "parlay_book",
+                        format_func=lambda b: BOOK_NAMES.get(b, b), on_change=_clear_slip)
+    version = style.choose("Model", nba_parlay.model_versions(found, book), "parlay_model",
                            format_func=nba_parlay.short_model_name, on_change=_clear_slip)
     with st.expander("How this works"):
         st.markdown(HOW_TO)
         st.markdown(GLOSSARY)
-        st.caption("Points only for now. " + nba_parlay.model_name(version))
+        st.caption(nba_parlay.model_name(version) + ". A stat this model didn't price uses "
+                   "the Simple one.")
+    if book == "kalshi":
+        st.markdown(style.notice("Kalshi prices are before fees, and its markets are thin."),
+                    unsafe_allow_html=True)
 
-    candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)
+    candidates = nba_parlay.all_candidates(ledger, nba_alt.load_ledger(), date, version, book,
+                                           found)
     if candidates.empty:
         st.info("This projection didn't price any lines on that day.")
         return
@@ -76,10 +87,13 @@ def render() -> None:
     browse, slip = st.columns([5, 4], gap="large")
     with browse:
         _suggested(candidates)
-        _browse(candidates)
+        _browse(candidates, book)
         _search(candidates)
     with slip, st.container(key="slip-panel"):
         _slip_panel(candidates, current)
+
+
+BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
 
 
 # ---- the slip: every change goes through these three callbacks -------------------
@@ -118,10 +132,15 @@ def selected_legs() -> pd.DataFrame | None:
     None when nothing is picked or the lines aren't available."""
     picked = st.session_state.get("parlay_legs")
     date, version = st.session_state.get("parlay_date"), st.session_state.get("parlay_model")
-    ledger = nba_paper.load_fanduel_ledger()
+    book = st.session_state.get("parlay_book") or nba_parlay.BOOK
+    ledger = nba_paper.load_ledger()
     if not picked or date is None or version is None or ledger.empty:
         return None
-    candidates = nba_parlay.candidate_legs(ledger, nba_alt.load_ledger(), date, version)
+    found = nba_parlay.sources(ledger, date)
+    if book not in found:
+        return None
+    candidates = nba_parlay.all_candidates(ledger, nba_alt.load_ledger(), date, version, book,
+                                           found)
     chosen = candidates.reindex(picked).dropna(subset=["Leg"])
     return None if chosen.empty else chosen
 
@@ -162,7 +181,7 @@ def _suggested(candidates: pd.DataFrame) -> None:
     for position, idea in enumerate(slips.itertuples()):
         legs = [(nba_parlay.headshot_url(row.player_id), row.Player,
                  _with_average(row.Leg.split(" · ")[-1] if " · " in row.Leg else row.Leg,
-                               row.player_id), str(row.Odds))
+                               row.player_id, row.stat_key), str(row.Odds))
                 for row in candidates.loc[idea.bets].itertuples()]
         st.markdown(style.idea_card(legs, f"{idea._3:.0f}%", f"${idea.Pays + 1:,.2f}"),
                     unsafe_allow_html=True)
@@ -170,48 +189,120 @@ def _suggested(candidates: pd.DataFrame) -> None:
                   use_container_width=True)
 
 
-def _with_average(bet: str, player_id) -> str:
+def _with_average(bet: str, player_id, stat: str = "points") -> str:
     """The bet with the player's average beside it, so a line can be judged at a glance."""
-    average = nba_parlay.average_text(averages_by_player(), player_id)
+    average = nba_parlay.average_text(averages_by_player(), player_id,
+                                      nba_parlay.stat_column(stat))
     return f"{bet} · {average}" if average else bet
 
 
-def _browse(candidates: pd.DataFrame) -> None:
-    st.markdown("#### Add bets")
+def _browse(candidates: pd.DataFrame, book: str = nba_parlay.BOOK) -> None:
+    st.markdown("#### All props")
     matchups = candidates.drop_duplicates("Game").set_index("Game")
     short = {game: f"{row.away_abbr} @ {row.home_abbr}" for game, row in matchups.iterrows()}
-    game = style.choose("Pick a game", list(short), "browse_game", format_func=short.get)
-    day = candidates[candidates["Game"] == game]
+    everything = "All games"
+    picked = style.choose("Game", [everything, *short], "browse_game",
+                          format_func=lambda g: g if g == everything else short[g])
     slip = set(st.session_state.get(LEGS_KEY, []))
-    stars_first = day.groupby("player_id")["line"].max().sort_values(ascending=False).index
-    st.caption("Tap a price to add it, tap it again to remove it. "
-               "**O** is over, **U** is under, and **X+** has more totals.")
-    with st.container(height=440, key="browse-list"):
-        for player_id in stars_first:
-            _player_row(day[day["player_id"] == player_id], slip, candidates)
+    view = style.choose("View", ["List", "Grid"], f"browse_view_{book}",
+                        default="List" if book == "kalshi" else "Grid")
+    if view == "List":
+        st.caption("Pick how many, then tap Yes or No to add it. Tap it again to remove it.")
+    else:
+        st.caption("Tap a price to add it, tap it again to remove it. **O** is over, **U** is "
+                   "under, **More** has the other lines.")
+    row_view = _ladder_row if view == "List" else _player_row
+    stats = [s for s in nba_stat_model.STATS if s in set(candidates["stat_key"])]
+    for position, stat in enumerate(stats):
+        label = f"Player {nba_stat_model.STATS[stat].label}"
+        with st.expander(label, expanded=position == 0), st.container(key=f"browse-list-{stat}"):
+            of_stat = candidates[candidates["stat_key"] == stat]
+            for game in (short if picked == everything else [picked]):
+                day = of_stat[of_stat["Game"] == game]
+                if day.empty:
+                    continue
+                st.markdown(f"##### {short[game]}")
+                stars_first = day.groupby("player_id")["line"].max().sort_values(
+                    ascending=False).index
+                for player_id in stars_first:
+                    row_view(day[day["player_id"] == player_id], slip, candidates, book)
 
 
-def _player_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame) -> None:
+def _player_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame,
+                book: str = nba_parlay.BOOK) -> None:
     photo, name, over, under, more = st.columns([1, 3, 2, 2, 2], vertical_alignment="center")
     first = rows.iloc[0]
     photo.image(nba_parlay.headshot_url(first["player_id"]), width=44)
     name.markdown(f"**{first['Player']}**{injury_badge(first['Player'])}")
-    if text := nba_parlay.average_text(averages_by_player(), first["player_id"]):
+    column = nba_parlay.stat_column(first["stat_key"])
+    if text := nba_parlay.average_text(averages_by_player(), first["player_id"], column):
         name.caption(text)
-    main = rows[rows["Side"].isin(["Over", "Under"])]
-    for column, side in ((over, "Over"), (under, "Under")):
-        match = main[main["Side"] == side]
-        if match.empty:
-            continue
-        _price_button(column, match.index[0], match.iloc[0], slip, candidates,
-                      f"{side[0]} {match.iloc[0]['line']:g}")
+    main_rows = rows[rows["Side"].isin(["Over", "Under"])]
+    featured = nba_parlay.main_line(main_rows)
+    shown = main_rows[main_rows["line"] == featured]
+    for target, side in ((over, "Over"), (under, "Under")):
+        match = shown[shown["Side"] == side]
+        if not match.empty:
+            _price_button(target, match.index[0], match.iloc[0], slip, candidates,
+                          f"{side[0]} {match.iloc[0]['line']:g}")
+    others = main_rows[main_rows["line"] != featured].sort_values(
+        ["line", "Side"], ascending=[True, False])
     totals = rows[~rows["Side"].isin(["Over", "Under"])].sort_values("line")
-    if totals.empty:
+    if others.empty and totals.empty:
         return
-    on_slip = any(index in slip for index in totals.index)
-    with more.popover("✓ X+" if on_slip else "X+", use_container_width=True):
+    on_slip = any(index in slip for index in [*others.index, *totals.index])
+    with more.popover("✓ More" if on_slip else "More", use_container_width=True):
+        for line in others["line"].unique():
+            left, right = st.columns(2)
+            for target, side in ((left, "Over"), (right, "Under")):
+                match = others[(others["line"] == line) & (others["Side"] == side)]
+                if not match.empty:
+                    _price_button(target, match.index[0], match.iloc[0], slip, candidates,
+                                  f"{side[0]} {line:g}")
         for index, row in totals.iterrows():
             _price_button(st, index, row, slip, candidates, f"{int(row['line'] + 0.5)}+")
+
+
+def _ladder_row(rows: pd.DataFrame, slip: set, candidates: pd.DataFrame,
+                book: str = nba_parlay.BOOK) -> None:
+    """One player as a Kalshi-style row: his name and the market's chance for the step you
+    picked, a stepper of "at least this many" choices, and Yes / No prices."""
+    steps = nba_parlay.ladder(rows)
+    if not steps:
+        return
+    first = rows.iloc[0]
+    column = nba_parlay.stat_column(first["stat_key"])
+    start = nba_parlay.default_step(steps)["threshold"]
+    key = f"step_{first['stat_key']}_{book}_{first['player_id']}"
+    photo, name, chance = st.columns([1, 4, 2], vertical_alignment="center")
+    photo.image(nba_parlay.headshot_url(first["player_id"]), width=44)
+    pick, yes, no = st.columns([5, 2, 2], vertical_alignment="center")
+    options = [s["threshold"] for s in steps]
+    if st.session_state.get(key) not in options:
+        st.session_state.pop(key, None)
+    chosen = pick.pills("At least", options, selection_mode="single", default=start, key=key,
+                        format_func=lambda t: f"{t}+", label_visibility="collapsed")
+    step = next(s for s in steps if s["threshold"] == (chosen if chosen is not None else start))
+    name.markdown(f"**{first['Player']}** · {step['threshold']}+{injury_badge(first['Player'])}")
+    if text := nba_parlay.average_text(averages_by_player(), first["player_id"], column):
+        name.caption(text)
+    chance.markdown(f"<div class='bk-chance'>{step['market']:.0f}%"
+                    f"<span>model {step['model']:.0f}%</span></div>", unsafe_allow_html=True)
+    _side_button(yes, step["yes"], "Yes", candidates, slip, book)
+    if step["no"] is not None:
+        _side_button(no, step["no"], "No", candidates, slip, book)
+
+
+def _side_button(container, index: int, side: str, candidates: pd.DataFrame, slip: set,
+                 book: str) -> None:
+    """Yes / No with the price: cents on Kalshi, American odds elsewhere."""
+    odds = candidates.loc[index, "Odds"]
+    price = f"{nba_parlay.cents(odds)}¢" if book == "kalshi" else shared.fmt_american(odds)
+    chosen = index in slip
+    container.button(
+        f"{'✓ ' if chosen else ''}{side} {price}", key=f"add_{index}",
+        type="primary" if chosen else "secondary", use_container_width=True,
+        on_click=_toggle, args=(index, candidates))
 
 
 def _price_button(container, index: int, row: pd.Series, slip: set, candidates: pd.DataFrame,

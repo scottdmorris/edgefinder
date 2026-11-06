@@ -16,11 +16,14 @@ from ..betting.correlated import Leg
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_players
+from ..models import nba_stat_model
 from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P
 from .nba_paper import MODEL_WEIGHT
 
-STAT = "points"           # the only stat the models project so far
-COLUMNS = ["Leg", "Stat", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
+STAT = "points"           # the default stat
+BOOK = "fanduel"          # the default price source
+DEFAULTS = {"stat": STAT, "book": BOOK}      # what an old ledger row without the column means
+COLUMNS = ["Leg", "Stat", "stat_key", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
            "away_abbr", "home_abbr"]
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
@@ -142,11 +145,110 @@ def average_text(averages: dict, player_id, column: str = "pts") -> str:
     return "" if pair is None else f"avg {pair[0]:.1f} · last 10: {pair[1]:.1f}"
 
 
+def sources(ledger: pd.DataFrame, game_date: str) -> dict[str, dict[str, list[str]]]:
+    """What can be bet on a date: {book: {stat: [model versions that priced it]}}, from
+    the ledger. Lets a screen offer only the choices that have prices."""
+    day = ledger[ledger["game_date"] == game_date]
+    found: dict[str, dict[str, list[str]]] = {}
+    for (book, stat, version), _ in day.groupby(
+            [day["book"].fillna(BOOK), day["stat"].fillna(STAT), "model_version"]):
+        found.setdefault(book, {}).setdefault(stat, []).append(version)
+    return found
+
+
+def stat_column(stat: str) -> str:
+    """The game-log column a stat's averages live in: 'rebounds' -> 'reb'."""
+    return nba_stat_model.STATS[stat].column
+
+
+def main_line(rows: pd.DataFrame) -> float | None:
+    """The line to feature for one player when he has several (Kalshi lists many): the one
+    whose over is closest to a coin flip, the lower line on a tie. None if he has no
+    over/under legs. Other lines can still be reached, just not shown first."""
+    overs = rows[rows["Side"] == "Over"]
+    if overs.empty:
+        return None
+    chance = 1.0 / overs["Odds"].map(american_to_decimal)
+    best = overs.assign(_distance=(chance - 0.5).abs()).sort_values(["_distance", "line"]).iloc[0]
+    return float(best["line"])
+
+
+def cents(american_odds: float) -> int:
+    """A price as Kalshi shows it: the cost in cents of a contract that pays $1, which is
+    also its implied chance. +100 is 50, -300 is 75, +300 is 25."""
+    return round(100.0 / american_to_decimal(american_odds))
+
+
+def ladder(rows: pd.DataFrame) -> list[dict]:
+    """One player's lines as steps from low to high, like Kalshi's "20+  25+  30+":
+    {"threshold", "yes", "no", "market", "model"}. `yes` is the candidate row to back
+    "at least this many" and `no` the row to back the opposite (None for an X+ step,
+    which has only the yes side). Over/under lines and X+ legs both make steps; when
+    one number has both, the over/under line wins because it has both sides."""
+    steps: dict[int, dict] = {}
+    for _, group in rows[rows["Side"].isin(["Over", "Under"])].groupby("line"):
+        overs, unders = group[group["Side"] == "Over"], group[group["Side"] == "Under"]
+        if overs.empty:
+            continue
+        threshold = int(group["line"].iloc[0] // 1) + 1        # over 24.5 means 25+
+        steps[threshold] = {
+            "threshold": threshold, "yes": overs.index[0],
+            "no": None if unders.empty else unders.index[0],
+            "market": float(overs.iloc[0]["Market %"]), "model": float(overs.iloc[0]["Model %"])}
+    for index, row in rows[rows["Side"].str.endswith("+")].iterrows():
+        threshold = int(row["Side"][:-1])
+        steps.setdefault(threshold, {
+            "threshold": threshold, "yes": index, "no": None,
+            "market": float(row["Market %"]), "model": float(row["Model %"])})
+    return [steps[t] for t in sorted(steps)]
+
+
+def default_step(steps: list[dict]) -> dict:
+    """The step to show first: the one whose market chance is closest to a coin flip,
+    the lower on a tie."""
+    return min(steps, key=lambda s: (abs(s["market"] - 50.0), s["threshold"]))
+
+
+def books_on(found: dict) -> list[str]:
+    """The price sources that have lines, FanDuel first, then the rest alphabetically."""
+    return sorted(found, key=lambda book: (book != BOOK, book))
+
+
+def model_versions(found: dict, book: str) -> list[str]:
+    """Every model version that priced anything for a source, newest name first."""
+    return sorted({v for versions in found[book].values() for v in versions}, reverse=True)
+
+
+def version_for(available: list[str], wanted: str) -> str:
+    """The model to use for one stat: the one asked for if it priced that stat, else the
+    simple baseline if it did, else the first listed. Only points have every model."""
+    if wanted in available:
+        return wanted
+    return "ewma-v1" if "ewma-v1" in available else sorted(available)[0]
+
+
+def all_candidates(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: str,
+                   model_version: str, book: str, found: dict) -> pd.DataFrame:
+    """Every leg a source offers that day, across all stats, as one table (points first,
+    then rebounds, assists, threes), so one slip can mix them. Each stat uses the chosen
+    model when it priced that stat and the baseline when it didn't."""
+    frames = [
+        candidate_legs(ledger, alt_ledger, game_date,
+                       version_for(found[book][stat], model_version), stat, book)
+        for stat in nba_stat_model.STATS if stat in found.get(book, {})]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame(columns=COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
+
 def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: str,
-                   model_version: str) -> pd.DataFrame:
-    """Every over, under and X+ leg one model priced on a date."""
-    rows = _over_under_rows(ledger, game_date, model_version)
-    rows += _x_plus_rows(alt_ledger, game_date, model_version)
+                   model_version: str, stat: str = STAT, book: str = BOOK) -> pd.DataFrame:
+    """Every over, under and X+ leg one model priced on a date, for one stat and one
+    price source. X+ legs exist only for FanDuel points."""
+    rows = _over_under_rows(ledger, game_date, model_version, stat, book)
+    if stat == STAT and book == BOOK:
+        rows += _x_plus_rows(alt_ledger, game_date, model_version)
     if not rows:
         return pd.DataFrame(columns=COLUMNS)
     table = pd.DataFrame(rows)
@@ -157,13 +259,15 @@ def candidate_legs(ledger: pd.DataFrame, alt_ledger: pd.DataFrame, game_date: st
     return table[COLUMNS].sort_values(["Game", "Player", "Leg"]).reset_index(drop=True)
 
 
-def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str) -> list[dict]:
+def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str,
+                     stat: str = STAT, book: str = BOOK) -> list[dict]:
     day = ledger[(ledger["game_date"] == game_date)
                  & (ledger["model_version"] == model_version)]
-    # these legs are FanDuel points lines; other books and stats share the ledger
-    for column, wanted in (("stat", STAT), ("book", "fanduel")):
+    # other books and stats share the ledger; each leg comes from exactly one of them
+    for column, wanted in (("stat", stat), ("book", book)):
         if column in day.columns:
-            day = day[day[column].fillna(wanted) == wanted]
+            day = day[day[column].fillna(DEFAULTS[column]) == wanted]
+    noun = nba_stat_model.STATS[stat].label.lower()
     rows = []
     for row in day.itertuples():
         for is_over, odds, model_p, market_p in (
@@ -171,8 +275,8 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str) -
                 (False, row.under_odds, 1 - row.model_p_over, 1 - row.fair_p_over)):
             side = "Over" if is_over else "Under"
             rows.append(_leg_row(
-                f"{row.player} · {side} {row.line} {STAT}", row, side, odds, model_p,
-                market_p, is_over, row.line))
+                f"{row.player} · {side} {row.line} {noun}", row, side, odds, model_p,
+                market_p, is_over, row.line, stat))
     return rows
 
 
@@ -183,14 +287,15 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str) -
                      & (alt_ledger["model_version"] == model_version)]
     return [
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
-                 row.over_odds, row.model_p, row.market_p, True, row.threshold - 0.5)
+                 row.over_odds, row.model_p, row.market_p, True, row.threshold - 0.5, STAT)
         for row in day.itertuples()
     ]
 
 
-def _leg_row(label, row, side, odds, model_p, market_p, is_over, line) -> dict:
+def _leg_row(label, row, side, odds, model_p, market_p, is_over, line, stat) -> dict:
     blended = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p
-    return {"Leg": label, "Stat": STAT.capitalize(), "Game": f"{row.away} @ {row.home}",
+    return {"Leg": label, "Stat": nba_stat_model.STATS[stat].label, "stat_key": stat,
+            "Game": f"{row.away} @ {row.home}",
             "Player": row.player,
             "Side": side, "Odds": odds, "Model %": model_p * 100.0,
             "Market %": market_p * 100.0, "prob": blended,
@@ -206,7 +311,7 @@ def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:
         Leg(player=row.Player, event_id=row.event_id,
             team=teams.get(int(row.player_id), f"?{row.player_id}"),
             is_over=bool(row.is_over), prob=float(row.prob),
-            american_odds=float(row.Odds), label=row.Leg)
+            american_odds=float(row.Odds), label=row.Leg, stat=row.stat_key)
         for row in chosen.itertuples()
     ]
 

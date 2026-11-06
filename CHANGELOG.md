@@ -4,6 +4,25 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Every stat, FanDuel or Kalshi, and a sportsbook-style list
+- **One page, every stat.** There is no market to pick. Points, Rebounds, Assists and
+  3-pointers are stacked sections you open and close (Points open first), and one slip
+  can mix them. Chips choose the Game day, Prices (FanDuel, Kalshi) and Model, offering
+  only what has prices that day. A stat the chosen model didn't price uses the Simple one. Kalshi shows a one-line note that its prices are before fees and its
+  markets are thin (only liquid markets are ever recorded). A slip is cleared when
+  you change any chip.
+- **All props, one scroll.** The bet list shows every game's props in one page with a
+  header per game, and no inner scroll box. The game chips are an optional filter.
+  A player with many lines (Kalshi) shows his most even line first and the rest
+  under "More". Averages beside each player follow the chosen stat.
+- **List view, like Kalshi.** Each player is a row: the market's chance for the step you
+  pick (the model's number underneath), a stepper of "at least" choices (20+ 25+ 30+),
+  and Yes / No prices (cents on Kalshi, American odds on FanDuel). It is the default on
+  Kalshi, with the old Grid as the other choice.
+- **Plumbing:** `nba_parlay.candidate_legs` takes `stat` and `book`, `sources` says
+  what has prices for a day, `main_line` picks the line to feature, and `ladder` turns a
+  player's lines into steps.
+
 ### A fourth model, `context-v2`
 - **Runs alongside the others** (the nightly snapshot prices every line with it too,
   including Kalshi points lines). Shot-habit inputs, a blend of the direct and

@@ -385,3 +385,87 @@ def test_each_style_asks_for_more_profit_the_bigger_the_payout():
         < nba_parlay.MIN_PROFIT["Bigger payouts"]
     assert set(nba_parlay.MIN_PROFIT) == set(nba_parlay.STYLES)
     assert nba_parlay.MIN_PROFIT["Safer"] >= 1.0            # $10 wins at least $10
+
+
+# ---- more than points, and more than FanDuel -------------------------------------------------------------------------
+
+def mixed():
+    """One game's lines from three places: FanDuel points, FanDuel-less Kalshi rebounds, and
+    Kalshi points. Legacy rows without stat/book columns count as FanDuel points."""
+    return ledger(
+        {"player": "Pts Guy", "player_id": 1, "stat": "points", "book": "fanduel", "line": 24.5},
+        {"player": "Reb Guy", "player_id": 2, "stat": "rebounds", "book": "kalshi", "line": 9.5,
+         "over_odds": 140, "under_odds": -170},
+        {"player": "Kal Guy", "player_id": 3, "stat": "points", "book": "kalshi", "line": 19.5})
+
+
+def test_each_stat_and_price_source_gets_only_its_own_legs():
+    games = mixed()
+    fd = nba_parlay.candidate_legs(games, NO_ALT, DAY, "ewma-v1")
+    reb = nba_parlay.candidate_legs(games, NO_ALT, DAY, "ewma-v1", stat="rebounds", book="kalshi")
+    kp = nba_parlay.candidate_legs(games, NO_ALT, DAY, "ewma-v1", stat="points", book="kalshi")
+    assert set(fd["Player"]) == {"Pts Guy"} and set(reb["Player"]) == {"Reb Guy"}
+    assert set(kp["Player"]) == {"Kal Guy"}
+    assert nba_parlay.candidate_legs(games, NO_ALT, DAY, "ewma-v1", stat="assists",
+                                     book="kalshi").empty
+
+
+def test_a_rebounds_leg_names_its_stat_carries_it_and_keeps_its_own_price():
+    reb = nba_parlay.candidate_legs(mixed(), NO_ALT, DAY, "ewma-v1", stat="rebounds", book="kalshi")
+    over = reb[reb["Side"] == "Over"].iloc[0]
+    assert over["Leg"] == "Reb Guy · Over 9.5 rebounds" and over["Odds"] == 140
+    assert set(reb["Stat"]) == {"Rebounds"} and set(reb["stat_key"]) == {"rebounds"}
+    assert nba_parlay.to_legs(reb, {2: "DET"})[0].stat == "rebounds"
+
+
+def test_threes_are_called_three_pointers_in_a_leg():
+    games = ledger({"stat": "threes", "book": "kalshi", "line": 2.5})
+    legs = nba_parlay.candidate_legs(games, NO_ALT, DAY, "ewma-v1", stat="threes", book="kalshi")
+    assert any(label.endswith("Over 2.5 3-pointers") for label in legs["Leg"])
+
+
+def test_x_plus_legs_belong_only_to_fanduel_points():
+    extra = alt_ledger({})
+    assert (nba_parlay.candidate_legs(mixed(), extra, DAY, "ewma-v1")["Side"] == "25+").any()
+    for stat, book in (("points", "kalshi"), ("rebounds", "kalshi")):
+        legs = nba_parlay.candidate_legs(mixed(), extra, DAY, "ewma-v1", stat=stat, book=book)
+        assert not legs["Side"].str.endswith("+").any()
+
+
+def test_sources_lists_only_what_has_prices_that_day_with_the_models_that_priced_it():
+    games = pd.concat([mixed(), ledger({"model_version": "context-v1", "stat": "points",
+                                        "book": "fanduel", "player": "Late Guy"}),
+                       ledger({"game_date": "2026-11-05", "stat": "assists", "book": "kalshi"})])
+    found = nba_parlay.sources(games, DAY)
+    assert found == {"fanduel": {"points": ["context-v1", "ewma-v1"]},
+                     "kalshi": {"rebounds": ["ewma-v1"], "points": ["ewma-v1"]}}
+    assert nba_parlay.sources(games, "2026-11-05") == {"kalshi": {"assists": ["ewma-v1"]}}
+    assert nba_parlay.sources(games, "2030-01-01") == {}
+
+
+def test_an_old_ledger_row_without_stat_or_book_counts_as_fanduel_points():
+    old = ledger({})
+    assert "stat" not in old.columns
+    assert nba_parlay.sources(old.assign(stat=None, book=None), DAY) == {
+        "fanduel": {"points": ["ewma-v1"]}}
+    assert not nba_parlay.candidate_legs(old, NO_ALT, DAY, "ewma-v1").empty
+
+
+def test_all_candidates_puts_every_stat_a_source_offers_in_one_table_points_first():
+    games = pd.concat([
+        mixed(),
+        ledger({"player": "Reb Guy", "player_id": 2, "stat": "rebounds", "book": "kalshi",
+                "line": 9.5, "model_version": "minutes-v1"})])
+    found = nba_parlay.sources(games, DAY)
+    table = nba_parlay.all_candidates(games, NO_ALT, DAY, "minutes-v1", "kalshi", found)
+    assert list(table["stat_key"].unique()) == ["points", "rebounds"]
+    assert table.index.is_unique and list(table.index) == list(range(len(table)))
+    # rebounds has a minutes-v1 row, points on Kalshi only has ewma-v1 -> baseline fallback
+    assert set(table.loc[table["stat_key"] == "points", "Player"]) == {"Kal Guy"}
+    assert set(table.loc[table["stat_key"] == "rebounds", "Player"]) == {"Reb Guy"}
+
+
+def test_all_candidates_is_empty_for_an_unknown_source_and_keeps_the_columns():
+    found = nba_parlay.sources(mixed(), DAY)
+    table = nba_parlay.all_candidates(mixed(), NO_ALT, DAY, "ewma-v1", "nobody", found)
+    assert table.empty and list(table.columns) == nba_parlay.COLUMNS
