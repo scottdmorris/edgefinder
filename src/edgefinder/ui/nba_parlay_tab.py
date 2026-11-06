@@ -106,7 +106,8 @@ def _clear_slip() -> None:
 
 def _toggle(index: int, candidates: pd.DataFrame) -> None:
     st.session_state[LEGS_KEY] = nba_parlay.toggle_leg(
-        list(st.session_state.get(LEGS_KEY, [])), index, candidates["player_id"])
+        list(st.session_state.get(LEGS_KEY, [])), index,
+        candidates["player_id"].astype(str) + "|" + candidates["stat_key"])
 
 
 def _load(indices: list[int]) -> None:
@@ -319,7 +320,7 @@ def _search(candidates: pd.DataFrame) -> None:
         st.multiselect(
             "Type a player's name", list(candidates.index), key=LEGS_KEY,
             format_func=lambda i: _describe(candidates.loc[i]),
-            help="One bet per player. This is the same slip as the one on the right.")
+            help="One bet per player per stat. This is the same slip as the one on the right.")
 
 
 # ---- the slip panel ---------------------------------------------------------------

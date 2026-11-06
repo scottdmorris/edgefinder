@@ -67,14 +67,16 @@ def test_the_newest_lock_comes_first():
 
 def test_integrity_counts_picks_recorded_at_or_after_tip_off():
     fine = rows(recorded="2026-11-04T17:00:00+00:00")
-    after = rows(version="late-model", recorded="2026-11-05T00:30:00+00:00")
+    # the builder refuses a late pick now, so make one the way an old or hand-edited file has it
+    after = [{**row, "recorded_at": "2026-11-05T00:30:00+00:00"}
+             for row in rows(version="late-model", recorded="2026-11-04T17:00:00+00:00")]
     report = nba_record.integrity(ledger(fine, after))
     assert report["picks"] == 4 and report["after_tip"] == 2
     assert nba_record.integrity(ledger(fine))["after_tip"] == 0
 
 
 def test_a_pick_recorded_exactly_at_tip_off_counts_as_late():
-    at_tip = rows(recorded="2026-11-05T00:00:00+00:00")
+    at_tip = [{**row, "recorded_at": "2026-11-05T00:00:00+00:00"} for row in rows()]
     assert nba_record.integrity(ledger(at_tip))["after_tip"] == 2
 
 
@@ -176,3 +178,49 @@ def test_the_verdict_says_ahead_level_or_behind_once_there_is_enough_data():
 def test_even_a_good_verdict_does_not_overclaim():
     text = nba_record.verdict(0.240, 0.250, 500)
     assert "Still needs to hold up" in text
+
+
+# ---- a pick can never be written once the game has started ------------------------------------------
+
+def test_no_pick_is_recorded_at_or_after_tip_off():
+    assert rows(recorded="2026-11-05T00:00:00+00:00") == []             # exactly at tip
+    assert rows(recorded="2026-11-05T00:30:00+00:00") == []             # after
+    assert len(rows(recorded="2026-11-04T23:59:59+00:00")) == 2         # one second before
+
+
+def test_tipped_off_compares_real_moments_whatever_the_time_zone_spelling():
+    assert nba_paper.tipped_off("2026-11-04T19:00:00-05:00", "2026-11-05T00:00:00Z")   # = 00:00Z
+    assert not nba_paper.tipped_off("2026-11-04T18:59:59-05:00", "2026-11-05T00:00:00Z")
+
+
+def test_x_plus_rows_follow_the_same_rule():
+    from edgefinder.tracking import nba_alt
+    lines = [{"player": "Cade Cunningham", "line": 24.5, "over_odds": 150}]
+    predictions = {"Cade Cunningham": {"player_id": 1, "mean": 27.0}}
+    late = nba_alt.build_alt_rows(EVENT, lines, predictions, "2026-11-05T00:00:00+00:00",
+                                  "2026-11-04", model_version="ewma-v1", dispersion=7.8)
+    early = nba_alt.build_alt_rows(EVENT, lines, predictions, "2026-11-04T20:00:00+00:00",
+                                   "2026-11-04", model_version="ewma-v1", dispersion=7.8)
+    assert late == [] and len(early) == 1
+
+
+# ---- closing-line value summary -------------------------------------------------------------------------
+
+def test_the_closing_value_summary_is_per_book_and_only_counts_picks_with_a_closing_price():
+    frame = pd.DataFrame({
+        "pick_side": ["over", "over", "under", None, "over"],
+        "book": ["fanduel", "fanduel", "fanduel", "fanduel", "kalshi"],
+        "clv_pct": [4.0, -2.0, None, 9.0, 1.5]})
+    summary = nba_record.clv_summary(frame)
+    # the non-pick (pick_side None) is ignored even though it has a number
+    assert summary["fanduel"] == {"picks": 3, "measured": 2, "avg_clv_pct": 1.0,
+                                  "beat_close_pct": 50.0}
+    assert summary["kalshi"] == {"picks": 1, "measured": 1, "avg_clv_pct": 1.5,
+                                 "beat_close_pct": 100.0}
+
+
+def test_a_book_with_no_closing_prices_yet_shows_nothing_to_average():
+    frame = pd.DataFrame({"pick_side": ["over"], "book": ["fanduel"], "clv_pct": [None]})
+    assert nba_record.clv_summary(frame)["fanduel"] == {
+        "picks": 1, "measured": 0, "avg_clv_pct": None, "beat_close_pct": None}
+    assert nba_record.clv_summary(frame.iloc[0:0]) == {}

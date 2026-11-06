@@ -30,7 +30,8 @@ def standardised_misses(games: pd.DataFrame, dispersion: float, stat: str = "pts
                   & (games["n_prior"] >= MIN_PRIOR_GAMES)].copy()
     variance = rated["pred_ewma"] + rated["pred_ewma"] ** 2 / dispersion
     rated["z"] = (rated[stat] - rated["pred_ewma"]) / np.sqrt(variance)
-    return rated[["game_id", "team", "z"]]
+    columns = ["game_id", "team", "z"] + (["player_id"] if "player_id" in rated else [])
+    return rated[columns]
 
 
 def pair_correlations(misses: pd.DataFrame) -> dict[str, float]:
@@ -55,5 +56,38 @@ def pair_correlations(misses: pd.DataFrame) -> dict[str, float]:
         "teammate": teammate_sum / teammate_pairs / scale if teammate_pairs else 0.0,
         "opponent": opponent_sum / opponent_pairs / scale if opponent_pairs else 0.0,
         "teammate_pairs": int(teammate_pairs),
+        "opponent_pairs": int(opponent_pairs),
+    }
+
+
+def cross_pair_correlations(first: pd.DataFrame, second: pd.DataFrame) -> dict[str, float]:
+    """How one stat's miss moves with ANOTHER stat's miss in the same game: for the same
+    player (points vs his own rebounds), for teammates (his points vs a teammate's
+    assists) and for opponents. `first` and `second` are `standardised_misses` output
+    with a player_id column, one per stat. Only players who have both are used, so the
+    three numbers rest on the same people."""
+    both = first.merge(second, on=["game_id", "team", "player_id"], suffixes=("_a", "_b"))
+    if both.empty:
+        return {"same_player": 0.0, "teammate": 0.0, "opponent": 0.0,
+                "same_player_pairs": 0, "teammate_pairs": 0, "opponent_pairs": 0}
+    scale = float(np.sqrt(np.mean(both["z_a"] ** 2) * np.mean(both["z_b"] ** 2)))
+    both = both.assign(cross=both["z_a"] * both["z_b"])
+    by_team = both.groupby(["game_id", "team"]).agg(
+        a=("z_a", "sum"), b=("z_b", "sum"), same=("cross", "sum"), n=("z_a", "size")).reset_index()
+
+    teammate_sum = float((by_team["a"] * by_team["b"] - by_team["same"]).sum())
+    teammate_pairs = float((by_team["n"] * (by_team["n"] - 1)).sum())
+    opponent_sum = opponent_pairs = 0.0
+    for _, game in by_team.groupby("game_id"):
+        if len(game) != 2:
+            continue
+        x, y = game.iloc[0], game.iloc[1]
+        opponent_sum += float(x["a"] * y["b"] + y["a"] * x["b"])
+        opponent_pairs += float(2 * x["n"] * y["n"])
+    return {
+        "same_player": float(both["cross"].mean()) / scale,
+        "teammate": teammate_sum / teammate_pairs / scale if teammate_pairs else 0.0,
+        "opponent": opponent_sum / opponent_pairs / scale if opponent_pairs else 0.0,
+        "same_player_pairs": len(both), "teammate_pairs": int(teammate_pairs),
         "opponent_pairs": int(opponent_pairs),
     }

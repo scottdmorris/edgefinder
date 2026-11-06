@@ -4,6 +4,24 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Reliability, closing-line value and cross-stat correlations
+- **Job heartbeats.** The snapshot and grading jobs write when they last ran and how it went
+  (`data/job_heartbeat.json`). The app shows "Lines last checked ..." in the footer and a
+  notice at the top when snapshots are behind or stopped, or when a run failed. Snapshot
+  tasks now also wake the PC to run (`WakeToRun`).
+- **No pick after tip-off.** `build_ledger_rows` and the X+ builder refuse any price taken at
+  or after the game's start, so the "recorded before the game" claim is enforced in code, not
+  just counted. (Found by the record audit.)
+- **Closing-line value for Kalshi.** The late snapshot now also saves Kalshi's prices
+  (`data/kalshi_snapshots.csv`); grading uses the latest one as the closing price for a
+  Kalshi pick on the same line. The Record tab opens with "Did the price move our way?":
+  average move, share of picks that beat the close and how many were measured, per source.
+- **Different stats, measured.** Same-game correlations between stats, from three seasons of
+  logs. Between different players they are near zero (largest: a teammate's assists with
+  another's points, +0.08). The same player's own stats are strongly linked: points and
+  threes +0.72, points and rebounds +0.26, rebounds and assists +0.18, points and assists
+  +0.13. The slip maths uses them, and one player can now be on a slip once per stat.
+
 ### A livelier live screen
 - **Points pop.** When a team scores between refreshes, its score flashes green and a
   "+2" or "+3" floats up beside it, on the scoreboard and on the open game. Nothing pops

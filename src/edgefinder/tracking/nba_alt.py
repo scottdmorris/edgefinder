@@ -27,7 +27,7 @@ from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
 from ..models import nba_context_points, nba_context_v2, nba_minutes_points, nba_points
-from .nba_paper import MIN_EV_TO_RECORD, MODEL_WEIGHT
+from .nba_paper import MIN_EV_TO_RECORD, MODEL_WEIGHT, tipped_off
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +102,10 @@ def build_alt_rows(
     dispersion: float | Callable,
 ) -> list[dict]:
     """One row per X+ price we can price. `lines` hold player, line (a half
-    point such as 14.5, meaning 15+) and over_odds."""
+    point such as 14.5, meaning 15+) and over_odds. Nothing is recorded once the game
+    has tipped off."""
+    if tipped_off(recorded_at, event["commence_time"]):
+        return []
     rows = []
     for item in lines:
         prediction = predictions.get(item["player"])

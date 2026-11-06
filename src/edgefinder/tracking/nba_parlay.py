@@ -89,9 +89,9 @@ def verdict(ev_per_dollar: float) -> str:
 
 
 def toggle_leg(slip: list[int], index: int, player_ids) -> list[int]:
-    """Tapping a price adds it; tapping it again removes it. A player can be on
-    a slip only once, so adding a second price for him replaces the first.
-    `player_ids` maps each bet's position to its player."""
+    """Tapping a price adds it; tapping it again removes it. A player can be on a slip
+    once per stat, so adding a second price for the same number replaces the first.
+    `player_ids` maps each bet's position to its player-and-stat."""
     if index in slip:
         return [i for i in slip if i != index]
     return [i for i in slip if player_ids[i] != player_ids[index]] + [index]

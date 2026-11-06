@@ -58,3 +58,50 @@ def test_bench_players_and_thin_histories_are_left_out():
     games.loc[games.index[6:9], "n_prior"] = 2            # thin history
     misses = nba_correlation.standardised_misses(games, 7.8)
     assert len(misses) == len(games) - 9
+
+
+def simulated_pair(same: float, teammate: float, opponent: float, games: int = 4000, seed: int = 3):
+    """Two stats for six players a game with known cross-correlations: a player's two
+    stats share `same`, a team's players share `teammate` across stats, the game shares
+    `opponent`."""
+    rng = np.random.default_rng(seed)
+    a_rows, b_rows = [], []
+    pid = 0
+    for game_id in range(games):
+        game_lift = rng.normal() * np.sqrt(opponent)
+        for team in ("AAA", "BBB"):
+            team_lift = rng.normal() * np.sqrt(max(teammate - opponent, 0.0))
+            for _ in range(3):
+                pid += 1
+                shared = rng.normal() * np.sqrt(max(same - teammate, 0.0))
+                za = game_lift + team_lift + shared + rng.normal() * np.sqrt(1 - same)
+                zb = game_lift + team_lift + shared + rng.normal() * np.sqrt(1 - same)
+                a_rows.append({"game_id": game_id, "team": team, "player_id": pid, "z": za})
+                b_rows.append({"game_id": game_id, "team": team, "player_id": pid, "z": zb})
+    return pd.DataFrame(a_rows), pd.DataFrame(b_rows)
+
+
+def test_cross_stat_correlations_recover_the_known_values():
+    a, b = simulated_pair(same=0.5, teammate=0.2, opponent=0.1)
+    result = nba_correlation.cross_pair_correlations(a, b)
+    assert result["same_player"] == pytest.approx(0.5, abs=0.04)
+    assert result["teammate"] == pytest.approx(0.2, abs=0.04)
+    assert result["opponent"] == pytest.approx(0.1, abs=0.04)
+
+
+def test_independent_stats_show_no_cross_correlation_and_the_pair_counts_are_right():
+    a, b = simulated_pair(same=0.0, teammate=0.0, opponent=0.0, games=2000)
+    result = nba_correlation.cross_pair_correlations(a, b)
+    assert max(abs(result["same_player"]), abs(result["teammate"]),
+               abs(result["opponent"])) < 0.04
+    # per game: 6 players; each team has 3*2 = 6 ordered teammate pairs; opponents 2*3*3 = 18
+    assert result["same_player_pairs"] == 2000 * 6
+    assert result["teammate_pairs"] == 2000 * 2 * 6 and result["opponent_pairs"] == 2000 * 18
+
+
+def test_only_players_with_both_stats_count_and_no_overlap_is_zero():
+    a, b = simulated_pair(same=0.5, teammate=0.2, opponent=0.1, games=50)
+    assert nba_correlation.cross_pair_correlations(a, b.assign(player_id=b["player_id"] + 10**6))[
+        "same_player_pairs"] == 0
+    half = nba_correlation.cross_pair_correlations(a, b[b["player_id"] % 2 == 0])
+    assert half["same_player_pairs"] == 50 * 3

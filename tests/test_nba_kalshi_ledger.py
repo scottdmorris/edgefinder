@@ -313,6 +313,13 @@ def script():
     return module
 
 
+@pytest.fixture(autouse=True)
+def heartbeat_file(script, tmp_path, monkeypatch):
+    """Keep the tests' heartbeats out of the real data folder."""
+    monkeypatch.setattr(script.job_health, "HEARTBEAT_PATH", tmp_path / "heartbeat.json")
+    return tmp_path / "heartbeat.json"
+
+
 class Exploding:
     """Stands in for Models: fails the test if anything is built."""
 
@@ -355,8 +362,23 @@ def run_main(script, monkeypatch, tasks, *, remaining):
     monkeypatch.setattr(
         script, "record_kalshi",
         lambda events, models: order.append(("kalshi", [e["event_id"] for e in events])))
+    monkeypatch.setattr(
+        script, "archive_kalshi_closing",
+        lambda events: order.append(("kalshi_close", [e["event_id"] for e in events])))
     script.main()
     return order
+
+
+def run_main_with_fetch(script, monkeypatch, tasks):
+    """Like run_main, but keeps whatever fetch_event_lines the test already installed."""
+    monkeypatch.setattr(script.sys, "argv", ["nba_props_snapshot.py"])
+    monkeypatch.setattr(script.nba_props, "upcoming_events", lambda: EVENTS)
+    monkeypatch.setattr(script.nba_props, "load_snapshots", lambda: None)
+    monkeypatch.setattr(script.nba_props, "requests_remaining", lambda: 300)
+    monkeypatch.setattr(script.nba_snapshot_plan, "plan_snapshots", lambda *a, **k: tasks)
+    monkeypatch.setattr(script, "Models", lambda today: Exploding())
+    monkeypatch.setattr(script, "archive_kalshi_closing", lambda events: None)
+    script.main()
 
 
 def test_kalshi_follows_the_early_window_only_and_runs_after_fanduel(script, monkeypatch):
@@ -365,7 +387,7 @@ def test_kalshi_follows_the_early_window_only_and_runs_after_fanduel(script, mon
              plan.SnapshotTask(EVENTS[2], "early")]
     order = run_main(script, monkeypatch, tasks, remaining=300)
     assert order == [("fanduel_fetch", "e1"), ("fanduel_fetch", "e2"), ("fanduel_fetch", "e3"),
-                     ("kalshi", ["e1", "e3"])]
+                     ("kalshi", ["e1", "e3"]), ("kalshi_close", ["e2"])]
 
 
 def test_kalshi_is_exempt_from_the_odds_api_reserve(script, monkeypatch):
@@ -374,10 +396,63 @@ def test_kalshi_is_exempt_from_the_odds_api_reserve(script, monkeypatch):
     assert order == [("kalshi", ["e1"])]       # FanDuel stopped on the reserve; Kalshi still ran
 
 
-def test_no_kalshi_work_for_a_cycle_with_only_late_snapshots(script, monkeypatch):
+def test_a_cycle_with_only_late_snapshots_saves_kalshi_closing_prices_not_picks(script, monkeypatch):
     tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "late")]
     order = run_main(script, monkeypatch, tasks, remaining=300)
-    assert order == [("fanduel_fetch", "e1")]
+    assert order == [("fanduel_fetch", "e1"), ("kalshi_close", ["e1"])]
+
+
+# ---- the heartbeat the job leaves behind ----------------------------------------------------------------
+
+def beat(path):
+    from edgefinder.data import job_health
+    return job_health.load(path)["snapshot"]
+
+
+def test_a_normal_run_reports_ok_with_how_many_snapshots_it_recorded(
+        script, monkeypatch, heartbeat_file):
+    tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early"),
+             nba_snapshot_plan.SnapshotTask(EVENTS[1], "late")]
+    run_main(script, monkeypatch, tasks, remaining=300)
+    assert beat(heartbeat_file) | {"ran_at": ""} == {
+        "ran_at": "", "outcome": "ok", "detail": "2 of 2 due snapshots recorded"}
+
+
+def test_a_run_with_nothing_due_still_reports_in(script, monkeypatch, heartbeat_file):
+    run_main(script, monkeypatch, [], remaining=300)
+    assert beat(heartbeat_file)["outcome"] == "nothing_due"
+
+
+def test_stopping_on_the_request_reserve_is_ok_but_says_so(script, monkeypatch, heartbeat_file):
+    tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early")]
+    run_main(script, monkeypatch, tasks, remaining=script.nba_props.QUOTA_RESERVE)
+    result = beat(heartbeat_file)
+    assert result["outcome"] == "ok" and "request reserve reached" in result["detail"]
+    assert result["detail"].startswith("0 of 1")
+
+
+def test_an_api_failure_before_anything_was_recorded_is_a_failed_run(
+        script, monkeypatch, heartbeat_file):
+    def broken(event):
+        raise script.nba_props.PropsApiError("the odds service is down")
+
+    tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early")]
+    monkeypatch.setattr(script.nba_props, "fetch_event_lines", broken)
+    run_main_with_fetch(script, monkeypatch, tasks)
+    result = beat(heartbeat_file)
+    assert result["outcome"] == "failed" and "odds service is down" in result["detail"]
+
+
+def test_not_being_able_to_list_games_is_a_failed_run(script, monkeypatch, heartbeat_file):
+    def broken():
+        raise script.nba_props.PropsApiError("no key")
+
+    monkeypatch.setattr(script.sys, "argv", ["nba_props_snapshot.py"])
+    monkeypatch.setattr(script.nba_props, "upcoming_events", broken)
+    with pytest.raises(SystemExit):
+        script.main()
+    assert beat(heartbeat_file)["outcome"] == "failed"
+    assert "could not list games" in beat(heartbeat_file)["detail"]
 
 
 # ---- other ledger readers --------------------------------------------------

@@ -79,9 +79,11 @@ def test_an_unmeasured_stat_falls_back_to_the_points_correlation():
     assert correlated.joint_probability(legs) == pytest.approx(0.245862, abs=1e-5)
 
 
-def test_bets_on_different_stats_are_independent_unless_overridden():
-    legs = [leg("A", stat="points"), leg("B", stat="assists")]
-    assert correlated.joint_probability(legs) == pytest.approx(0.25, abs=1e-9)
+def test_bets_on_different_stats_use_the_measured_cross_value_unless_overridden():
+    import math
+    legs = [leg("A", stat="points"), leg("B", stat="assists")]      # teammates: +0.075
+    assert correlated.joint_probability(legs) == pytest.approx(
+        0.25 + math.asin(0.075) / (2 * math.pi), abs=1e-6)
     # an explicit override applies to every pair regardless of stat
     assert correlated.joint_probability(legs, teammate_rho=0.5) == pytest.approx(1 / 3, abs=1e-6)
 
@@ -117,7 +119,7 @@ def test_an_empty_parlay_is_rejected():
         correlated.joint_probability([])
 
 
-def test_the_same_player_twice_in_one_game_is_rejected():
+def test_the_same_player_twice_on_the_same_stat_is_rejected():
     with pytest.raises(ValueError, match="only appear once"):
         correlated.joint_probability([leg("A"), leg("A", over=False)])
 

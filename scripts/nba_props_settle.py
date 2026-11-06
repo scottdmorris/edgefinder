@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from edgefinder.data import nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
-from edgefinder.tracking import nba_alt, nba_paper  # noqa: E402
+from edgefinder.data import job_health, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
+from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_paper  # noqa: E402
 
 
 def build_report(today: dt.date) -> str:
@@ -26,7 +26,8 @@ def build_report(today: dt.date) -> str:
     if ledger.empty:
         return "The ledger is empty: run scripts/nba_props_snapshot.py first."
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
-    settled = nba_paper.settle(ledger, games, nba_props.load_snapshots(), today)
+    settled = nba_paper.settle(ledger, games, nba_props.load_snapshots(), today,
+                               nba_kalshi_ledger.load_snapshots())
     nba_paper.save_ledger(settled)
 
     lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"]
@@ -100,6 +101,8 @@ def main() -> None:
         stamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         with args.log_file.open("a", encoding="utf-8") as handle:
             handle.write(f"{stamp}  settle\n{report}\n\n")
+    first_line = report.splitlines()[0] if report else ""
+    job_health.record("settle", job_health.FAILED if failed else job_health.OK, first_line[:200])
     if failed:
         sys.exit(1)
 

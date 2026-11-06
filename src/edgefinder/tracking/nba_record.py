@@ -144,3 +144,19 @@ def verdict(brier_model: float | None, brier_market: float | None, lines: int,
                 "better). Still needs to hold up over more games before it means much.")
     return (f"Behind the market so far, by {-gap:.4f} on accuracy (lower scores are better). "
             "Right now the sportsbook's own odds are the better guide.")
+
+
+def clv_summary(ledger: pd.DataFrame) -> dict[str, dict]:
+    """Closing-line value of the picks, per price source: {book: {"picks", "measured",
+    "avg_clv_pct", "beat_close_pct"}}. CLV asks whether the market later moved our way, which
+    needs far fewer picks to read than wins and losses do. `measured` counts picks that have
+    a closing price to compare with."""
+    picks = ledger[ledger["pick_side"].notna()]
+    out = {}
+    for book, group in picks.groupby(picks["book"].fillna("fanduel")):
+        clv = pd.to_numeric(group["clv_pct"], errors="coerce").dropna()
+        out[book] = {
+            "picks": len(group), "measured": len(clv),
+            "avg_clv_pct": float(clv.mean()) if len(clv) else None,
+            "beat_close_pct": float((clv > 0).mean() * 100.0) if len(clv) else None}
+    return out

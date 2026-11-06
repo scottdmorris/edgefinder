@@ -24,6 +24,7 @@ def render() -> None:
                "result is filled in later, and the lock time below shows it.")
     locked = nba_record.locked_picks(ledger)
     _status(nba_record.integrity(ledger))
+    _closing_value(nba_paper.load_ledger())
     _models(ledger)
     _profit_chart(locked)
     _calibration(ledger)
@@ -44,6 +45,32 @@ def _status(report: dict) -> None:
                    f"{report['last_lock']:%b %d, %I:%M %p} ET. "
                    + ("Every pick was recorded before its game started."
                       if clean else "Some picks were recorded after tip-off: ignore those."))
+
+
+def _closing_value(ledger: pd.DataFrame) -> None:
+    """The quickest honest read on whether a model has an edge: did the market move our way
+    after we picked? Shown per price source, from the first graded picks."""
+    st.markdown("#### Did the price move our way?")
+    summary = nba_record.clv_summary(ledger)
+    shown = False
+    for book, label in (("fanduel", "FanDuel"), ("kalshi", "Kalshi")):
+        facts = summary.get(book)
+        if not facts or not facts["measured"]:
+            continue
+        shown = True
+        st.markdown(f"**{label}**")
+        average, beat, count = st.columns(3)
+        average.markdown(style.stat_tile("Average move", f"{facts['avg_clv_pct']:+.1f}%"),
+                         unsafe_allow_html=True)
+        beat.markdown(style.stat_tile("Picks that beat the close",
+                                      f"{facts['beat_close_pct']:.0f}%"), unsafe_allow_html=True)
+        count.markdown(style.stat_tile("Picks measured", str(facts["measured"])),
+                       unsafe_allow_html=True)
+    if not shown:
+        st.caption("This appears after the first graded picks that have a closing price.")
+    st.caption("Closing-line value compares the price we took with the price just before "
+               "tip-off. If the market keeps moving our way, we saw something early, and that "
+               "shows up long before wins and losses can be trusted.")
 
 
 def _models(ledger: pd.DataFrame) -> None:

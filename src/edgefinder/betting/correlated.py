@@ -25,13 +25,27 @@ from .odds_math import american_to_decimal
 # Measured on 2023-24 to 2025-26 game logs (about 60,000 teammate pairs and
 # 70,000 opposing pairs per stat); see scripts/nba_correlation_report.py.
 # (teammates, opponents) for two bets on the SAME stat in one game. Every one
-# is small. Bets on different stats are treated as independent: nobody has
-# measured those, and guessing would be worse than saying so.
+# is small.
 CORRELATIONS = {
     "points": (-0.026, 0.023),
     "rebounds": (-0.005, 0.023),
     "assists": (-0.025, 0.014),
     "threes": (-0.002, 0.004),
+}
+# Bets on DIFFERENT stats, measured the same way over 2023-24 to 2025-26 (see
+# cross_report in scripts/nba_correlation_report.py), keyed by the two stats in
+# alphabetical order: (the same player, teammates, opponents). Between different
+# players they are close to nothing (a teammate's assists and another's points is
+# the largest, +0.08). The same player's own stats are the exception: his points
+# and threes move together almost lock-step, so a slip with both is far likelier
+# to hit, or miss, together than the legs' separate prices suggest.
+CROSS_CORRELATIONS = {
+    ("assists", "points"): (0.129, 0.075, 0.027),
+    ("assists", "rebounds"): (0.180, -0.009, -0.007),
+    ("assists", "threes"): (0.068, 0.085, 0.013),
+    ("points", "rebounds"): (0.260, 0.016, -0.008),
+    ("points", "threes"): (0.719, -0.021, 0.008),
+    ("rebounds", "threes"): (0.086, 0.005, -0.008),
 }
 TEAMMATE_RHO, OPPONENT_RHO = CORRELATIONS["points"]
 _SEED = 7
@@ -101,18 +115,23 @@ def summarise(legs: list[Leg], teammate_rho: float | None = None,
 def _validate(legs: list[Leg]) -> None:
     if not legs:
         raise ValueError("a parlay needs at least one leg")
-    players = [(leg.event_id, leg.player) for leg in legs]
-    if len(set(players)) != len(players):
-        raise ValueError("a player can only appear once in a parlay: his legs are not independent")
+    bets = [(leg.event_id, leg.player, leg.stat) for leg in legs]
+    if len(set(bets)) != len(bets):
+        raise ValueError("a player can only appear once per stat in a parlay: two bets on the "
+                         "same number are not independent")
     if any(not 0.0 < leg.prob < 1.0 for leg in legs):
         raise ValueError("every leg's probability must be strictly between 0 and 1")
 
 
 def _correlation(a: Leg, b: Leg, teammate_rho: float | None, opponent_rho: float | None) -> float:
     """How two bets in one game move together."""
-    if a.stat != b.stat and teammate_rho is None and opponent_rho is None:
-        return 0.0
-    measured_teammates, measured_opponents = CORRELATIONS.get(a.stat, CORRELATIONS["points"])
+    if a.stat != b.stat:
+        same_player, measured_teammates, measured_opponents = CROSS_CORRELATIONS.get(
+            tuple(sorted((a.stat, b.stat))), (0.0, 0.0, 0.0))
+        if a.player == b.player:
+            return same_player
+    else:
+        measured_teammates, measured_opponents = CORRELATIONS.get(a.stat, CORRELATIONS["points"])
     if a.team == b.team:
         return measured_teammates if teammate_rho is None else teammate_rho
     return measured_opponents if opponent_rho is None else opponent_rho

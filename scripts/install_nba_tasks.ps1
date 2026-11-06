@@ -9,7 +9,8 @@
 #
 # Triggers use this PC's local time, and the NBA schedule assumes Eastern.
 # Jobs run windowless (pythonw) and log to data\nba_jobs.log. They only run
-# while you are logged in; a run missed while asleep is started on wake.
+# while you are logged in. A run due while the PC sleeps wakes it (WakeToRun), and one
+# missed anyway is started when it next wakes.
 
 $ErrorActionPreference = 'Stop'
 
@@ -21,7 +22,7 @@ if ((Get-TimeZone).Id -notlike 'Eastern*') {
 }
 
 $settings = New-ScheduledTaskSettingsSet `
-    -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
 
 $logArg = '--log-file data\nba_jobs.log'

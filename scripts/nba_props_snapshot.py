@@ -26,7 +26,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from edgefinder.data import nba_injuries, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
+from edgefinder.data import (  # noqa: E402
+    job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats)
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_recording  # noqa: E402
@@ -177,6 +178,18 @@ def record_kalshi(events: list[dict], models: Models) -> None:
         log.exception("Kalshi snapshot failed; the FanDuel snapshot is unaffected")
 
 
+def archive_kalshi_closing(events: list[dict]) -> None:
+    """Save Kalshi's prices for games about to tip off, so Kalshi picks can be judged against
+    a closing price. Free, and nothing it raises may fail the run."""
+    try:
+        saved = nba_kalshi_ledger.archive_closing(
+            nba_kalshi_ledger.fetch_kalshi_rows(), events,
+            dt.datetime.now(dt.timezone.utc).isoformat())
+        log.info("Kalshi closing prices saved: %d", saved)
+    except Exception:
+        log.exception("Kalshi closing snapshot failed; the FanDuel snapshot is unaffected")
+
+
 def backfill_models(models: Models, now: dt.datetime, dry_run: bool) -> None:
     """Price archived early snapshots with models that haven't yet. Only
     games that haven't tipped off: projections use games through last
@@ -211,10 +224,12 @@ def main() -> None:
         events = nba_props.upcoming_events()
     except nba_props.PropsApiError as exc:
         log.error("Could not list NBA games: %s", exc)
+        job_health.record("snapshot", job_health.FAILED, f"could not list games: {exc}")
         sys.exit(1)
     tasks = nba_snapshot_plan.plan_snapshots(events, nba_props.load_snapshots(), now)
     if not tasks:
         log.info("Nothing due right now.")
+        job_health.record("snapshot", job_health.NOTHING_DUE)
         return
     for task in tasks:
         log.info("due: %-5s %s @ %s", task.phase, task.event["away"], task.event["home"])
@@ -222,34 +237,46 @@ def main() -> None:
         log.info("(dry run: no requests spent)")
         return
 
+    archived, stopped, api_failed = 0, "", False
     for task in tasks:
         remaining = nba_props.requests_remaining()
         if remaining is not None and remaining <= nba_props.QUOTA_RESERVE:
             log.info("Stopping: %s requests left, keeping a reserve of %s.",
                      remaining, nba_props.QUOTA_RESERVE)
+            stopped = "request reserve reached"
             break
         try:
             lines = nba_props.fetch_event_lines(task.event)
         except nba_props.PropsApiError as exc:
             log.info("Stopping: %s", exc)
+            stopped, api_failed = str(exc)[:120], True
             break
         nba_props.append_snapshot(
             task.event, task.phase, lines, dt.datetime.now(dt.timezone.utc).isoformat())
         recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
         log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
+        archived += 1
         if task.phase == "early":
             record_alt_lines(task.event, models)
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
     early_events = [task.event for task in tasks if task.phase == "early"]
     if early_events:
         record_kalshi(early_events, models)
+    late_events = [task.event for task in tasks if task.phase == "late"]
+    if late_events:
+        archive_kalshi_closing(late_events)
+    detail = f"{archived} of {len(tasks)} due snapshots recorded" + (
+        f"; stopped: {stopped}" if stopped else "")
+    failed = api_failed and archived == 0
+    job_health.record("snapshot", job_health.FAILED if failed else job_health.OK, detail)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except Exception as exc:
         # an unattended run has nobody watching a console, so record the crash
         log.exception("Snapshot run crashed")
+        job_health.record("snapshot", job_health.FAILED, f"{type(exc).__name__}: {exc}"[:200])
         sys.exit(1)

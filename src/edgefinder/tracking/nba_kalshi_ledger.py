@@ -29,11 +29,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pandas as pd
+
 from ..data import kalshi, nba_players, nba_snapshot_plan
 from ..models import nba_stat_model
 from . import nba_paper
 
 log = logging.getLogger(__name__)
+
+SNAPSHOT_PATH = Path(__file__).resolve().parents[3] / "data" / "kalshi_snapshots.csv"
+SNAPSHOT_COLUMNS = ["fetched_at", "event_id", "stat", "player", "line", "over_odds", "under_odds"]
 
 # projections[event_id][stat][player name as Kalshi spells it] -> {player_id, mean}
 Projections = dict[str, dict[str, dict[str, dict]]]
@@ -137,6 +142,34 @@ def build_kalshi_ledger_rows(
                 nba_snapshot_plan.tip_date(event), model_version=model_version,
                 dispersion=dispersions[stat], stat=stat, book=kalshi.BOOK)
     return ledger_rows
+
+
+def archive_closing(kalshi_rows: list[dict], events: list[dict], fetched_at: str,
+                    path: Path | None = None) -> int:
+    """Save the liquid Kalshi prices for games about to tip off, the closest we get to a
+    closing price. Every call appends; the latest price for a line is the one used. Costs
+    nothing and changes no picks. Returns how many prices were saved."""
+    joined = join_to_events(kalshi_rows, events)
+    saved = [
+        {"fetched_at": fetched_at, "event_id": event_id, "stat": stat, "player": line["player"],
+         "line": line["line"], "over_odds": line["over_odds"], "under_odds": line["under_odds"]}
+        for event_id, rows in joined.by_event.items()
+        for stat, lines in _lines_by_stat(rows).items() for line in lines]
+    if not saved:
+        return 0
+    path = path or SNAPSHOT_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    table = pd.DataFrame(saved, columns=SNAPSHOT_COLUMNS)
+    table.to_csv(path, mode="a", header=not path.exists(), index=False)
+    return len(table)
+
+
+def load_snapshots(path: Path | None = None) -> pd.DataFrame:
+    """The saved closing prices; empty (with the right columns) when there are none yet."""
+    path = path or SNAPSHOT_PATH
+    if not path.exists():
+        return pd.DataFrame(columns=SNAPSHOT_COLUMNS)
+    return pd.read_csv(path)
 
 
 def record_kalshi(

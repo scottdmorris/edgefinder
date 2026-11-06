@@ -49,6 +49,13 @@ DEFAULT_BOOK = "fanduel"
 _LEGACY_DEFAULTS = {"stat": DEFAULT_STAT, "book": DEFAULT_BOOK}
 
 
+def tipped_off(recorded_at: str, commence_time: str) -> bool:
+    """True when a price was taken at or after the game's start."""
+    def moment(text: str) -> dt.datetime:
+        return dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return moment(recorded_at) >= moment(commence_time)
+
+
 def build_ledger_rows(
     event: dict,
     lines: list[dict],
@@ -66,7 +73,11 @@ def build_ledger_rows(
     own handling, and FanDuel almost always posts half points).
 
     Several models can price the same line: each writes its own rows,
-    tagged with its `model_version` and using its own `dispersion`."""
+    tagged with its `model_version` and using its own `dispersion`.
+
+    Nothing is recorded once the game has tipped off: a price taken then is not a pick."""
+    if tipped_off(recorded_at, event["commence_time"]):
+        return []
     rows = []
     for item in lines:
         prediction = predictions.get(item["player"])
@@ -162,9 +173,11 @@ def settle(
     games: pd.DataFrame,
     snapshots: pd.DataFrame,
     today: dt.date,
+    kalshi_snapshots: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Return a copy of the ledger with finished games settled and closing
-    information attached. `games` needs player_id, game_date and pts."""
+    information attached. `games` needs player_id, game_date and pts.
+    `kalshi_snapshots` are the saved late Kalshi prices that close Kalshi rows."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
     values = _stat_values(out, games)
 
@@ -181,6 +194,7 @@ def settle(
             out.loc[index, "pnl_units"] = 0.0
 
     _attach_closing(out, snapshots)
+    _attach_kalshi_closing(out, kalshi_snapshots)
     return out
 
 
@@ -222,22 +236,46 @@ def _attach_closing(out: pd.DataFrame, snapshots: pd.DataFrame) -> None:
     for index in out.index[closable]:
         row = out.loc[index]
         key = (row["event_id"], row["player"])
-        if key not in closing.index:
-            continue
-        snap = closing.loc[key]
-        out.loc[index, "closing_line"] = snap["line"]
-        out.loc[index, "closing_over_odds"] = snap["over_odds"]
-        out.loc[index, "closing_under_odds"] = snap["under_odds"]
-        if pd.isna(row["pick_side"]):
-            continue
-        is_over = row["pick_side"] == "over"
+        if key in closing.index:
+            snap = closing.loc[key]
+            _apply_closing(out, index, row, snap["line"], snap["over_odds"], snap["under_odds"])
+
+
+def _attach_kalshi_closing(out: pd.DataFrame, snapshots: pd.DataFrame | None) -> None:
+    """Close Kalshi rows from the saved late prices. Kalshi lists a ladder of lines, so a
+    row is only closed by the same line, and there is no line movement to report."""
+    if snapshots is None or snapshots.empty:
+        return
+    keys = ["event_id", "player", "stat", "line"]
+    closing = snapshots.sort_values("fetched_at").groupby(keys).tail(1).set_index(keys)
+    closable = (out["status"] != "pending") & (out["book"] == "kalshi")
+    for index in out.index[closable]:
+        row = out.loc[index]
+        key = (row["event_id"], row["player"], row["stat"], float(row["line"]))
+        if key in closing.index:
+            snap = closing.loc[key]
+            _apply_closing(out, index, row, row["line"], snap["over_odds"], snap["under_odds"],
+                           with_move=False)
+
+
+def _apply_closing(out: pd.DataFrame, index, row: pd.Series, close_line: float,
+                   close_over: float, close_under: float, with_move: bool = True) -> None:
+    """Store a row's closing line and, for a pick, how the price moved after we took it:
+    CLV is the closing implied chance against ours, as a share of ours (positive means the
+    market later agreed with us)."""
+    out.loc[index, "closing_line"] = close_line
+    out.loc[index, "closing_over_odds"] = close_over
+    out.loc[index, "closing_under_odds"] = close_under
+    if pd.isna(row["pick_side"]):
+        return
+    is_over = row["pick_side"] == "over"
+    if with_move:
         out.loc[index, "line_move"] = (
-            snap["line"] - row["line"] if is_over else row["line"] - snap["line"])
-        closing_odds = snap["over_odds" if is_over else "under_odds"]
-        if snap["line"] == row["line"] and pd.notna(closing_odds):
-            placed = implied_prob(float(row["pick_odds"]))
-            out.loc[index, "clv_pct"] = (
-                (implied_prob(float(closing_odds)) - placed) / placed * 100.0)
+            close_line - row["line"] if is_over else row["line"] - close_line)
+    closing_odds = close_over if is_over else close_under
+    if close_line == row["line"] and pd.notna(closing_odds):
+        placed = implied_prob(float(row["pick_odds"]))
+        out.loc[index, "clv_pct"] = (implied_prob(float(closing_odds)) - placed) / placed * 100.0
 
 
 def scope(ledger: pd.DataFrame, model_version: str | None = None, stat: str | None = None,

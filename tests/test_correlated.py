@@ -82,9 +82,12 @@ def stat_leg(player, stat, team="AAA", prob=0.5):
                american_odds=100, stat=stat)
 
 
-def test_bets_on_different_stats_in_one_game_are_treated_as_independent():
+def test_bets_on_different_stats_by_different_players_use_the_measured_cross_values():
+    import math
+    # points x rebounds, opponents: -0.008 ; two coin flips: P(both) = 1/4 + asin(r) / (2 pi)
     legs = [stat_leg("a", "points"), stat_leg("b", "rebounds", team="BBB")]
-    assert correlated.joint_probability(legs) == pytest.approx(0.25, abs=1e-6)
+    assert correlated.joint_probability(legs) == pytest.approx(
+        0.25 + math.asin(-0.008) / (2 * math.pi), abs=1e-5)
 
 
 def test_each_stat_uses_its_own_measured_correlation():
