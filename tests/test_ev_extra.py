@@ -1,13 +1,12 @@
-"""Hand-verified expected value, Kelly sizing and parlay accounting."""
+"""Hand-verified expected value and Kelly sizing."""
 
 import math
 import random
 
 import pytest
 
-from edgefinder.betting import ev, parlay
+from edgefinder.betting import ev
 from edgefinder.betting.odds_math import american_to_decimal
-from edgefinder.betting.parlay import ParlayLeg
 
 def test_minus_110_pays_twenty_one_elevenths():
     # 1 + 100/110 = 210/110 = 21/11, the figure the cases below rely on
@@ -126,66 +125,3 @@ def test_stake_stays_between_zero_and_the_cap_for_random_bets():
     "== -200.0."))
 def test_a_stake_is_never_negative_even_with_a_bad_multiplier():
     assert ev.recommended_stake(1000, 0.6, 2.0, kelly_multiplier=-1) >= 0.0
-
-
-# ---- parlay accounting ----------------------------------------------------------
-
-A = ParlayLeg("A", 0.6, 100)
-B = ParlayLeg("B", 0.55, 100)
-C = ParlayLeg("C", 0.5, 150)
-
-
-def test_parlay_true_probability_is_the_product():
-    assert parlay.parlay_true_prob([A, B]) == pytest.approx(0.33)
-    assert parlay.parlay_true_prob([]) == 1.0
-
-
-def test_parlay_decimal_odds_multiply():
-    # +100 -> 2.0 ; +150 -> 2.5
-    assert parlay.parlay_decimal_odds([A, C]) == pytest.approx(5.0)
-
-
-def test_fair_parlay_has_zero_ev():
-    # 0.5 * 0.4 = 0.2 ; fair decimal 5.0 (+100 is 2.0 and +150 is 2.5)
-    legs = [ParlayLeg("x", 0.5, 100), ParlayLeg("y", 0.4, 150)]
-    assert parlay.parlay_ev(legs) == pytest.approx(0.0)
-
-
-def test_quoted_payout_replaces_the_naive_product():
-    legs = [ParlayLeg("x", 0.5, 100), ParlayLeg("y", 0.4, 150)]
-    # quoted 4.0: 0.2 * 3 - 0.8 = -0.2
-    assert parlay.parlay_ev(legs, quoted_decimal=4.0) == pytest.approx(-0.2)
-
-
-def test_empty_parlay_is_worth_nothing():
-    assert parlay.parlay_ev([]) == 0.0
-
-
-def test_leg_marginal_ev_is_the_change_from_adding_it():
-    # [A, B]: p=0.33, decimal 4 -> 0.33*3 - 0.67 = 0.32 ; [A] alone: 0.6*1 - 0.4 = 0.2
-    assert parlay.leg_marginal_ev([A, B], 1) == pytest.approx(0.12)
-    # without A: B alone = 0.55 - 0.45 = 0.10 -> marginal of A = 0.32 - 0.10
-    assert parlay.leg_marginal_ev([A, B], 0) == pytest.approx(0.22)
-
-
-def test_a_dragging_leg_has_negative_marginal_ev():
-    bad = ParlayLeg("bad", 0.3, 100)
-    assert parlay.leg_marginal_ev([A, bad], 1) < 0
-
-
-def test_marginal_ev_of_a_lone_leg_is_the_whole_ticket():
-    assert parlay.leg_marginal_ev([A], 0) == pytest.approx(0.2)
-
-
-@pytest.mark.parametrize("index", [-1, 2, 99])
-def test_marginal_ev_rejects_out_of_range_indexes(index):
-    with pytest.raises(IndexError):
-        parlay.leg_marginal_ev([A, B], index)
-
-
-def test_parlay_probability_never_exceeds_the_weakest_leg():
-    rng = random.Random(21)
-    for _ in range(300):
-        legs = [ParlayLeg("l", rng.uniform(0.05, 0.95), 100) for _ in range(rng.randint(1, 5))]
-        joint = parlay.parlay_true_prob(legs)
-        assert 0.0 <= joint <= min(leg.model_prob for leg in legs) + 1e-12

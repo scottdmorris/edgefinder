@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Repo cleanup, license, CI and a new README
+- **Removed the old multi-sport code**: the MLB board, soccer, UFC, bet evaluator, bet log
+  and old parlay views and the pipelines, models and clients behind them (20 modules, 3
+  scripts and about eighty tests that covered only them). The live app no longer imports
+  any of it, and `ui/shared.py` is down to the one helper it used. It remains in git history.
+  The question-box logic (`tracking/nba_questions.py`) stays: it is built and tested and
+  waiting for a screen.
+- **License: PolyForm Noncommercial 1.0.0** (`LICENSE`): free to read, run and learn from,
+  not for commercial use.
+- **CI:** a GitHub Actions workflow runs the tests on Windows, with a badge in the README.
+- **README rewritten** to match what the project is: screenshots (with neutral images in place
+  of NBA photos and logos), the live record as an honest table from `scripts/readme_results.py`,
+  an architecture diagram, how to verify the record, and a data and licensing note.
+
 ### A tamper-evident record
 - **Append-only pick log with a hash chain** (`tracking/pick_chain.py`). Every ledger row and
   every result is also written to `data/nba_paper_log.chain.jsonl`, each entry fingerprinted
