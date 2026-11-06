@@ -469,3 +469,88 @@ def test_all_candidates_is_empty_for_an_unknown_source_and_keeps_the_columns():
     found = nba_parlay.sources(mixed(), DAY)
     table = nba_parlay.all_candidates(mixed(), NO_ALT, DAY, "ewma-v1", "nobody", found)
     assert table.empty and list(table.columns) == nba_parlay.COLUMNS
+
+
+# ---- slips inside one game ---------------------------------------------------------------------------------------------
+
+def three_in_one_game():
+    return nba_parlay.candidate_legs(
+        ledger(good_game("e1", 1, "A"), good_game("e1", 2, "B"), good_game("e1", 3, "C")),
+        NO_ALT, DAY, "ewma-v1")
+
+
+def test_by_default_one_game_gives_no_slips_because_legs_in_a_game_are_not_independent():
+    assert nba_parlay.suggest_parlays(three_in_one_game(), min_chance=0.0).empty
+
+
+def test_with_one_per_game_off_slips_are_built_from_different_players_in_that_game():
+    slips = nba_parlay.suggest_parlays(three_in_one_game(), min_chance=0.0, one_per_game=False,
+                                       top=10)
+    assert sorted(slips["Legs"]) == [2, 2, 2, 3]          # three pairs and the trio
+    # two +100 legs pay 2*2 - 1 = 3.0 per $1 and three pay 2*2*2 - 1 = 7.0
+    assert sorted(slips["Pays"]) == pytest.approx([3.0, 3.0, 3.0, 7.0])
+    for text in slips["Slip"]:
+        players = [leg.split(" · ")[0] for leg in text.split("  +  ")]
+        assert len(players) == len(set(players))                       # nobody twice
+
+
+def test_a_same_game_slip_is_priced_with_the_correlation_not_as_independent():
+    pair = nba_parlay.suggest_parlays(three_in_one_game(), min_chance=0.0, one_per_game=False,
+                                      max_legs=2, top=1).iloc[0]
+    independent = 0.536 ** 2 * 100.0                                      # 28.7296
+    assert pair["Chance %"] != pytest.approx(independent, abs=1e-6)
+    assert pair["Chance %"] == pytest.approx(independent, abs=1.0)        # close: the effect is small
+
+
+def test_one_player_with_several_worthwhile_legs_is_on_a_same_game_slip_only_once():
+    both = ledger(good_game("e1", 1, "A"), good_game("e1", 2, "B"))
+    extra = alt_ledger({"player": "A", "player_id": 1, "threshold": 25, "over_odds": 150,
+                        "model_p": 0.6, "market_p": 0.42})
+    table = nba_parlay.candidate_legs(both, extra, DAY, "ewma-v1")
+    assert (table["Player"] == "A").sum() >= 2                            # A has more than one leg
+    slips = nba_parlay.suggest_parlays(table, min_chance=0.0, one_per_game=False, top=20)
+    for text in slips["Slip"]:
+        players = [leg.split(" · ")[0] for leg in text.split("  +  ")]
+        assert len(players) == len(set(players))
+
+
+def big_game(players=30):
+    rows = [good_game("e1", i, f"P{i}") for i in range(1, players + 1)]
+    return nba_parlay.candidate_legs(ledger(*rows), NO_ALT, DAY, "ewma-v1")
+
+
+def test_a_same_game_search_prices_only_a_handful_of_slips_not_every_combination(monkeypatch):
+    from edgefinder.betting import correlated
+    calls = []
+    real = correlated.summarise
+    monkeypatch.setattr(correlated, "summarise", lambda legs, *a, **k: calls.append(1) or real(
+        legs, *a, **k))
+    nba_parlay.suggest_parlays(big_game(), one_per_game=False, min_chance=0.20, min_profit=2.0,
+                               real_leg_decimal=1.5)
+    # 10 players -> at most C(10,2) + C(10,3) = 165 slips; the profit and chance bars cut it more
+    assert 0 < len(calls) <= 165
+
+
+def test_skipping_slips_that_cannot_reach_the_chance_bar_never_drops_one_that_could():
+    # three legs at 0.536 give 0.154 independent and about 0.155 correlated: both clear 0.15
+    # and both miss 0.18, so the cheap skip and the full pricing agree either side of the bar
+    legs = big_game(4)
+    above = nba_parlay.suggest_parlays(legs, one_per_game=False, min_chance=0.15, max_legs=3,
+                                       top=20)
+    below = nba_parlay.suggest_parlays(legs, one_per_game=False, min_chance=0.18, max_legs=3,
+                                       top=20)
+    assert 3 in set(above["Legs"]) and 3 not in set(below["Legs"])
+    assert 2 in set(below["Legs"])                        # pairs (0.287) still clear 0.18
+
+
+def test_the_slips_shown_carry_the_exact_numbers_not_the_quick_ranking_ones():
+    from edgefinder.betting import correlated
+    games = big_game(5)
+    top = nba_parlay.suggest_parlays(games, one_per_game=False, min_chance=0.0, max_legs=3,
+                                     top=3)
+    assert len(top) == 3
+    for _, row in top.iterrows():
+        exact = correlated.summarise(nba_parlay.to_legs(games.loc[row["bets"]], {}))
+        assert row["Chance %"] == exact["joint_probability"] * 100.0     # identical, not close
+        assert row["EV %"] == exact["ev_per_unit"] * 100.0
+        assert row["Pays"] == exact["decimal_odds"] - 1.0

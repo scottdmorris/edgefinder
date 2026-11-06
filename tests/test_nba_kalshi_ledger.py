@@ -317,6 +317,7 @@ def script():
 def heartbeat_file(script, tmp_path, monkeypatch):
     """Keep the tests' heartbeats out of the real data folder."""
     monkeypatch.setattr(script.job_health, "HEARTBEAT_PATH", tmp_path / "heartbeat.json")
+    monkeypatch.setattr(script, "RETRY_WAIT_SECONDS", 0.0)          # no real waiting in tests
     return tmp_path / "heartbeat.json"
 
 
@@ -467,3 +468,45 @@ def test_parlay_legs_ignore_kalshi_and_non_points_rows():
         + nba_paper.build_ledger_rows(*common, model_version=VERSION, stat="rebounds"))
     rows = nba_parlay._over_under_rows(ledger, "2026-11-04", VERSION)
     assert len(rows) == 2          # the FanDuel points line, over and under
+
+
+# ---- a blip on the odds service should not cost a whole cycle ----------------------------------------------
+
+def test_a_failed_call_is_retried_and_the_pauses_are_taken(script):
+    pauses, attempts = [], []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise script.nba_props.PropsApiError("Odds API returned HTTP 502")
+        return ["games"]
+
+    assert script.with_retries(flaky, attempts=3, wait=7.0, sleep=pauses.append) == ["games"]
+    assert len(attempts) == 3 and pauses == [7.0, 7.0]
+
+
+def test_the_last_error_surfaces_after_the_attempts_run_out(script):
+    pauses = []
+
+    def down():
+        raise script.nba_props.PropsApiError("Odds API returned HTTP 502")
+
+    with pytest.raises(script.nba_props.PropsApiError, match="502"):
+        script.with_retries(down, attempts=3, wait=1.0, sleep=pauses.append)
+    assert len(pauses) == 2                     # paused between the three tries, not after the last
+
+
+def test_a_call_that_works_first_time_never_pauses(script):
+    pauses = []
+    assert script.with_retries(lambda: 5, sleep=pauses.append) == 5 and pauses == []
+
+
+def test_other_errors_are_not_retried(script):
+    pauses = []
+
+    def bug():
+        raise ValueError("a real bug")
+
+    with pytest.raises(ValueError):
+        script.with_retries(bug, sleep=pauses.append)
+    assert pauses == []

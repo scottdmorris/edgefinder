@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Game filter, a faster slip search, and phone polish
+- **Filter the Parlay tab by game.** The Game chips sit above the suggested slips and filter
+  both them and the prop list. Choosing one game gives same-game slips (different players,
+  priced with the measured correlations); "All games" gives one leg per game as before.
+- **Much faster slip search.** The search ranks slips with a quick probability calculation
+  (about 400x faster, within 1e-5) and prices only the few shown exactly, skips slips that
+  cannot meet the payout or chance bar before the slow part, and remembers results between
+  taps. A same-game search that took up to 31 seconds now takes under 2.
+- **Snapshot retries.** A blip on the odds service (such as a 502) is retried up to three
+  times, 20 seconds apart, before the run is counted as failed.
+- **Phone layout** (from the mobile audit): all six tabs fit one row, every tap target is at
+  least 44px, and alert boxes keep the black look.
+
 ### Reliability, closing-line value and cross-stat correlations
 - **Job heartbeats.** The snapshot and grading jobs write when they last ran and how it went
   (`data/job_heartbeat.json`). The app shows "Lines last checked ..." in the footer and a

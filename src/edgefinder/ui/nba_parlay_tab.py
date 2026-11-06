@@ -84,16 +84,18 @@ def render() -> None:
     current = _current_slip(candidates)
     _slip_bar(current)
 
+    shown, single_game = _game_filter(candidates)
     browse, slip = st.columns([5, 4], gap="large")
     with browse:
-        _suggested(candidates)
-        _browse(candidates, book)
+        _suggested(candidates, shown, single_game)
+        _browse(shown, candidates, book)
         _search(candidates)
     with slip, st.container(key="slip-panel"):
         _slip_panel(candidates, current)
 
 
 BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
+ALL_GAMES = "All games"
 
 
 # ---- the slip: every change goes through these three callbacks -------------------
@@ -166,18 +168,44 @@ def _slip_bar(current) -> None:
 
 # ---- browsing ---------------------------------------------------------------------
 
-def _suggested(candidates: pd.DataFrame) -> None:
+def _game_filter(candidates: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    """Chips to look at one game, or all of them. Returns the legs to show (they keep their
+    positions in the full table, which is what the slip refers to) and whether one game is
+    chosen. The choice applies to the suggested slips and the prop list alike."""
+    matchups = candidates.drop_duplicates("Game").set_index("Game")
+    short = {game: f"{row.away_abbr} @ {row.home_abbr}" for game, row in matchups.iterrows()}
+    picked = style.choose("Game", [ALL_GAMES, *short], "browse_game",
+                          format_func=lambda g: g if g == ALL_GAMES else short[g])
+    if picked == ALL_GAMES:
+        return candidates, False
+    return candidates[candidates["Game"] == picked], True
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _slips(pool: pd.DataFrame, style_name: str, one_per_game: bool) -> pd.DataFrame:
+    """The suggested slips for these legs and this style. Remembered, because every tap on a
+    price reruns the screen and the same legs would otherwise be searched all over again."""
+    return nba_parlay.suggest_parlays(pool, top=IDEAS_SHOWN,
+                                      min_chance=nba_parlay.STYLES[style_name],
+                                      min_profit=nba_parlay.MIN_PROFIT[style_name],
+                                      real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL,
+                                      one_per_game=one_per_game)
+
+
+def _suggested(candidates: pd.DataFrame, shown: pd.DataFrame | None = None,
+               single_game: bool = False) -> None:
     st.markdown("#### Ideas the model likes")
     style_name = style.choose("How much risk?", list(nba_parlay.STYLES), "slip_style",
                               default=nba_parlay.DEFAULT_STYLE)
-    slips = nba_parlay.suggest_parlays(candidates, top=IDEAS_SHOWN,
-                                       min_chance=nba_parlay.STYLES[style_name],
-                                       min_profit=nba_parlay.MIN_PROFIT[style_name],
-                                       real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL)
+    pool = candidates if shown is None else shown
+    slips = _slips(pool, style_name, not single_game)
+    if single_game:
+        st.caption("One game: these bets move together, and the chance accounts for that.")
     if slips.empty:
-        st.info("Nothing fits that style today. It takes a bet worth making on its own in "
-                "at least two different games, and a real chance of the whole slip hitting. "
-                "Try a bigger-payout style.")
+        st.info("Nothing fits that style here. It takes bets worth making on their own "
+                + ("from different players in this game" if single_game
+                   else "in at least two different games")
+                + ", and a real chance of the whole slip hitting. Try a bigger-payout style.")
         return
     for position, idea in enumerate(slips.itertuples()):
         legs = [(nba_parlay.headshot_url(row.player_id), row.Player,
@@ -197,13 +225,12 @@ def _with_average(bet: str, player_id, stat: str = "points") -> str:
     return f"{bet} · {average}" if average else bet
 
 
-def _browse(candidates: pd.DataFrame, book: str = nba_parlay.BOOK) -> None:
+def _browse(shown: pd.DataFrame, candidates: pd.DataFrame, book: str = nba_parlay.BOOK) -> None:
+    """Every prop in `shown`, a section per stat. `candidates` is the full table the slip
+    indexes into; `shown` may be one game's worth of it."""
     st.markdown("#### All props")
-    matchups = candidates.drop_duplicates("Game").set_index("Game")
+    matchups = shown.drop_duplicates("Game").set_index("Game")
     short = {game: f"{row.away_abbr} @ {row.home_abbr}" for game, row in matchups.iterrows()}
-    everything = "All games"
-    picked = style.choose("Game", [everything, *short], "browse_game",
-                          format_func=lambda g: g if g == everything else short[g])
     slip = set(st.session_state.get(LEGS_KEY, []))
     view = style.choose("View", ["List", "Grid"], f"browse_view_{book}",
                         default="List" if book == "kalshi" else "Grid")
@@ -213,12 +240,12 @@ def _browse(candidates: pd.DataFrame, book: str = nba_parlay.BOOK) -> None:
         st.caption("Tap a price to add it, tap it again to remove it. **O** is over, **U** is "
                    "under, **More** has the other lines.")
     row_view = _ladder_row if view == "List" else _player_row
-    stats = [s for s in nba_stat_model.STATS if s in set(candidates["stat_key"])]
+    stats = [s for s in nba_stat_model.STATS if s in set(shown["stat_key"])]
     for position, stat in enumerate(stats):
         label = f"Player {nba_stat_model.STATS[stat].label}"
         with st.expander(label, expanded=position == 0), st.container(key=f"browse-list-{stat}"):
-            of_stat = candidates[candidates["stat_key"] == stat]
-            for game in (short if picked == everything else [picked]):
+            of_stat = shown[shown["stat_key"] == stat]
+            for game in short:
                 day = of_stat[of_stat["Game"] == game]
                 if day.empty:
                     continue

@@ -64,14 +64,16 @@ class Leg:
 
 
 def joint_probability(legs: list[Leg], teammate_rho: float | None = None,
-                      opponent_rho: float | None = None) -> float:
+                      opponent_rho: float | None = None, fast: bool = False) -> float:
     """Chance every leg hits. Passing a correlation overrides the measured
-    one for every stat; leaving it out uses the measured value per stat."""
+    one for every stat; leaving it out uses the measured value per stat. `fast` trades the
+    last few decimals (good to about 1e-5) for speed, for ranking many slips; show people
+    the exact one."""
     _validate(legs)
     ordered = sorted(legs, key=lambda leg: leg.event_id)
     joint = 1.0
     for _, group in groupby(ordered, key=lambda leg: leg.event_id):
-        joint *= _game_probability(list(group), teammate_rho, opponent_rho)
+        joint *= _game_probability(list(group), teammate_rho, opponent_rho, fast)
     return joint
 
 
@@ -97,9 +99,9 @@ def fair_american(probability: float) -> int:
 
 
 def summarise(legs: list[Leg], teammate_rho: float | None = None,
-              opponent_rho: float | None = None) -> dict:
+              opponent_rho: float | None = None, fast: bool = False) -> dict:
     """Everything the builder shows for a slip."""
-    joint = joint_probability(legs, teammate_rho, opponent_rho)
+    joint = joint_probability(legs, teammate_rho, opponent_rho, fast)
     payout = decimal_odds(legs)
     return {
         "legs": len(legs),
@@ -137,8 +139,11 @@ def _correlation(a: Leg, b: Leg, teammate_rho: float | None, opponent_rho: float
     return measured_opponents if opponent_rho is None else opponent_rho
 
 
+FAST_TOLERANCE, EXACT_TOLERANCE = 1e-5, 1e-9
+
+
 def _game_probability(legs: list[Leg], teammate_rho: float | None,
-                      opponent_rho: float | None) -> float:
+                      opponent_rho: float | None, fast: bool = False) -> float:
     if len(legs) == 1:
         return legs[0].prob
     signs = np.array([-1.0 if leg.is_over else 1.0 for leg in legs])
@@ -150,4 +155,5 @@ def _game_probability(legs: list[Leg], teammate_rho: float | None,
     thresholds = stats.norm.ppf([leg.prob for leg in legs])
     return float(stats.multivariate_normal.cdf(
         thresholds, mean=np.zeros(len(legs)), cov=covariance,
-        abseps=1e-9, releps=1e-9, rng=np.random.default_rng(_SEED)))
+        abseps=FAST_TOLERANCE if fast else EXACT_TOLERANCE,
+        releps=FAST_TOLERANCE if fast else EXACT_TOLERANCE, rng=np.random.default_rng(_SEED)))

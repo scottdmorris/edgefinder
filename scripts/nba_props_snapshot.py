@@ -20,6 +20,7 @@ import argparse
 import datetime as dt
 import logging
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -178,6 +179,26 @@ def record_kalshi(events: list[dict], models: Models) -> None:
         log.exception("Kalshi snapshot failed; the FanDuel snapshot is unaffected")
 
 
+RETRY_ATTEMPTS = 3
+RETRY_WAIT_SECONDS = 20.0
+
+
+def with_retries(call, attempts: int = RETRY_ATTEMPTS, wait: float | None = None,
+                 sleep=time.sleep):
+    """Call `call()`, trying again after a pause when the odds service errors. A blip on their
+    side (a 502) should not cost a whole 30-minute cycle, and the last error still surfaces."""
+    wait = RETRY_WAIT_SECONDS if wait is None else wait
+    for attempt in range(1, attempts + 1):
+        try:
+            return call()
+        except nba_props.PropsApiError as exc:
+            if attempt == attempts:
+                raise
+            log.info("Odds API error (%s); retry %d of %d in %.0fs", exc, attempt, attempts - 1,
+                     wait)
+            sleep(wait)
+
+
 def archive_kalshi_closing(events: list[dict]) -> None:
     """Save Kalshi's prices for games about to tip off, so Kalshi picks can be judged against
     a closing price. Free, and nothing it raises may fail the run."""
@@ -221,7 +242,7 @@ def main() -> None:
         return
 
     try:
-        events = nba_props.upcoming_events()
+        events = with_retries(nba_props.upcoming_events)
     except nba_props.PropsApiError as exc:
         log.error("Could not list NBA games: %s", exc)
         job_health.record("snapshot", job_health.FAILED, f"could not list games: {exc}")
@@ -246,7 +267,7 @@ def main() -> None:
             stopped = "request reserve reached"
             break
         try:
-            lines = nba_props.fetch_event_lines(task.event)
+            lines = with_retries(lambda: nba_props.fetch_event_lines(task.event))
         except nba_props.PropsApiError as exc:
             log.info("Stopping: %s", exc)
             stopped, api_failed = str(exc)[:120], True

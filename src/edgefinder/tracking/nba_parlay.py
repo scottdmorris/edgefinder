@@ -27,6 +27,11 @@ COLUMNS = ["Leg", "Stat", "stat_key", "Game", "Player", "Side", "Odds", "Model %
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
            "away_abbr", "home_abbr"]
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
+SAME_GAME_POOL = 10        # inside one game, fewer: every combination is priced with correlations
+# Different players' bets in one game move together only a little (the measured values
+# are at most 0.09), so a slip whose plain product of chances is well short of the bar
+# cannot clear it once correlated, and is skipped before the slow pricing.
+PRUNE_BELOW = 0.85
 # Safe "lock" legs (say -400) may sit on a slip: each one still has to be worth betting
 # on its own. But a leg that is nearly certain ("3+ points" at -2000) pays almost nothing
 # and only pads a slip, so about -1000 is the most a suggested leg may cost to back.
@@ -328,7 +333,8 @@ REAL_LEG_DECIMAL = 1.5          # about -200: the cheapest price that counts as 
 
 def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
                     min_chance: float = STYLES[DEFAULT_STYLE], min_profit: float = 0.0,
-                    real_leg_decimal: float | None = None) -> pd.DataFrame:
+                    real_leg_decimal: float | None = None,
+                    one_per_game: bool = True) -> pd.DataFrame:
     """Best slips built from legs that are each worth betting on their own,
     at most one leg per game so the legs really are independent, keeping only
     slips that have at least `min_chance` of hitting and, when given, win at least
@@ -338,25 +344,35 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
 
     Each game offers two legs to build from: the one with the best expected
     profit (usually a long shot) and the likeliest one that is still worth
-    betting, so a cautious style has something sensible to work with."""
+    betting, so a cautious style has something sensible to work with.
+
+    With `one_per_game` off (a single game was chosen), slips are built from different
+    players in that game instead, one bet each, priced with the measured same-game
+    correlations; the pool is each player's best leg and his likeliest worthwhile one."""
     good = _worthwhile_legs(candidates)
-    best_value = good.sort_values("Leg EV %", ascending=False).drop_duplicates("event_id")
-    likeliest = good.sort_values("prob", ascending=False).drop_duplicates("event_id")
+    key = "event_id" if one_per_game else "player_id"
+    best_value = good.sort_values("Leg EV %", ascending=False).drop_duplicates(key)
+    likeliest = good.sort_values("prob", ascending=False).drop_duplicates(key)
     pool = pd.concat([best_value, likeliest]).loc[lambda t: ~t.index.duplicated()]
-    pool = pool.sort_values("Leg EV %", ascending=False).head(SUGGESTION_POOL)
+    pool = pool.sort_values("Leg EV %", ascending=False).head(
+        SUGGESTION_POOL if one_per_game else SAME_GAME_POOL)
     slips = []
     for size in range(2, max_legs + 1):
         for combo in combinations(pool.index, size):
             chosen = pool.loc[list(combo)]
-            if chosen["event_id"].nunique() < size:
+            if one_per_game and chosen["event_id"].nunique() < size:
                 continue                              # two legs from one game: not independent
-            summary = correlated.summarise(to_legs(chosen, {}))
-            if summary["joint_probability"] < min_chance:
-                continue
-            if summary["decimal_odds"] - 1.0 < min_profit:
+            if chosen["player_id"].nunique() < size:
+                continue                              # one player twice: a different bet
+            decimals = chosen["Odds"].map(american_to_decimal)
+            if decimals.prod() - 1.0 < min_profit:
                 continue                              # wins too little to be worth the stake
-            if real_leg_decimal is not None and not (
-                    chosen["Odds"].map(american_to_decimal) >= real_leg_decimal).any():
+            if real_leg_decimal is not None and not (decimals >= real_leg_decimal).any():
+                continue
+            if chosen["prob"].prod() < min_chance * PRUNE_BELOW:
+                continue                              # cannot reach the bar, so skip the slow part
+            summary = correlated.summarise(to_legs(chosen, {}), fast=True)
+            if summary["joint_probability"] < min_chance:
                 continue
             slips.append({
                 "Slip": "  +  ".join(chosen["Leg"]), "Legs": size,
@@ -367,7 +383,14 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
             })
     if not slips:
         return pd.DataFrame(columns=["Slip", "Legs", "Chance %", "Pays", "EV %", "bets"])
-    return pd.DataFrame(slips).sort_values("EV %", ascending=False).head(top).reset_index(drop=True)
+    best = pd.DataFrame(slips).sort_values("EV %", ascending=False).head(top).reset_index(drop=True)
+    # the search ranked slips with the quick calculation; the ones shown get the exact one
+    for position, bets in enumerate(best["bets"]):
+        exact = correlated.summarise(to_legs(pool.loc[bets], {}))
+        best.loc[position, ["Chance %", "Pays", "EV %"]] = [
+            exact["joint_probability"] * 100.0, exact["decimal_odds"] - 1.0,
+            exact["ev_per_unit"] * 100.0]
+    return best
 
 
 def _worthwhile_legs(candidates: pd.DataFrame) -> pd.DataFrame:

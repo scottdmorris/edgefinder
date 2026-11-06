@@ -70,3 +70,13 @@ def test_the_slip_lets_one_player_back_two_stats_but_replaces_a_second_price_on_
     assert nba_parlay.toggle_leg([0], 1, keys) == [1]          # same player, same stat: replaced
     assert nba_parlay.toggle_leg([0], 2, keys) == [0, 2]       # same player, other stat: kept
     assert nba_parlay.toggle_leg([0, 2], 3, keys) == [0, 2, 3]
+
+
+def test_the_quick_calculation_agrees_with_the_exact_one_to_five_decimals():
+    legs = [leg("A", "points", prob=0.46), leg("B", "points", team="BBB", prob=0.52),
+            leg("C", "rebounds", prob=0.41), leg("A", "threes", prob=0.35)]
+    exact = correlated.joint_probability(legs)
+    quick = correlated.joint_probability(legs, fast=True)
+    assert quick == pytest.approx(exact, abs=1e-5)
+    assert correlated.summarise(legs, fast=True)["decimal_odds"] == correlated.summarise(legs)[
+        "decimal_odds"]                                  # only the probability is approximate
