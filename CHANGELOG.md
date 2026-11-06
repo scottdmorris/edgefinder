@@ -4,6 +4,17 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### The price gaps get a record of their own
+- **Logged before tip-off.** Each snapshot that records prices writes that night's
+  FanDuel-vs-Kalshi gaps to `data/price_gap_log.csv`: one row per bet, at the first price seen,
+  and never once its game has started, so a gap can't be called after the fact or improved later.
+- **Graded each morning** by the settle job at a flat 1 unit (over beats the line, under stays
+  below it, "25+" needs at least 25; a player who didn't play is a void) and reported there.
+- **On the Record tab:** "Betting the price gaps" shows gaps logged, the record and units, split
+  into exact matches and ones estimated from Kalshi's ladder.
+- It starts with the next slate. Last night's gaps are not back-filled: they were found after
+  tip-off, which the rule forbids.
+
 ### Where FanDuel and Kalshi disagree
 - **A price-gap flag** (`tracking/price_gaps.py`) on the Parlay screen: bets one market prices
   well above the other's fair chance for the same thing, biggest first, with an Add button.

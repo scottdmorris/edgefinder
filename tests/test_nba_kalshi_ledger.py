@@ -366,6 +366,8 @@ def run_main(script, monkeypatch, tasks, *, remaining):
     monkeypatch.setattr(
         script, "archive_kalshi_closing",
         lambda events: order.append(("kalshi_close", [e["event_id"] for e in events])))
+    monkeypatch.setattr(script, "log_price_gaps",
+                        lambda events: order.append(("gaps", [e["event_id"] for e in events])))
     script.main()
     return order
 
@@ -379,6 +381,7 @@ def run_main_with_fetch(script, monkeypatch, tasks):
     monkeypatch.setattr(script.nba_snapshot_plan, "plan_snapshots", lambda *a, **k: tasks)
     monkeypatch.setattr(script, "Models", lambda today: Exploding())
     monkeypatch.setattr(script, "archive_kalshi_closing", lambda events: None)
+    monkeypatch.setattr(script, "log_price_gaps", lambda events: 0)
     script.main()
 
 
@@ -388,13 +391,14 @@ def test_kalshi_follows_the_early_window_only_and_runs_after_fanduel(script, mon
              plan.SnapshotTask(EVENTS[2], "early")]
     order = run_main(script, monkeypatch, tasks, remaining=300)
     assert order == [("fanduel_fetch", "e1"), ("fanduel_fetch", "e2"), ("fanduel_fetch", "e3"),
-                     ("kalshi", ["e1", "e3"]), ("kalshi_close", ["e2"])]
+                     ("kalshi", ["e1", "e3"]), ("gaps", ["e1", "e3"]), ("kalshi_close", ["e2"])]
 
 
 def test_kalshi_is_exempt_from_the_odds_api_reserve(script, monkeypatch):
     tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early")]
     order = run_main(script, monkeypatch, tasks, remaining=script.nba_props.QUOTA_RESERVE)
-    assert order == [("kalshi", ["e1"])]       # FanDuel stopped on the reserve; Kalshi still ran
+    # FanDuel stopped on the reserve; Kalshi still ran, and the gaps were logged after it
+    assert order == [("kalshi", ["e1"]), ("gaps", ["e1"])]
 
 
 def test_a_cycle_with_only_late_snapshots_saves_kalshi_closing_prices_not_picks(script, monkeypatch):
@@ -510,3 +514,44 @@ def test_other_errors_are_not_retried(script):
     with pytest.raises(ValueError):
         script.with_retries(bug, sleep=pauses.append)
     assert pauses == []
+
+
+
+def test_logging_price_gaps_writes_only_to_the_paths_given_and_never_fails_the_run(
+        script, tmp_path, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("anything")
+
+    monkeypatch.setattr(script.price_gaps, "find_gaps", boom)
+    assert script.log_price_gaps(EVENTS, tmp_path / "l.csv", tmp_path / "a.csv",
+                                 tmp_path / "g.csv") == 0
+    assert not (tmp_path / "g.csv").exists()
+
+
+def test_logging_price_gaps_end_to_end_logs_tonights_gaps_once(script, tmp_path):
+    import datetime as dt
+    from edgefinder.tracking import gap_log, nba_alt, nba_paper
+    future = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=3)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+    event = {"event_id": "e9", "commence_time": future, "away": "Miami Heat",
+             "home": "Golden State Warriors"}
+    when = dt.datetime.now(dt.timezone.utc).isoformat()
+    tip_day = nba_snapshot_plan.tip_date(event)
+    kalshi_row = {c: None for c in nba_paper.COLUMNS} | {
+        "game_date": tip_day, "event_id": "e9", "commence_time": future, "away": event["away"],
+        "home": event["home"], "player": "A", "player_id": 1, "line": 24.5, "over_odds": -150,
+        "under_odds": 130, "fair_p_over": 0.6, "recorded_at": when, "stat": "points",
+        "book": "kalshi", "model_version": "ewma-v1"}
+    alt_row = {c: None for c in nba_alt.COLUMNS} | {
+        "game_date": tip_day, "event_id": "e9", "away": event["away"], "home": event["home"],
+        "player": "A", "player_id": 1, "threshold": 25, "over_odds": 100, "recorded_at": when,
+        "model_version": "ewma-v1"}
+    ledger_path, alt_path, log_path = tmp_path / "l.csv", tmp_path / "a.csv", tmp_path / "g.csv"
+    nba_paper.save_ledger(pd.DataFrame([kalshi_row], columns=nba_paper.COLUMNS), ledger_path)
+    nba_alt.save_ledger(pd.DataFrame([alt_row], columns=nba_alt.COLUMNS), alt_path)
+    # FanDuel 25+ at +100 against Kalshi's 60%: 0.6 * 2 - 1 = +20%
+    assert script.log_price_gaps([event], ledger_path, alt_path, log_path) == 1
+    assert script.log_price_gaps([event], ledger_path, alt_path, log_path) == 0   # once only
+    row = gap_log.load(log_path).iloc[0]
+    assert (row["bet"], row["book"], row["status"]) == ("25+", "fanduel", "pending")
+    assert row["edge_pct"] == pytest.approx(20.0)

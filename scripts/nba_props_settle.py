@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import job_health, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
-from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_paper  # noqa: E402
+from edgefinder.tracking import gap_log, nba_alt, nba_kalshi_ledger, nba_paper  # noqa: E402
 
 
 def build_report(today: dt.date) -> str:
@@ -45,6 +45,7 @@ def build_report(today: dt.date) -> str:
             lines += ["Head to head on the lines every model priced (Brier, lower is better):",
                       comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
     lines += alt_block(games, today)
+    lines += gap_block(games, today)
     return "\n".join(lines)
 
 
@@ -61,6 +62,22 @@ def alt_block(games, today: dt.date) -> list[str]:
         s = nba_alt.summary(settled, version)
         lines.append(f"[{version}] X+ picks: {s['picks']} made, {s['settled']} settled, "
                      f"record {s['record']}, {s['units']:+.2f} units ({s['roi_pct']:+.1f}% ROI)")
+    return lines
+
+
+def gap_block(games, today: dt.date) -> list[str]:
+    """Grade the FanDuel-vs-Kalshi price gaps and report how betting them would have done."""
+    log = gap_log.load()
+    if log.empty:
+        return []
+    settled = gap_log.settle(log, games, today)
+    gap_log.save(settled)
+    s = gap_log.summary(settled)
+    lines = ["", f"Price gaps: {s['all']['logged']} logged, {s['all']['graded']} graded"]
+    for part in ("all", "exact", "estimated"):
+        f = s[part]
+        lines.append(f"  {part:9s} record {f['record']}, {f['units']:+.2f} units "
+                     f"({f['roi_pct']:+.1f}% return)")
     return lines
 
 

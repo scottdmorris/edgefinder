@@ -7,6 +7,7 @@ data/nba_prop_lines.csv
 data/nba_paper_log.csv
 data/nba_alt_log.csv
 data/kalshi_snapshots.csv
+data/price_gap_log.csv
 data/job_heartbeat.json
 data/*.chain.jsonl
 data/*.log

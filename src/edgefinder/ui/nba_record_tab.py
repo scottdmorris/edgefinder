@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from ..data.nba_snapshot_plan import EASTERN
-from ..tracking import nba_alt, nba_paper, nba_parlay, nba_record, pick_chain
+from ..tracking import gap_log, nba_alt, nba_paper, nba_parlay, nba_record, pick_chain
 from . import shared, style
 
 
@@ -30,6 +30,7 @@ def render() -> None:
     _status(nba_record.integrity(ledger))
     _chain_status()
     _closing_value(nba_paper.load_ledger())
+    _gap_record()
     _models(ledger)
     _profit_chart(locked)
     _calibration(ledger)
@@ -121,6 +122,27 @@ def _closing_value(ledger: pd.DataFrame) -> None:
     st.caption("Closing-line value compares the price we took with the price just before "
                "tip-off. If the market keeps moving our way, we saw something early, and that "
                "shows up long before wins and losses can be trusted.")
+
+
+def _gap_record() -> None:
+    """How betting the FanDuel-vs-Kalshi price gaps would have gone, at a flat 1 unit."""
+    st.markdown("#### Betting the price gaps")
+    log = gap_log.load()
+    if log.empty:
+        st.caption("Every gap the Parlay screen flags is written down before tip-off and graded "
+                   "the next morning. The first ones are logged with the next slate.")
+        return
+    s = gap_log.summary(log)
+    logged, record, units = st.columns(3)
+    logged.markdown(style.stat_tile("Gaps logged", str(s["all"]["logged"])),
+                    unsafe_allow_html=True)
+    record.markdown(style.stat_tile("Record", s["all"]["record"]), unsafe_allow_html=True)
+    units.markdown(style.stat_tile("Units", f"{s['all']['units']:+.1f}"), unsafe_allow_html=True)
+    exact, estimated = s["exact"], s["estimated"]
+    st.caption(f"Exact matches {exact['record']} ({exact['units']:+.1f} units); estimated from "
+               f"Kalshi's ladder {estimated['record']} ({estimated['units']:+.1f} units). Each "
+               "gap is logged once, at the first price seen, and never after its game starts. "
+               "A few dozen bets prove nothing either way.")
 
 
 def _models(ledger: pd.DataFrame) -> None:

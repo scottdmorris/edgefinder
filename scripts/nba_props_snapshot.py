@@ -31,7 +31,8 @@ from edgefinder.data import (  # noqa: E402
     job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats)
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
-from edgefinder.tracking import nba_alt, nba_kalshi_ledger, nba_recording  # noqa: E402
+from edgefinder.tracking import (  # noqa: E402
+    gap_log, nba_alt, nba_kalshi_ledger, nba_paper, nba_recording, price_gaps)
 
 log = logging.getLogger("nba_props_snapshot")
 
@@ -199,6 +200,24 @@ def with_retries(call, attempts: int = RETRY_ATTEMPTS, wait: float | None = None
             sleep(wait)
 
 
+def log_price_gaps(events: list[dict], ledger_path=None, alt_path=None, log_path=None) -> int:
+    """Log tonight's FanDuel-vs-Kalshi price gaps for games that haven't started, so the flag
+    can be graded like the picks. Nothing it raises may fail the run. Returns how many it added."""
+    try:
+        ledger = nba_paper.load_ledger(ledger_path)
+        alt = nba_alt.load_ledger(alt_path)
+        now = dt.datetime.now(dt.timezone.utc)
+        added = 0
+        for game_date in sorted({nba_snapshot_plan.tip_date(e) for e in events}):
+            gaps = price_gaps.find_gaps(ledger, alt, game_date)
+            added += gap_log.append(gap_log.rows_to_log(gaps, ledger, game_date, now), log_path)
+        log.info("Price gaps logged: %d", added)
+        return added
+    except Exception:
+        log.exception("Logging price gaps failed; the snapshot is unaffected")
+        return 0
+
+
 def archive_kalshi_closing(events: list[dict]) -> None:
     """Save Kalshi's prices for games about to tip off, so Kalshi picks can be judged against
     a closing price. Free, and nothing it raises may fail the run."""
@@ -284,6 +303,7 @@ def main() -> None:
     early_events = [task.event for task in tasks if task.phase == "early"]
     if early_events:
         record_kalshi(early_events, models)
+        log_price_gaps(early_events)
     late_events = [task.event for task in tasks if task.phase == "late"]
     if late_events:
         archive_kalshi_closing(late_events)
