@@ -231,3 +231,35 @@ def test_the_box_table_shows_each_players_fouls():
     players = {1: fouled(1, "PHI", 2), 2: fouled(2, "PHI", 5)}
     table = view.box_table(players, "PHI", starters=False)
     assert "PF" in table.columns and sorted(table["PF"]) == [2, 5]
+
+
+# ---- the score strip -----------------------------------------------------------------------------------
+
+def test_a_live_game_chip_shows_the_score_and_a_short_period_and_clock():
+    assert view.chip_label("MIA", "GSW", 83, 98, "live", "4th Qtr", "8:34") == \
+        "MIA 83-98 GSW · Q4 8:34"
+    assert view.chip_label("MIA", "GSW", 50, 49, "live", "2nd Qtr", "0:12") == \
+        "MIA 50-49 GSW · Q2 0:12"
+    assert view.chip_label("MIA", "GSW", 101, 101, "live", "OT1", "3:00") == \
+        "MIA 101-101 GSW · OT1 3:00"
+
+
+def test_finished_and_upcoming_games_read_differently():
+    assert view.chip_label("ORL", "PHX", 104, 117, "final", "Final") == "ORL 104-117 PHX · Final"
+    assert view.chip_label("MIA", "GSW", 0, 0, "upcoming", "10:00 pm ET") == \
+        "MIA @ GSW · 10:00 pm ET"
+
+
+# ---- what changed since the last refresh, for the animations ------------------------------------------
+
+def test_new_plays_are_the_ones_after_the_last_seen_and_a_first_look_marks_none():
+    assert view.new_plays(None, [1, 2, 3]) == set()
+    assert view.new_plays(2, [1, 2, 3, 4]) == {3, 4}
+    assert view.new_plays(4, [1, 2, 3, 4]) == set()
+
+
+def test_a_slip_leg_that_changed_status_is_flagged_once_and_a_new_leg_is_not():
+    before = {"A · Over 9.5": "alive", "B · 10+": "alive"}
+    now = {"A · Over 9.5": "hit", "B · 10+": "alive", "C · 5+": "alive"}
+    assert view.changed_status(before, now) == {"A · Over 9.5"}
+    assert view.changed_status(now, now) == set()

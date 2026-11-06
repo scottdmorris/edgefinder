@@ -30,7 +30,7 @@ def render(game: LiveGame, detail: GameDetail) -> None:
         _team_comparison(game, detail)
         _leaders(game, detail)
     with plays:
-        _play_feed(detail)
+        _play_feed(detail, game)
     with box:
         _box_score(game, detail)
 
@@ -149,13 +149,19 @@ def _leaders(game: LiveGame, detail: GameDetail) -> None:
                 unsafe_allow_html=True)
 
 
-def _play_feed(detail: GameDetail) -> None:
+def _play_feed(detail: GameDetail, game: LiveGame | None = None) -> None:
     if not detail.plays:
         st.caption("No plays yet.")
         return
+    key = f"seen_play_{game.game_id}" if game else "seen_play"
+    fresh = view.new_plays(st.session_state.get(key), [p.order for p in detail.plays])
+    st.session_state[key] = max(p.order for p in detail.plays)
+    colors = dict(zip((game.away, game.home), team_colors.matchup_colors(game.away, game.home))) \
+        if game else {}
     latest = list(reversed(detail.plays[-FEED_LENGTH:]))
     st.markdown("".join(
-        style.feed_item(f"{p.period} {p.clock}", p.text, p.score) for p in latest),
+        style.feed_item(f"{p.period} {p.clock}", p.text, p.score, p.order in fresh,
+                        colors.get(p.team, "")) for p in latest),
         unsafe_allow_html=True)
 
 

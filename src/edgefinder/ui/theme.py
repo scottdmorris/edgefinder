@@ -200,7 +200,9 @@ hr {{ border-color: {LINE} !important; }}
   100% {{ color: inherit; transform: scale(1); }}
 }}
 @media (prefers-reduced-motion: reduce) {{
-  .bk-pop, .bk-team.scored b {{ animation: none; }}
+  .bk-pop, .bk-team.scored b, .bk-feed.new, .bk-card.flash, .bk-hero-team.scored .bk-hero-score,
+  .bk-hero.live .bk-hero-badge::before {{ animation: none; }}
+  .bk-card, .bk-idea, .bk-game {{ transition: none; }}
 }}
 .bk-logo {{ width: 26px; height: 26px; object-fit: contain; flex: none; }}
 .bk-game-status {{ font-size: 0.78rem; font-weight: 700; color: {MUTED}; text-align: right; flex: none; }}
@@ -234,13 +236,45 @@ hr {{ border-color: {LINE} !important; }}
   text-align: center; padding: 28px 16px; border: 1.5px dashed {LINE_STRONG}; border-radius: 16px;
 }}
 .bk-empty-title {{ font-weight: 800; margin-bottom: 4px; }}
-.bk-feed {{ padding: 8px 0; border-bottom: 1px solid {LINE}; }}
+.bk-feed {{ padding: 8px 0 8px 10px; border-bottom: 1px solid {LINE};
+  border-left: 3px solid transparent; }}
+.bk-feed.new {{ animation: bk-slide-in .5s ease-out, bk-glow 2.5s ease-out; }}
 .bk-feed:last-child {{ border-bottom: 0; }}
 .bk-feed-time {{ color: {MUTED}; font-size: 0.78rem; font-weight: 700; }}
 .bk-feed-score {{ color: {MUTED}; font-size: 0.78rem; float: right; }}
 
 .bk-chance {{ font-size: 1.5rem; font-weight: 800; line-height: 1.1; text-align: right; }}
 .bk-chance span {{ display: block; font-size: 0.72rem; font-weight: 600; color: {MUTED}; }}
+
+/* the open game, big, in both teams' colors */
+.bk-hero {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  padding: 18px 20px; margin: 6px 0 14px; border: 1px solid {LINE}; border-radius: 20px; }}
+.bk-hero.live {{ border-color: {GREEN}; }}
+.bk-hero-team {{ position: relative; display: grid; justify-items: center; gap: 2px; color: {MUTED}; }}
+.bk-hero-team.lead {{ color: {TEXT}; }}
+.bk-hero-logo {{ width: 56px; height: 56px; object-fit: contain; }}
+.bk-hero-code {{ font-weight: 800; font-size: 1rem; letter-spacing: .04em; }}
+.bk-hero-score {{ position: relative; font-size: 3rem; font-weight: 900; line-height: 1; }}
+.bk-hero-team.scored .bk-hero-score {{ animation: bk-flash 1.8s ease-out; }}
+.bk-hero-score .bk-pop {{ right: -2.2rem; top: 0; }}
+.bk-hero-note {{ font-size: .75rem; color: {MUTED}; text-align: center; min-height: 1em; }}
+.bk-hero-mid {{ display: grid; justify-items: center; gap: 4px; }}
+.bk-hero-badge {{ font-size: .7rem; font-weight: 800; letter-spacing: .12em; color: {MUTED}; }}
+.bk-hero.live .bk-hero-badge {{ color: {GREEN}; }}
+.bk-hero-clock {{ font-size: .95rem; font-weight: 700; white-space: nowrap; }}
+
+/* motion: only ever on a change, never on a plain refresh */
+.bk-hero.live .bk-hero-badge::before {{ content: ""; display: inline-block; width: 7px; height: 7px;
+  margin-right: 6px; border-radius: 999px; background: {GREEN}; vertical-align: 1px;
+  animation: bk-pulse 1.6s ease-in-out infinite; }}
+.bk-card.flash {{ animation: bk-glow 2.5s ease-out; }}
+.bk-card, .bk-idea, .bk-game {{ transition: transform .15s ease, border-color .15s ease; }}
+.bk-card:hover, .bk-idea:hover {{ transform: translateY(-2px); border-color: {LINE_STRONG}; }}
+@keyframes bk-pulse {{ 0%, 100% {{ opacity: 1; transform: scale(1); }}
+  50% {{ opacity: .35; transform: scale(.7); }} }}
+@keyframes bk-slide-in {{ from {{ opacity: 0; transform: translateY(-8px); }}
+  to {{ opacity: 1; transform: none; }} }}
+@keyframes bk-glow {{ 0% {{ background: rgba(0,186,124,.22); }} 100% {{ background: transparent; }} }}
 
 /* no stray blue: links and alert boxes follow the black palette */
 .stApp a, .stApp a:visited {{ color: {TEXT}; text-decoration: underline; text-decoration-color: {LINE_STRONG}; }}
@@ -257,6 +291,10 @@ hr {{ border-color: {LINE} !important; }}
   }}
 }}
 @media (max-width: 640px) {{
+  .bk-hero {{ padding: 14px 10px; gap: 6px; }}
+  .bk-hero-logo {{ width: 40px; height: 40px; }}
+  .bk-hero-score {{ font-size: 2.2rem; }}
+  .bk-hero-clock {{ font-size: .8rem; }}
   .block-container {{ padding: 3.2rem .8rem 5rem; }}
   [class*="st-key-browse-list"] button {{ padding: .2rem .15rem; min-height: 2.2rem; }}
   [class*="st-key-browse-list"] button p {{ font-size: .72rem; line-height: 1.15; }}

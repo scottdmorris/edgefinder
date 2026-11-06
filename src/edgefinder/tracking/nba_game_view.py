@@ -168,6 +168,34 @@ FOUL_TROUBLE = 4          # four fouls is where a coach starts to worry
 FOULED_OUT = 6
 
 
+def chip_label(away: str, home: str, away_score: int, home_score: int, state: str,
+               status: str, clock: str = "") -> str:
+    """A game as one tappable chip, like a sportsbook's score strip:
+    'MIA 83-98 GSW · Q4 8:34' live, 'ORL 104-117 PHX · Final' finished, 'MIA @ GSW · 10:00 pm ET'
+    before tip-off."""
+    if state == "upcoming":
+        return f"{away} @ {home} · {status}"
+    if state == "final":
+        return f"{away} {away_score}-{home_score} {home} · Final"
+    period = status.replace(" Qtr", "").replace("1st", "Q1").replace("2nd", "Q2") \
+        .replace("3rd", "Q3").replace("4th", "Q4")
+    return f"{away} {away_score}-{home_score} {home} · {period} {clock}".rstrip()
+
+
+def new_plays(last_seen: int | None, orders: list[int]) -> set[int]:
+    """The plays that arrived since the last refresh (by their order number). The first look
+    at a game marks nothing new, so the feed doesn't light up on page load."""
+    if last_seen is None:
+        return set()
+    return {order for order in orders if order > last_seen}
+
+
+def changed_status(before: dict[str, str], now: dict[str, str]) -> set[str]:
+    """Slip legs whose status changed since the last refresh (alive -> hit, say). A leg seen
+    for the first time has not changed."""
+    return {leg for leg, status in now.items() if leg in before and before[leg] != status}
+
+
 def score_deltas(previous: dict[str, tuple[int, int]],
                  current: dict[str, tuple[int, int]]) -> dict[str, tuple[int, int]]:
     """Points each team scored since the last look, for games seen both times: {game id:

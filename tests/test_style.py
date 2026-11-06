@@ -265,3 +265,45 @@ def test_the_alert_body_is_neutral_too_not_just_its_outer_box():
     css = style.CSS
     assert '[data-testid="stAlertContainer"] { background: transparent !important; color: #E7E9EA !important; }' in css
     assert '[data-testid^="stAlertContent"] { color: #E7E9EA !important; }' in css
+
+
+def test_the_game_header_shows_both_teams_big_with_the_leader_marked_and_the_clock():
+    html = style.game_hero("MIA", "GSW", "m.svg", "g.svg", 83, 98, "4th Qtr 8:34", "live",
+                           "#98002E", "#FFC72C", away_note="●●○ · 12 fouls")
+    assert html.count('class="bk-hero-team') == 2
+    assert 'bk-hero-team home lead' in html and 'bk-hero-team away lead' not in html
+    assert "83" in html and "98" in html and "4th Qtr 8:34" in html and "LIVE" in html
+    assert "rgba(152,0,46" in html and "rgba(255,199,44" in html       # each team's color
+    assert "●●○ · 12 fouls" in html
+
+
+def test_the_header_pops_the_team_that_scored_and_hides_scores_before_tip_off():
+    scored = style.game_hero("MIA", "GSW", "", "", 85, 98, "Q4", "live", away_pop=2)
+    assert scored.count("bk-pop") == 1 and "+2" in scored and "away scored" in scored
+    early = style.game_hero("MIA", "GSW", "", "", 0, 0, "10:00 pm ET", "upcoming", away_pop=3)
+    assert "bk-pop" not in early and early.count(">–<") == 2 and "LIVE" not in early
+
+
+def test_the_header_escapes_its_text():
+    html = style.game_hero("<b>", "GSW", "", "", 1, 2, "<i>", "live", away_note="<script>")
+    assert "<b>" not in html and "<i>" not in html and "<script>" not in html
+
+
+def test_a_fresh_play_is_marked_to_animate_and_carries_its_team_color():
+    fresh = style.feed_item("Q4 7:25", "Adebayo makes layup", "MIA 87 - GSW 103", True, "#98002E")
+    assert 'class="bk-feed new"' in fresh and "border-left-color:#98002E" in fresh
+    plain = style.feed_item("Q4 7:25", "x", "y")
+    assert 'class="bk-feed"' in plain and "border-left-color" not in plain
+
+
+def test_a_slip_leg_that_just_changed_flashes():
+    assert "bk-card hit flash" in style.leg_card("u", "t", "s", "Hit", kind="hit", flash=True)
+    assert "flash" not in style.leg_card("u", "t", "s", "Hit", kind="hit")
+
+
+def test_every_animation_is_switched_off_for_reduced_motion():
+    css = style.CSS
+    block = css[css.index("prefers-reduced-motion: reduce"):][:600]
+    for name in (".bk-feed.new", ".bk-card.flash", ".bk-hero-badge::before", ".bk-pop"):
+        assert name in block, name
+    assert "animation: none" in block and "transition: none" in block

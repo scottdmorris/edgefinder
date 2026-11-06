@@ -59,7 +59,7 @@ def _logo(url: str, css: str = "bk-tiny-logo") -> str:
 
 def leg_card(photo_url: str, title: str, subtitle: str, pill_text: str, *, kind: str = "",
              progress: float | None = None, detail: str = "", compact: bool = False,
-             accent: str = "", logo: str = "") -> str:
+             accent: str = "", logo: str = "", flash: bool = False) -> str:
     """One bet as a card: the player's cutout, the bet, small print, an optional
     progress bar, and a pill on the right (the odds, or a status). `kind` colours
     the card and pill: hit, alive, missed, neutral, or empty for the default blue.
@@ -72,7 +72,7 @@ def leg_card(photo_url: str, title: str, subtitle: str, pill_text: str, *, kind:
         width = round(max(0.0, min(1.0, progress)) * 100)
         bar = f'<div class="bk-bar"><div style="width:{width}%"></div></div>'
     more = f'<div class="bk-sub">{escape(detail)}</div>' if detail else ""
-    size = " compact" if compact else ""
+    size = (" compact" if compact else "") + (" flash" if flash else "")
     color = _hex(accent)
     edge = f' style="border-left-color:{color}"' if color and not kind else ""
     return (
@@ -157,6 +157,40 @@ def game_card(away: str, home: str, away_logo: str, home_logo: str, away_score: 
     )
 
 
+def game_hero(away: str, home: str, away_logo: str, home_logo: str, away_score: int,
+              home_score: int, status: str, state: str, away_color: str = "",
+              home_color: str = "", away_pop: int = 0, home_pop: int = 0,
+              away_note: str = "", home_note: str = "") -> str:
+    """The open game, big: each team's logo, code and score in its colors, the clock in the
+    middle, and a small line under each team (timeouts, fouls). Scores are hidden before
+    tip-off. A team that just scored flashes and shows "+2" / "+3"."""
+    started = state != "upcoming"
+    tint_away, tint_home = _hex(away_color) or BLUE, _hex(home_color) or AMBER
+
+    def side(code, logo, score, other, pop, note, where):
+        shown = str(score) if started else "–"
+        lead = " lead" if started and score > other else ""
+        scored = " scored" if started and pop > 0 else ""
+        burst = (f'<span class="bk-pop p{min(int(pop), 3)}">+{int(pop)}</span>'
+                 if started and pop > 0 else "")
+        mark = _logo(logo, "bk-hero-logo") if logo else ""
+        return (f'<div class="bk-hero-team {where}{lead}{scored}">{mark}'
+                f'<div class="bk-hero-code">{escape(code)}</div>'
+                f'<div class="bk-hero-score">{escape(shown)}{burst}</div>'
+                f'<div class="bk-hero-note">{escape(note)}</div></div>')
+
+    badge = {"live": "LIVE", "final": "FINAL"}.get(state, "")
+    return (
+        f'<div class="bk-hero {escape(state)}" style="background:linear-gradient(90deg,'
+        f'{rgba(tint_away, 0.30)},{rgba(tint_away, 0.0)} 38%,{rgba(tint_home, 0.0)} 62%,'
+        f'{rgba(tint_home, 0.30)})">'
+        f'{side(away, away_logo, away_score, home_score, away_pop, away_note, "away")}'
+        f'<div class="bk-hero-mid"><div class="bk-hero-badge">{escape(badge)}</div>'
+        f'<div class="bk-hero-clock">{escape(status)}</div></div>'
+        f'{side(home, home_logo, home_score, away_score, home_pop, home_note, "home")}</div>'
+    )
+
+
 def compare_bar(label: str, away_text: str, home_text: str, away_share: float,
                 ahead: str, away_color: str = "", home_color: str = "") -> str:
     """One team-stat row: the number for each side, the label between them, and
@@ -208,9 +242,14 @@ def empty_slip(title: str, hint: str) -> str:
             f'<div class="bk-sub">{escape(hint)}</div></div>')
 
 
-def feed_item(clock: str, text: str, score: str) -> str:
+def feed_item(clock: str, text: str, score: str, fresh: bool = False, color: str = "") -> str:
+    """One play. A `fresh` play (new since the last refresh) slides in and glows; `color` is
+    the team's, shown on its edge."""
+    tint = _hex(color)
+    edge = f' style="border-left-color:{tint}"' if tint else ""
     return (
-        f'<div class="bk-feed"><span class="bk-feed-time">{escape(clock)}</span>'
+        f'<div class="bk-feed{" new" if fresh else ""}"{edge}>'
+        f'<span class="bk-feed-time">{escape(clock)}</span>'
         f'<span class="bk-feed-score">{escape(score)}</span>'
         f'<div>{escape(text)}</div></div>'
     )

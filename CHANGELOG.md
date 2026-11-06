@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A cleaner Live screen
+- **Score strip.** Every game is one chip with its live score ("MIA 87-103 GSW · Q4 7:25"),
+  games on now first. Tap one to open it. The separate card list that repeated each game is gone.
+- **Game header.** The open game is shown big: both logos and scores in the teams' colors, the
+  clock in the middle, timeouts, team fouls and the bonus under each team, the leader in white,
+  and a "+2" / "+3" that floats up when a team scores. Players in foul trouble are listed below.
+- **One score everywhere.** The scoreboard feed trails the play-by-play by a minute or more, so
+  every live game now takes its score and clock from the latest play; the chip and the header
+  can no longer disagree.
+- **Less clutter.** The slip section appears only when there is a slip.
+- **Refreshes every 10 seconds** (was 30), with the feeds at most 8 seconds old.
+- **More motion, only on change.** New plays slide in and glow on the team's color, a slip leg
+  glows when it flips (alive to hit, say), the LIVE badge pulses, and cards lift on hover.
+  Nothing replays on a plain refresh, and all of it is off for people who prefer reduced motion.
+- Checked during Heat at Warriors: the page refreshed by itself, the score and clock moved, and
+  the "+2" appeared when Miami scored.
+
 ### Repo cleanup, license, CI and a new README
 - **Removed the old multi-sport code**: the MLB board, soccer, UFC, bet evaluator, bet log
   and old parlay views and the pipelines, models and clients behind them (20 modules, 3

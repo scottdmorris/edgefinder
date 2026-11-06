@@ -16,7 +16,8 @@ from ..data import nba_live
 from ..tracking import nba_game_view, nba_parlay, nba_slip_tracker
 from . import nba_game_center, nba_parlay_tab, style, team_colors
 
-REFRESH_SECONDS = 30
+REFRESH_SECONDS = 10
+DATA_TTL = 8                 # seconds a fetched feed is reused; under the refresh, so each one is new
 STATE_NAMES = {nba_live.SCHEDULED: "upcoming", nba_live.LIVE: "live", nba_live.FINAL: "final"}
 BADGES = {
     nba_slip_tracker.HIT: ("hit", "Hit"),
@@ -27,25 +28,23 @@ BADGES = {
 }
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def _games() -> list[nba_live.LiveGame]:
     return nba_live.fetch_games()
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def _box(game_id: str) -> dict[int, nba_live.PlayerLine]:
     return nba_live.fetch_box(game_id)
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def _detail(game_id: str, away: str, home: str) -> nba_live.GameDetail:
     return nba_live.fetch_detail(game_id, away, home)
 
 
 def render() -> None:
     st.subheader("Live")
-    st.caption(f"Updates every {REFRESH_SECONDS} seconds while games are on. "
-               "Data comes from NBA's own live feed.")
     _live()
 
 
@@ -59,20 +58,24 @@ def _live() -> None:
     if not games:
         st.info("No NBA games on the live scoreboard right now.")
         return
+    # the scoreboard feed trails the play-by-play, so live games take their score from the
+    # latest play everywhere on the page, and two views of one game can never disagree
+    details = {g.game_id: _safe_detail(g) for g in games if g.status == nba_live.LIVE}
+    games = [_freshest(g, details[g.game_id].plays) if details.get(g.game_id) else g
+             for g in games]
+    pops = _pops("live_scores", games)
     _slip(games)
-    st.divider()
-    _scoreboard(games, _pops("live_scores", games))
-    st.divider()
-    _game_detail(games)
+    game = _pick_game(games)
+    _open_game(game, details.get(game.game_id), pops.get(game.game_id, (0, 0)))
+    st.caption(f"Updates by itself every {REFRESH_SECONDS} seconds. NBA's own live feed.")
 
 
 def _slip(games: list[nba_live.LiveGame]) -> None:
-    st.markdown("#### Your slip")
+    """Your slip, tracked bet by bet, shown only when there is one."""
     chosen = nba_parlay_tab.selected_legs()
     if chosen is None:
-        st.info("Add bets in the **Parlay builder** tab and they show up here, "
-                "with a live read on whether each one is hitting.")
         return
+    st.markdown("#### Your slip")
     try:
         progress = nba_slip_tracker.track_slip(chosen, games, _box)
     except nba_live.LiveDataError as error:
@@ -86,6 +89,9 @@ def _slip(games: list[nba_live.LiveGame]) -> None:
         "YOUR SLIP", word, [("Bets hit", f"{hits} of {len(progress)}"),
                             *_stake_facts(chosen)]), unsafe_allow_html=True)
     teams = nba_parlay_tab.teams_by_player()
+    statuses = dict(zip(progress["Leg"], progress["Status"]))
+    flipped = nba_game_view.changed_status(st.session_state.get("slip_statuses", {}), statuses)
+    st.session_state["slip_statuses"] = statuses
     for bet in progress.itertuples():
         kind, word = BADGES[bet.Status]
         player, wager = bet.Leg.split(" · ", 1)
@@ -94,7 +100,8 @@ def _slip(games: list[nba_live.LiveGame]) -> None:
             nba_parlay.headshot_url(bet.player_id), player, f"{wager}  ·  {bet.Game}", word,
             kind=kind, progress=bet.Progress, detail=bet.Detail,
             accent=team_colors.team_color(team) if team else "",
-            logo=nba_live.logo_url(team) if team else ""), unsafe_allow_html=True)
+            logo=nba_live.logo_url(team) if team else "", flash=bet.Leg in flipped),
+            unsafe_allow_html=True)
 
 
 def _stake_facts(chosen: pd.DataFrame) -> list[tuple[str, str]]:
@@ -116,54 +123,81 @@ def _pops(state_key: str, games: list[nba_live.LiveGame]) -> dict[str, tuple[int
     return changes
 
 
-def _scoreboard(games: list[nba_live.LiveGame], pops: dict | None = None) -> None:
-    st.markdown("#### Tonight's games")
-    pops = pops or {}
-    left, right = st.columns(2)
-    for index, game in enumerate(games):
-        (left if index % 2 == 0 else right).markdown(
-            _card(game, pops.get(game.game_id, (0, 0))), unsafe_allow_html=True)
+ORDER = {nba_live.LIVE: 0, nba_live.SCHEDULED: 1, nba_live.FINAL: 2}
 
 
-def _card(game: nba_live.LiveGame, pop: tuple[int, int] = (0, 0)) -> str:
+def _safe_detail(game: nba_live.LiveGame) -> nba_live.GameDetail | None:
+    try:
+        return _detail(game.game_id, game.away, game.home)
+    except nba_live.LiveDataError:
+        return None
+
+
+def _state(game: nba_live.LiveGame) -> str:
+    return STATE_NAMES.get(game.status, "upcoming")
+
+
+def _status(game: nba_live.LiveGame) -> str:
     running = game.status == nba_live.LIVE and ("Qtr" in game.status_text
                                                  or game.status_text.startswith("OT"))
-    status = f"{game.status_text} {game.clock}".strip() if running else game.status_text
-    return style.game_card(game.away, game.home, nba_live.logo_url(game.away),
-                           nba_live.logo_url(game.home), game.away_score, game.home_score,
-                           status, STATE_NAMES.get(game.status, "upcoming"),
-                           team_colors.team_color(game.away), team_colors.team_color(game.home),
-                           pop[0], pop[1])
+    return f"{game.status_text} {game.clock}".strip() if running else game.status_text
 
 
-def _game_detail(games: list[nba_live.LiveGame]) -> None:
-    st.markdown("#### Any game")
+def _pick_game(games: list[nba_live.LiveGame]) -> nba_live.LiveGame:
+    """The score strip: every game as a chip with its live score, games on now first."""
     by_id = {g.game_id: g for g in games}
-    # games on the court right now come first, then upcoming, then finished
-    order = {nba_live.LIVE: 0, nba_live.SCHEDULED: 1, nba_live.FINAL: 2}
-    ranked = sorted(games, key=lambda g: order.get(g.status, 3))
-    game_id = style.choose(
-        "Pick a game", [g.game_id for g in ranked], "live_game",
-        format_func=lambda gid: f"{'🔴 ' if by_id[gid].status == nba_live.LIVE else ''}"
-                                f"{by_id[gid].away} @ {by_id[gid].home}")
-    game = by_id[game_id]
+    ranked = sorted(games, key=lambda g: ORDER.get(g.status, 3))
+
+    def label(game_id: str) -> str:
+        g = by_id[game_id]
+        text = nba_game_view.chip_label(g.away, g.home, g.away_score, g.home_score, _state(g),
+                                        g.status_text, g.clock)
+        return ("🔴 " if g.status == nba_live.LIVE else "") + text
+
+    return by_id[style.choose("Games", [g.game_id for g in ranked], "live_game",
+                              format_func=label)]
+
+
+def _team_note(game: nba_live.LiveGame, detail: nba_live.GameDetail | None, team: str) -> str:
+    """Timeouts left, team fouls and the bonus, for under a team in the header."""
+    away = team == game.away
+    timeouts = game.away_timeouts if away else game.home_timeouts
+    bonus = game.away_bonus if away else game.home_bonus
+    fouls = (detail.team_stats.get(team, {}).get("foulsPersonal") if detail else None)
+    parts = [style.dots(timeouts)]
+    if fouls is not None:
+        parts.append(f"{int(fouls)} fouls")
+    if bonus:
+        parts.append("bonus")
+    return " · ".join(parts)
+
+
+def _hero(game: nba_live.LiveGame, detail, pop: tuple[int, int] = (0, 0)) -> str:
+    started = game.status >= nba_live.LIVE
+    return style.game_hero(
+        game.away, game.home, nba_live.logo_url(game.away), nba_live.logo_url(game.home),
+        game.away_score, game.home_score, _status(game), _state(game),
+        *team_colors.matchup_colors(game.away, game.home), pop[0], pop[1],
+        _team_note(game, detail, game.away) if started else "",
+        _team_note(game, detail, game.home) if started else "")
+
+
+def _open_game(game: nba_live.LiveGame, detail, pop: tuple[int, int]) -> None:
     if game.status < nba_live.LIVE:
-        st.markdown(_card(game), unsafe_allow_html=True)
-        st.info(f"Tips off at {game.status_text}. The play-by-play and box score appear "
-                "once the game starts.")
+        st.markdown(_hero(game, None), unsafe_allow_html=True)
+        st.caption(f"Tips off at {game.status_text}. Shots, plays and the box score appear "
+                   "once the game starts.")
         return
-    try:
-        detail = _detail(game.game_id, game.away, game.home)
-    except nba_live.LiveDataError as error:
-        st.markdown(_card(game), unsafe_allow_html=True)
-        st.warning(str(error))
+    detail = detail or _safe_detail(game)
+    st.markdown(_hero(game, detail, pop), unsafe_allow_html=True)
+    if detail is None:
+        st.warning("NBA's live feed isn't answering for this game. It tries again on its own.")
         return
-    game = _freshest(game, detail.plays)
-    pop = _pops("live_scores_detail", [game]).get(game.game_id, (0, 0))
-    st.markdown(_card(game, pop), unsafe_allow_html=True)
-    st.markdown(nba_game_center.timeout_line(game), unsafe_allow_html=True)
-    if fouls := nba_game_center.foul_lines(game, detail):
-        st.caption(fouls)
+    trouble = [f"{name.split()[-1]} {count} ({team})"
+               for team in (game.away, game.home)
+               for name, count in nba_game_view.foul_trouble(detail.players, team)]
+    if trouble:
+        st.caption("Foul trouble: " + ", ".join(trouble))
     nba_game_center.render(game, detail)
 
 
