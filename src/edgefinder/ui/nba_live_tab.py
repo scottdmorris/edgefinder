@@ -13,7 +13,7 @@ import streamlit as st
 
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_live
-from ..tracking import nba_parlay, nba_slip_tracker
+from ..tracking import nba_game_view, nba_parlay, nba_slip_tracker
 from . import nba_game_center, nba_parlay_tab, style, team_colors
 
 REFRESH_SECONDS = 30
@@ -61,7 +61,7 @@ def _live() -> None:
         return
     _slip(games)
     st.divider()
-    _scoreboard(games)
+    _scoreboard(games, _pops("live_scores", games))
     st.divider()
     _game_detail(games)
 
@@ -107,21 +107,33 @@ def _stake_facts(chosen: pd.DataFrame) -> list[tuple[str, str]]:
             ("To win", nba_parlay.money(stake * (decimal - 1.0)))]
 
 
-def _scoreboard(games: list[nba_live.LiveGame]) -> None:
+def _pops(state_key: str, games: list[nba_live.LiveGame]) -> dict[str, tuple[int, int]]:
+    """Points each team scored since this view last refreshed, for the score to pop. The scores
+    are remembered under `state_key`; a game seen for the first time pops nothing."""
+    scores = {g.game_id: (g.away_score, g.home_score) for g in games}
+    changes = nba_game_view.score_deltas(st.session_state.get(state_key, {}), scores)
+    st.session_state[state_key] = scores
+    return changes
+
+
+def _scoreboard(games: list[nba_live.LiveGame], pops: dict | None = None) -> None:
     st.markdown("#### Tonight's games")
+    pops = pops or {}
     left, right = st.columns(2)
     for index, game in enumerate(games):
-        (left if index % 2 == 0 else right).markdown(_card(game), unsafe_allow_html=True)
+        (left if index % 2 == 0 else right).markdown(
+            _card(game, pops.get(game.game_id, (0, 0))), unsafe_allow_html=True)
 
 
-def _card(game: nba_live.LiveGame) -> str:
+def _card(game: nba_live.LiveGame, pop: tuple[int, int] = (0, 0)) -> str:
     running = game.status == nba_live.LIVE and ("Qtr" in game.status_text
                                                  or game.status_text.startswith("OT"))
     status = f"{game.status_text} {game.clock}".strip() if running else game.status_text
     return style.game_card(game.away, game.home, nba_live.logo_url(game.away),
                            nba_live.logo_url(game.home), game.away_score, game.home_score,
                            status, STATE_NAMES.get(game.status, "upcoming"),
-                           team_colors.team_color(game.away), team_colors.team_color(game.home))
+                           team_colors.team_color(game.away), team_colors.team_color(game.home),
+                           pop[0], pop[1])
 
 
 def _game_detail(games: list[nba_live.LiveGame]) -> None:
@@ -147,8 +159,11 @@ def _game_detail(games: list[nba_live.LiveGame]) -> None:
         st.warning(str(error))
         return
     game = _freshest(game, detail.plays)
-    st.markdown(_card(game), unsafe_allow_html=True)
+    pop = _pops("live_scores_detail", [game]).get(game.game_id, (0, 0))
+    st.markdown(_card(game, pop), unsafe_allow_html=True)
     st.markdown(nba_game_center.timeout_line(game), unsafe_allow_html=True)
+    if fouls := nba_game_center.foul_lines(game, detail):
+        st.caption(fouls)
     nba_game_center.render(game, detail)
 
 

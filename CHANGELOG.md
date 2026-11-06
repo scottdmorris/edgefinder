@@ -4,6 +4,15 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A livelier live screen
+- **Points pop.** When a team scores between refreshes, its score flashes green and a
+  "+2" or "+3" floats up beside it, on the scoreboard and on the open game. Nothing pops
+  on first load, and the animation is switched off for people who prefer reduced motion.
+- **The home team's court.** The shot chart now sits on the home team's floor: their color
+  as a wash across the court and their logo at center court.
+- **Fouls.** Under the timeouts, each team's fouls and the players in foul trouble
+  (four or more). The box score has a PF column.
+
 ### Every stat, FanDuel or Kalshi, and a sportsbook-style list
 - **One page, every stat.** There is no market to pick. Points, Rebounds, Assists and
   3-pointers are stacked sections you open and close (Points open first), and one slip

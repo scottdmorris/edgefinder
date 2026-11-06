@@ -175,7 +175,25 @@ hr {{ border-color: {LINE} !important; }}
 .bk-teams {{ flex: 1; }}
 .bk-team {{ display: flex; align-items: center; gap: 10px; padding: 3px 0; color: {MUTED}; }}
 .bk-team.lead {{ color: {TEXT}; font-weight: 800; }}
+.bk-team {{ position: relative; }}
 .bk-team b {{ margin-left: auto; font-size: 1.05rem; }}
+/* a basket: the score flashes and "+3" floats up beside it */
+.bk-pop {{ position: absolute; right: 2.6rem; top: -0.2rem; font-weight: 800; font-size: 0.95rem;
+  color: {GREEN}; pointer-events: none; animation: bk-rise 2.4s ease-out forwards; }}
+.bk-pop.p3 {{ font-size: 1.25rem; }}
+.bk-team.scored b {{ animation: bk-flash 1.8s ease-out; }}
+@keyframes bk-rise {{
+  0% {{ opacity: 0; transform: translateY(8px) scale(0.8); }}
+  15% {{ opacity: 1; transform: translateY(0) scale(1.2); }}
+  100% {{ opacity: 0; transform: translateY(-22px) scale(1); }}
+}}
+@keyframes bk-flash {{
+  0% {{ color: {GREEN}; transform: scale(1.35); }}
+  100% {{ color: inherit; transform: scale(1); }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  .bk-pop, .bk-team.scored b {{ animation: none; }}
+}}
 .bk-logo {{ width: 26px; height: 26px; object-fit: contain; flex: none; }}
 .bk-game-status {{ font-size: 0.78rem; font-weight: 700; color: {MUTED}; text-align: right; flex: none; }}
 .bk-game.live .bk-game-status {{ color: {GREEN}; }}

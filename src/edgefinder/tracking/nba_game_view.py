@@ -164,6 +164,49 @@ def quarter_table(period_scores: dict[str, list[int]], away: str, home: str,
     return table
 
 
+FOUL_TROUBLE = 4          # four fouls is where a coach starts to worry
+FOULED_OUT = 6
+
+
+def score_deltas(previous: dict[str, tuple[int, int]],
+                 current: dict[str, tuple[int, int]]) -> dict[str, tuple[int, int]]:
+    """Points each team scored since the last look, for games seen both times: {game id:
+    (away, home)}, only where someone scored. A game seen for the first time has no
+    change, so nothing pops when the page first loads, and a score that went down
+    (a correction) shows nothing rather than a negative."""
+    changes = {}
+    for game_id, (away, home) in current.items():
+        if game_id not in previous:
+            continue
+        before_away, before_home = previous[game_id]
+        away_gain, home_gain = max(0, away - before_away), max(0, home - before_home)
+        if away_gain or home_gain:
+            changes[game_id] = (away_gain, home_gain)
+    return changes
+
+
+def foul_trouble(players: dict[int, PlayerLine], team: str) -> list[tuple[str, int]]:
+    """Players on a team with four or more fouls, most fouls first: [(name, fouls)]."""
+    chosen = [(p.name, p.fouls) for p in players.values()
+              if p.team == team and p.played and p.fouls >= FOUL_TROUBLE]
+    return sorted(chosen, key=lambda item: (-item[1], item[0]))
+
+
+def foul_line(team: str, team_stats: dict[str, dict[str, float]],
+              players: dict[int, PlayerLine]) -> str:
+    """One team's fouls for the score header: 'GSW fouls 12 · foul trouble: Green 5, Curry 4'.
+    Empty when the feed carries neither number."""
+    fouls = team_stats.get(team, {}).get("foulsPersonal")
+    trouble = foul_trouble(players, team)
+    parts = []
+    if fouls is not None:
+        parts.append(f"fouls {int(fouls)}")
+    if trouble:
+        names = ", ".join(f"{name.split()[-1]} {count}" for name, count in trouble)
+        parts.append(f"foul trouble: {names}")
+    return f"{team} " + " · ".join(parts) if parts else ""
+
+
 def box_table(players: dict[int, PlayerLine], team: str, starters: bool) -> pd.DataFrame:
     """Starters or bench for one team, highest scorer first, with the shooting
     splits a box score carries. Players who haven't played are left out."""
@@ -180,6 +223,6 @@ def box_table(players: dict[int, PlayerLine], team: str, starters: bool) -> pd.D
         "3PT": [f"{p.threes}-{p.three_att}" for p in chosen],
         "FT": [f"{p.ft_made}-{p.ft_att}" for p in chosen],
         "Stl": [p.steals for p in chosen], "Blk": [p.blocks for p in chosen],
-        "TO": [p.turnovers for p in chosen],
+        "TO": [p.turnovers for p in chosen], "PF": [p.fouls for p in chosen],
         "+/-": [f"{p.plus_minus:+.0f}" for p in chosen],
     })

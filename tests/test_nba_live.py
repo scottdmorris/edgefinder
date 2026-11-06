@@ -46,7 +46,8 @@ DETAILED_BOX = {"game": {
                            "fieldGoalsAttempted": 12, "threePointersMade": 3,
                            "threePointersAttempted": 6, "freeThrowsMade": 1,
                            "freeThrowsAttempted": 2, "steals": 1, "blocks": 0,
-                           "turnovers": 2, "plusMinusPoints": 5.0}}]},
+                           "turnovers": 2, "plusMinusPoints": 5.0,
+                           "foulsPersonal": 4}}]},
     "homeTeam": {
         "teamTricode": "DET",
         "periods": [{"period": 1, "score": 28}, {"period": 2, "score": 9},
@@ -63,11 +64,13 @@ def test_a_player_line_carries_the_full_shooting_split_and_role():
     assert (maxey.threes, maxey.three_att) == (3, 6)
     assert (maxey.ft_made, maxey.ft_att) == (1, 2)
     assert (maxey.steals, maxey.blocks, maxey.turnovers, maxey.plus_minus) == (1, 0, 2, 5.0)
+    assert maxey.fouls == 4
 
 
 def test_a_player_line_without_the_extra_stats_falls_back_to_zeros():
     simple = nba_live.parse_boxscore(BOX)[1]
     assert simple.fg_made == 0 and simple.starter is False and simple.plus_minus == 0.0
+    assert simple.fouls == 0
 
 
 def test_team_stats_keep_only_the_numbers_we_compare():

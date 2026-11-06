@@ -175,3 +175,59 @@ def test_the_box_table_splits_starters_from_bench_and_sorts_by_points():
 def test_a_player_on_the_court_is_marked_in_the_box_table():
     players = {1: line(1, "PHI", points=10, on_court=True)}
     assert "🏀" in view.box_table(players, "PHI", True)["Player"].iloc[0]
+
+
+# ---- score changes, for the pop on a basket ------------------------------------------------------
+
+def test_score_deltas_report_what_each_team_scored_since_the_last_look():
+    before = {"g1": (50, 48), "g2": (30, 30)}
+    after = {"g1": (53, 48), "g2": (30, 32)}
+    assert view.score_deltas(before, after) == {"g1": (3, 0), "g2": (0, 2)}
+
+
+def test_both_teams_can_score_between_two_looks_and_an_unchanged_game_is_left_out():
+    assert view.score_deltas({"g1": (10, 10), "g2": (5, 5)},
+                             {"g1": (12, 13), "g2": (5, 5)}) == {"g1": (2, 3)}
+
+
+def test_a_game_seen_for_the_first_time_does_not_pop():
+    assert view.score_deltas({}, {"g1": (88, 91)}) == {}
+    assert view.score_deltas({"g1": (88, 91)}, {"g1": (88, 91), "g2": (2, 0)}) == {}
+
+
+def test_a_corrected_score_never_shows_a_negative_pop():
+    assert view.score_deltas({"g1": (50, 50)}, {"g1": (49, 52)}) == {"g1": (0, 2)}
+    assert view.score_deltas({"g1": (50, 50)}, {"g1": (49, 50)}) == {}
+
+
+# ---- fouls ---------------------------------------------------------------------------------------------
+
+def fouled(pid, team, fouls, played=True):
+    return PlayerLine(player_id=pid, name=f"First Last{pid}", team=team, points=0, rebounds=0,
+                      assists=0, minutes=10.0, played=played, on_court=False, fouls=fouls)
+
+
+def test_foul_trouble_starts_at_four_fouls_for_players_who_played_most_fouls_first():
+    players = {1: fouled(1, "GSW", 3), 2: fouled(2, "GSW", 4), 3: fouled(3, "GSW", 5),
+               4: fouled(4, "GSW", 6), 5: fouled(5, "MIA", 5), 6: fouled(6, "GSW", 5, played=False)}
+    assert view.foul_trouble(players, "GSW") == [
+        ("First Last4", 6), ("First Last3", 5), ("First Last2", 4)]
+    assert view.foul_trouble(players, "MIA") == [("First Last5", 5)]
+
+
+def test_the_foul_line_shows_team_fouls_and_the_players_in_trouble_by_surname():
+    players = {3: fouled(3, "GSW", 5), 2: fouled(2, "GSW", 4)}
+    text = view.foul_line("GSW", {"GSW": {"foulsPersonal": 12.0}}, players)
+    assert text == "GSW fouls 12 · foul trouble: Last3 5, Last2 4"
+
+
+def test_the_foul_line_copes_with_a_missing_number_or_nobody_in_trouble():
+    assert view.foul_line("GSW", {"GSW": {"foulsPersonal": 7.0}}, {}) == "GSW fouls 7"
+    assert view.foul_line("GSW", {}, {3: fouled(3, "GSW", 4)}) == "GSW foul trouble: Last3 4"
+    assert view.foul_line("GSW", {}, {}) == ""
+
+
+def test_the_box_table_shows_each_players_fouls():
+    players = {1: fouled(1, "PHI", 2), 2: fouled(2, "PHI", 5)}
+    table = view.box_table(players, "PHI", starters=False)
+    assert "PF" in table.columns and sorted(table["PF"]) == [2, 5]

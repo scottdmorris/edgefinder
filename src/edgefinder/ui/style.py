@@ -132,23 +132,27 @@ def slip_summary(head: str, big: str, facts: list[tuple[str, str]]) -> str:
 
 def game_card(away: str, home: str, away_logo: str, home_logo: str, away_score: int,
               home_score: int, status: str, state: str, away_color: str = "",
-              home_color: str = "") -> str:
+              home_color: str = "", away_pop: int = 0, home_pop: int = 0) -> str:
     """A scoreboard card with both teams' logos and colors. `state` is live,
-    final or upcoming; scores are hidden before tip-off."""
+    final or upcoming; scores are hidden before tip-off. `away_pop` and `home_pop` are
+    points a team just scored: its score flashes and a "+3" floats up beside it."""
     started = state != "upcoming"
 
-    def row(code: str, logo: str, score: int, other: int, color: str) -> str:
+    def row(code: str, logo: str, score: int, other: int, color: str, pop: int) -> str:
         shown = str(score) if started else "–"
         lead = " lead" if started and score > other else ""
+        scored = " scored" if started and pop > 0 else ""
         tint = _hex(color)
         edge = f' style="border-left-color:{tint}"' if tint else ""
-        return (f'<div class="bk-team{lead}"{edge}>{_logo(logo, "bk-logo")}'
-                f'<span>{escape(code)}</span><b>{escape(shown)}</b></div>')
+        burst = (f'<span class="bk-pop p{min(int(pop), 3)}">+{int(pop)}</span>'
+                 if started and pop > 0 else "")
+        return (f'<div class="bk-team{lead}{scored}"{edge}>{_logo(logo, "bk-logo")}'
+                f'<span>{escape(code)}</span><b>{escape(shown)}</b>{burst}</div>')
 
     return (
         f'<div class="bk-game {escape(state)}"><div class="bk-teams">'
-        f'{row(away, away_logo, away_score, home_score, away_color)}'
-        f'{row(home, home_logo, home_score, away_score, home_color)}'
+        f'{row(away, away_logo, away_score, home_score, away_color, away_pop)}'
+        f'{row(home, home_logo, home_score, away_score, home_color, home_pop)}'
         f'</div><div class="bk-game-status">{escape(status)}</div></div>'
     )
 

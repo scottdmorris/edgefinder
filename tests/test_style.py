@@ -200,3 +200,26 @@ def test_links_and_alert_boxes_follow_the_black_palette_not_streamlits_blue():
     assert ".stApp a, .stApp a:visited" in style.CSS
     assert 'stAlertContainer"] {' in style.CSS
     assert "1493FF" not in style.CSS.upper() and "3D9DF3" not in style.CSS.upper()
+
+
+def test_a_team_that_just_scored_flashes_and_shows_how_many_points():
+    live = style.game_card("CHI", "NYK", "a.svg", "b.svg", 31, 28, "Q2", "live", "", "", 3, 0)
+    assert live.count("bk-pop") == 1 and "+3" in live and "p3" in live
+    assert live.count("scored") == 1 and live.index("scored") < live.index("CHI")
+    two = style.game_card("CHI", "NYK", "a.svg", "b.svg", 31, 28, "Q2", "live", "", "", 0, 2)
+    assert "+2" in two and "p2" in two and two.index("scored") > two.index("CHI")
+
+
+def test_nothing_pops_when_nobody_scored_or_the_game_has_not_started():
+    assert "bk-pop" not in style.game_card("A", "B", "", "", 10, 8, "Q1", "live")
+    assert "scored" not in style.game_card("A", "B", "", "", 10, 8, "Q1", "live", "", "", 0, 0)
+    assert "bk-pop" not in style.game_card("A", "B", "", "", 0, 0, "8 pm", "upcoming",
+                                            "", "", 3, 3)
+
+
+def test_the_basket_animation_is_defined_and_switched_off_for_reduced_motion():
+    css = style.CSS
+    assert "@keyframes bk-rise" in css and "@keyframes bk-flash" in css
+    assert "prefers-reduced-motion: reduce" in css
+    block = css[css.index("prefers-reduced-motion: reduce"):]
+    assert "animation: none" in block[:200]

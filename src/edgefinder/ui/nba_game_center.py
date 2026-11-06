@@ -15,7 +15,9 @@ from ..tracking import nba_game_view as view
 from ..tracking import nba_parlay
 from . import style, team_colors
 
-COURT_COLOR = "#3b4a6b"
+COURT_COLOR = "#8B98A5"
+FLOOR_TINT = 0.24            # how much of the home team's color shows in the floor
+LOGO_SIZE = 90
 FEED_LENGTH = 14
 ALL_PERIODS = "All"
 
@@ -51,6 +53,7 @@ def _shot_chart(game: LiveGame, detail: GameDetail) -> None:
 
     away, home = (view.shot_summary(shots, team) for team in (game.away, game.home))
     colors = team_colors.matchup_colors(game.away, game.home)
+    st.caption(f"Home court: {game.home}")
     st.markdown(
         f"{_team_tag(game.away, colors[0])} {away['made']}-{away['attempts']}"
         f"&nbsp;&nbsp;&nbsp;&nbsp; {_team_tag(game.home, colors[1])} "
@@ -71,8 +74,34 @@ def _period_label(period: int) -> str:
     return f"Q{period}" if period <= 4 else f"OT{period - 4}"
 
 
+def court_floor(home: str) -> alt.Chart:
+    """The home team's floor: their color as a wash across the court, their logo at center
+    court (their tricode in big letters when no logo is on file)."""
+    axis_free = {"axis": None, "scale": alt.Scale(domain=[0, 100], nice=False)}
+    wash = alt.Chart(pd.DataFrame({"x": [0], "x2": [100], "y": [0], "y2": [100]})).mark_rect(
+        color=team_colors.rgba(team_colors.team_color(home), FLOOR_TINT)).encode(
+        x=alt.X("x:Q", **axis_free), x2="x2:Q", y=alt.Y("y:Q", **axis_free), y2="y2:Q")
+    logo = nba_live.logo_url(home)
+    center = pd.DataFrame({"x": [50], "y": [50], "url": [logo], "name": [home]})
+    mark = (alt.Chart(center).mark_image(width=LOGO_SIZE, height=LOGO_SIZE).encode(
+                x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free), url="url:N")
+            if logo else
+            alt.Chart(center).mark_text(fontSize=44, fontWeight="bold", opacity=0.3,
+                                        color="#E7E9EA").encode(
+                x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free), text="name:N"))
+    return wash, mark
+
+
+def foul_lines(game: LiveGame, detail: GameDetail) -> str:
+    """Team fouls and players in foul trouble for both teams, one team per line."""
+    lines = [view.foul_line(team, detail.team_stats, detail.players)
+             for team in (game.away, game.home)]
+    return "  \n".join(line for line in lines if line)
+
+
 def _court_chart(shots, game: LiveGame, colors: tuple[str, str]) -> alt.Chart:
     axis_free = {"axis": None, "scale": alt.Scale(domain=[0, 100], nice=False)}
+    floor, logo = court_floor(game.home)
     court = alt.Chart(view.court_lines()).mark_line(color=COURT_COLOR, strokeWidth=1.4).encode(
         x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free),
         detail="line:N", order="order:Q")
@@ -85,7 +114,8 @@ def _court_chart(shots, game: LiveGame, colors: tuple[str, str]) -> alt.Chart:
     missed = alt.Chart(table[table["Result"] == "Missed"]).mark_point(
         shape="cross", size=55, strokeWidth=1.6, opacity=0.85).encode(
         x=alt.X("x:Q", **axis_free), y=alt.Y("y:Q", **axis_free), color=color, tooltip=tooltip)
-    return (court + missed + made).properties(height=300).configure_view(strokeWidth=0)
+    return (floor + court + logo + missed + made).properties(height=300).configure_view(
+        strokeWidth=0)
 
 
 def _team_comparison(game: LiveGame, detail: GameDetail) -> None:

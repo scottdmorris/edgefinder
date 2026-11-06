@@ -57,6 +57,7 @@ class PlayerLine:
     blocks: int = 0
     turnovers: int = 0
     plus_minus: float = 0.0
+    fouls: int = 0
 
 
 @dataclass(frozen=True)
@@ -187,7 +188,8 @@ def parse_boxscore(payload: dict) -> dict[int, PlayerLine]:
                 ft_att=int(stats.get("freeThrowsAttempted", 0)),
                 steals=int(stats.get("steals", 0)), blocks=int(stats.get("blocks", 0)),
                 turnovers=int(stats.get("turnovers", 0)),
-                plus_minus=float(stats.get("plusMinusPoints", 0.0)))
+                plus_minus=float(stats.get("plusMinusPoints", 0.0)),
+                fouls=int(stats.get("foulsPersonal", 0)))
     return lines
 
 
