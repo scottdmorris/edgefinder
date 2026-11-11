@@ -4,6 +4,32 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A full-season test against Kalshi
+- **Kalshi's archive** (`data/kalshi_history.py`, `scripts/kalshi_history_download.py`): every
+  settled 2025-26 player-points market and its hourly prices, free and keyless, cached and
+  resumable. Tip-off comes from NBA's official schedule (Kalshi's own time agrees on 99% of
+  markets; the rest are dropped); the price is the last hourly bid and ask that closed 15+
+  minutes before tip; markets that settled at a price (a player who never played) are left out.
+- **The backtest** (`scripts/nba_kalshi_backtest.py`, report in `docs/KALSHI_BACKTEST.md`):
+  13,443 markets on 136 nights, with walk-forward projections (trained on 2023-24 and
+  2024-25) and role correction curves refitted on 2024-25 alone, since the production curves
+  were fitted on 2025-26. Accuracy and betting results come with 95% intervals from
+  resampling whole nights.
+- **What it found:** every model alone is less accurate than Kalshi; blended 30/70 with Kalshi
+  they are slightly more accurate than Kalshi alone; and no betting rule makes money once
+  Kalshi's spread and fee are paid. Betting every 2%+ value rung lost (Simple -12%, mostly on
+  long shots); with the guardrails the results are near break-even with wide intervals. The
+  role correction barely moves accuracy.
+- **Did the edge last?** The report now scores each half of the season. The blend's small lead
+  over Kalshi is all from before January 28, when these markets were new; after that the blend
+  and Kalshi are tied. Tuning the spread, the blend weight or a stacked model on the early half
+  made the late half worse, so the 30/70 blend and the recording rules are unchanged.
+- **Are consistent players easy locks?** Markets grouped by how often the player reached the
+  number in his last 20 games. The steadiest (90%+) hit 87% of the time at an average ask of
+  88 cents: the cheapest bets to make (-2%), still not a profit. A nightly three-leg slip of
+  them won 74% at an average cost of 77 cents.
+- CI actions moved to their Node 24 versions (checkout v5, setup-python v6, setup-node v5).
+
 ### A real web app
 - **FastAPI service** (`src/edgefinder/api`) over the same Python the Streamlit app uses, so
   the two can't disagree: `/api/board`, `/api/ideas` and `/api/slip` for the Parlay screen,

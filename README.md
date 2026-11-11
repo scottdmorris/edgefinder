@@ -204,6 +204,33 @@ photos and team logos shown in the app come from the NBA's content network and
 are not included in this repository. A public or commercial product would need
 licensed replacements for all of these.
 
+## Does it beat the market? A full-season test
+
+[docs/KALSHI_BACKTEST.md](docs/KALSHI_BACKTEST.md) tests every model on **13,443
+settled Kalshi player-points markets from 2025-26** (136 game nights), a season
+the models never trained on. Each market uses Kalshi's own bid and ask from the
+last hour before tip-off, and the intervals resample whole game nights.
+
+- **On its own, every model is less accurate than Kalshi's price.**
+- **Blended 30/70 with Kalshi, the models added a little, early.** Over the
+  whole season the blend beats Kalshi's price by a small margin (Brier 0.1837
+  vs 0.1846 for the Smarter model). All of that comes from before late
+  January, when these markets were new. From January 28 on, the blend and
+  Kalshi are tied (a gap of -0.0001, interval -0.0008 to +0.0005).
+- **Nothing survives the costs.** Kalshi's spread (4 cents at the median) plus
+  its fee is larger than any edge. Betting every 2%+ value rung lost money
+  (-12% for the Simple model, mostly on long shots at 20 cents or less). With
+  the guardrails the results sit near break-even, with intervals of roughly
+  ±15% that include both a profit and a loss.
+- **Consistent players are not easy locks.** A player who reached a number in
+  90%+ of his last 20 games reached it again 87% of the time, and Kalshi
+  charged 88 cents. Those were the least costly bets on the board (-2%, against
+  -15% for long shots), and a nightly three-leg slip of them won 74% of the
+  time at an average cost of 77 cents.
+
+So the models are a useful second opinion next to the market, and nothing here
+shows they make money.
+
 ## An honest note on profit
 
 Sportsbooks price parlays with compounding vig; most parlays are negative
