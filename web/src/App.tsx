@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Health } from './lib/api'
+import { api } from './lib/api'
 import { usePoll } from './lib/poll'
 import { Live } from './screens/Live'
 import { Parlay } from './screens/Parlay'
@@ -25,14 +25,13 @@ function current(): ScreenId {
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>(current)
-  const [health, setHealth] = useState<Health | null>(null)
+  const health = usePoll(api.health, LIVE_CHECK_MS, 'health').data
   const games = usePoll(api.live, LIVE_CHECK_MS, 'header')
   const live = games.data?.filter((g) => g.state === 'live').length ?? 0
 
   useEffect(() => {
     const onHash = () => { setScreen(current()); window.scrollTo(0, 0) }
     window.addEventListener('hashchange', onHash)
-    api.health().then(setHealth).catch(() => setHealth(null))
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 

@@ -46,7 +46,7 @@ def _tonight(player_id: int) -> dict | None:
     return {"date": first["game_date"], "game": f"{first['away']} @ {first['home']}",
             "line": float(first["line"]), "over": int(first["over_odds"]),
             "under": int(first["under_odds"]),
-            "projections": [{"model": nba_parlay.short_model_name(r["model_version"]),
+            "projections": [{"model": service.model_short(r["model_version"]),
                              "mean": service._num(r["model_mean"], 1)}
                             for _, r in projections.iterrows()]}
 

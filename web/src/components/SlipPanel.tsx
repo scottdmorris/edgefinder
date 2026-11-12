@@ -6,31 +6,34 @@ import { Photo } from './ui'
 // The slip. On a wide screen it sits beside the props and stays in view; on a phone it is a bar
 // along the bottom that opens into a sheet. Its numbers come from the API (the same maths as the
 // Python builder, correlations included).
-export function SlipPanel({ market, legs, legsById, onRemove, onClear }: {
+export function SlipPanel({ market, legs, legsById, onRemove, onClear, onPriced }: {
   market: Market
   legs: number[]
   legsById: Map<number, Leg>
   onRemove: (id: number) => void
   onClear: () => void
+  onPriced?: (price: SlipPrice, ids: number[]) => void
 }) {
   const [stake, setStake] = useState(10)
-  const [priced, setPrice] = useState<SlipPrice | null>(null)
-  const [failed, setError] = useState<string | null>(null)
+  const [priced, setPrice] = useState<{ key: string; value: SlipPrice } | null>(null)
+  const [failed, setError] = useState<{ key: string; message: string } | null>(null)
   const [sheet, setSheet] = useState(false)
+
+  const quoteKey = JSON.stringify([market.date, market.book, market.model, legs, stake])
 
   useEffect(() => {
     if (!legs.length) return
     let live = true
     const timer = setTimeout(() => {
-      api.slip(market, legs, stake).then((p) => { if (live) { setPrice(p); setError(null) } })
-        .catch((e: Error) => live && setError(e.message))
+      api.slip(market, legs, stake).then((p) => { if (live) { setPrice({ key: quoteKey, value: p }); setError(null); onPriced?.(p, legs) } })
+        .catch((e: Error) => live && setError({ key: quoteKey, message: e.message }))
     }, 150)
     return () => { live = false; clearTimeout(timer) }
-  }, [market.date, market.book, market.model, legs.join(','), stake]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [quoteKey, onPriced]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // an empty slip shows nothing priced, whatever the last answer was
-  const price = legs.length ? priced : null
-  const error = legs.length ? failed : null
+  const price = legs.length && priced?.key === quoteKey ? priced.value : null
+  const error = legs.length && failed?.key === quoteKey ? failed.message : null
 
   const body = (
     <div>
@@ -41,16 +44,16 @@ export function SlipPanel({ market, legs, legsById, onRemove, onClear }: {
       {legs.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line px-5 py-8 text-center">
           <div className="font-bold">Your slip is empty</div>
-          <div className="mt-1 text-sm text-muted">Tap Yes or No on any prop, or use an idea.</div>
+          <div className="mt-1 text-sm text-muted">Choose a player's line and tap a price.</div>
         </div>
       ) : (
         <>
-          <div className="space-y-2">
+          <div className="divide-y divide-line border-y border-line">
             {legs.map((id) => {
               const leg = legsById.get(id)!
               return (
-                <div key={id} className="rise flex items-center gap-3 rounded-2xl border border-line bg-raised p-2.5">
-                  <Photo src={leg.photo} size={40} />
+                <div key={id} className="flex items-center gap-2 py-3">
+                  <Photo src={leg.photo} size={30} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold">{leg.player}</div>
                     <div className="truncate text-xs text-muted">{leg.bet} · {leg.game_short}</div>
@@ -71,18 +74,24 @@ export function SlipPanel({ market, legs, legsById, onRemove, onClear }: {
               className="min-h-11 w-full bg-transparent px-2 font-bold outline-none" />
           </div>
 
+          {!price && !error && <p role="status" className="mt-3 text-sm text-muted">Recalculating estimate…</p>}
           {error && <div className="mt-3 rounded-xl border border-bad/50 px-3 py-2 text-sm text-bad">{error}</div>}
           {price && !error && (
-            <div className="mt-4 rounded-2xl border border-line bg-raised p-4">
+            <div className="mt-4 border-t border-line py-4">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{legs.length === 1 ? 'Single bet' : `${legs.length}-leg parlay`}</div>
-              <div className="mt-1 text-3xl font-black">To win {money(price.to_win)}</div>
+              <div className="mt-1 text-xl font-bold">Estimated profit {money(price.to_win)}</div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <Fact label="Chance it hits" value={`${price.chance_pct?.toFixed(1)}% (${price.one_in})`} />
+                <Fact label="Estimated chance all hit" value={`${price.chance_pct?.toFixed(1)}% (${price.one_in})`} />
                 <Fact label="Total return" value={money(price.total_return)} />
-                <Fact label="Fair price" value={price.fair_american !== undefined ? american(price.fair_american) : '–'} />
-                <Fact label="Average result" value={money(price.expected)} good={(price.expected ?? 0) > 0} />
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-muted">{price.verdict}</p>
+              <p className="mt-3 text-xs text-muted">Recorded-price estimate · Before fees</p>
+              <details className="mt-2 text-xs text-muted"><summary className="cursor-pointer py-1">Calculation details</summary>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <Fact label="Fair price" value={price.fair_american !== undefined ? american(price.fair_american) : '–'} />
+                  <Fact label="Expected result before fees" value={money(price.expected)} good={(price.expected ?? 0) > 0} />
+                </div>
+                <p className="mt-3">Illustration using multiplied individual prices, not a quoted combined payout. Same-game pricing can differ. {market.book === 'kalshi' ? 'Kalshi trading fees are excluded.' : 'Check the actual combined quote.'} Expected result is a model estimate, not a promised return.</p>
+              </details>
             </div>
           )}
         </>
@@ -102,7 +111,7 @@ export function SlipPanel({ market, legs, legsById, onRemove, onClear }: {
           <button type="button" onClick={() => setSheet(true)}
             className="fixed inset-x-3 bottom-3 z-40 flex min-h-14 items-center justify-between rounded-full bg-button px-5 font-bold text-button-text shadow-2xl">
             <span>{legs.length} {legs.length === 1 ? 'bet' : 'bets'}</span>
-            <span>{price?.to_win !== undefined ? `To win ${money(price.to_win)}` : 'Open slip'}</span>
+            <span>{!error && price?.to_win !== undefined ? `Est. profit ${money(price.to_win)}` : 'Open slip'}</span>
           </button>
         )}
         {sheet && (

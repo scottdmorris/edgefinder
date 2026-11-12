@@ -52,7 +52,7 @@ def picks(date: str | None = None) -> dict:
     return {
         "date": date,
         "days": [{"date": d, "label": nba_view.day_label(d, service.today())} for d in dates],
-        "models": [{"id": v, "short": nba_parlay.short_model_name(v),
-                    "name": nba_parlay.model_name(v)} for v in versions],
+        "models": [{"id": v, "short": service.model_short(v),
+                    "name": service.model_name(v)} for v in versions],
         "liked": liked, "lines": lines,
     }

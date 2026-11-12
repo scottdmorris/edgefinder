@@ -25,7 +25,7 @@ BOOK = "fanduel"          # the default price source
 DEFAULTS = {"stat": STAT, "book": BOOK}      # what an old ledger row without the column means
 COLUMNS = ["Leg", "Stat", "stat_key", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
-           "away_abbr", "home_abbr"]
+           "away_abbr", "home_abbr", "projection", "projection_model"]
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
 SAME_GAME_POOL = 10        # inside one game, fewer: every combination is priced with correlations
 # Different players' bets in one game move together only a little (the measured values
@@ -332,6 +332,8 @@ def _leg_row(label, row, side, odds, model_p, market_p, is_over, line, stat) -> 
     return {"Leg": label, "Stat": nba_stat_model.STATS[stat].label, "stat_key": stat,
             "Game": f"{row.away} @ {row.home}",
             "Player": row.player,
+            "projection": getattr(row, "model_mean", None),
+            "projection_model": getattr(row, "model_version", ""),
             "Side": side, "Odds": odds, "Model %": model_p * 100.0,
             "Market %": market_p * 100.0, "prob": blended,
             "player_id": row.player_id, "event_id": row.event_id, "is_over": is_over,

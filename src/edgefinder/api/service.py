@@ -6,13 +6,15 @@ cached for a short time so a page of taps doesn't re-read the files each time.
 """
 
 import datetime as dt
+import hashlib
+import json
 import math
 import time
 from collections.abc import Callable
 
 import pandas as pd
 
-from ..betting import correlated
+from ..betting import correlated, odds_math
 from ..data import job_health, nba_stats
 from ..data.nba_snapshot_plan import EASTERN
 from ..models import nba_stat_model
@@ -20,6 +22,9 @@ from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
 
 CACHE_SECONDS = 60
 IDEAS_SHOWN = 3
+STEADY_GAMES = 20             # the same window the season backtest measured
+STEADY_MIN_RATE = 0.9
+STEADY_SHOWN = 8
 BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
 _cache: dict[tuple, tuple[float, object]] = {}
 
@@ -122,13 +127,39 @@ def _choose(date: str | None, book: str | None, model: str | None) -> tuple[str,
     return date, book, model, found
 
 
+def quote_id(date: str, book: str, model: str, row: pd.Series) -> int:
+    """A leg's identity is the bet itself, never its price: a saved slip must survive the next
+    snapshot moving the odds. 52 bits, so it stays exact in JavaScript."""
+    values = ["quote-v3", date, book, model, str(row["event_id"]), int(row["player_id"]),
+              row["stat_key"], row["Side"], float(row["line"])]
+    return int(hashlib.sha256(json.dumps(values).encode()).hexdigest()[:13], 16)
+
+
+def model_short(version: str) -> str:
+    return {"ewma-v1": "Recent average", "minutes-v1": "Minutes",
+            "context-v1": "Context", "context-v2": "Shot profile"}.get(version, version)
+
+
+def model_name(version: str) -> str:
+    original = nba_parlay.model_name(version)
+    return model_short(version) + (": " + original.split(": ", 1)[1] if ": " in original else "")
+
+
 def candidates(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
     date, book, model, found = _choose(date, book, model)
 
     def build() -> pd.DataFrame:
         return nba_parlay.all_candidates(load_ledger(), load_alt(), date, model, book, found,
                                          _minutes())
-    table = cached(("candidates", date, book, model), build)
+    def identified() -> pd.DataFrame:
+        table = build().copy()
+        # Deterministic IDs, never positions: a snapshot adding or reordering rows
+        # must not turn a saved selection into another bet.
+        table.index = [quote_id(date, book, model, row) for _, row in table.iterrows()]
+        if not table.index.is_unique:
+            raise ValueError("duplicate quote identities; refresh the recorded data")
+        return table
+    table = cached(("candidates", date, book, model), identified)
     return table, {"date": date, "book": book, "model": model, "found": found}
 
 
@@ -143,6 +174,8 @@ def _leg(index: int, row: pd.Series, averages: dict) -> dict:
         "bet": row["Leg"].split(" · ", 1)[-1], "odds": int(row["Odds"]),
         "model_pct": _num(row["Model %"], 1), "market_pct": _num(row["Market %"], 1),
         "chance_pct": _num(row["Blended %"], 1), "ev_pct": _num(row["Leg EV %"], 1),
+        "projection": _num(row.get("projection"), 1),
+        "projection_model": model_short(row.get("projection_model", "")),
         "average": None if pair is None else {"season": _num(pair[0], 1),
                                               "last10": _num(pair[1], 1)},
     }
@@ -162,13 +195,14 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
         "book": chosen["book"],
         "books": [{"id": b, "name": BOOK_NAMES.get(b, b)} for b in nba_parlay.books_on(found)],
         "model": chosen["model"],
-        "models": [{"id": v, "short": nba_parlay.short_model_name(v),
-                    "name": nba_parlay.model_name(v)}
+        "models": [{"id": v, "short": model_short(v),
+                    "name": model_name(v)}
                    for v in nba_parlay.model_versions(found, chosen["book"])],
         "summary": {"games": len(games),
                     "props": int(table[["player_id", "stat_key"]].drop_duplicates().shape[0]),
                     "gaps": len(gaps)},
         "games": games, "legs": legs, "gaps": gaps,
+        "steady": steady_for(chosen["date"], table),
         "styles": list(nba_parlay.STYLES), "default_style": nba_parlay.DEFAULT_STYLE,
     }
 
@@ -189,6 +223,50 @@ def gaps_for(date: str, book: str, table: pd.DataFrame) -> list[dict]:
     return out
 
 
+def _threshold(side: str, line: float) -> int | None:
+    """The number a "yes" leg needs: over 24.5 and "25+" both mean 25. None for an under."""
+    if side == "Over":
+        return math.floor(line) + 1
+    return int(side[:-1]) if side.endswith("+") else None
+
+
+def steady_for(date: str, table: pd.DataFrame) -> list[dict]:
+    """Legs a player has reached in nearly all of his last 20 games, next to what they cost.
+
+    A convenience for building slips, not an edge: over a full season these hit about as often as
+    their price said (docs/KALSHI_BACKTEST.md). One leg per player and stat, the highest number
+    that still qualifies.
+    """
+    games = load_games()
+    if games.empty or table.empty:
+        return []
+    before = games[games["game_date"] < pd.Timestamp(date)].sort_values("game_date")
+    recent = {pid: rows.tail(STEADY_GAMES) for pid, rows in before.groupby("player_id")}
+    found = []
+    for index, row in table.iterrows():
+        threshold = _threshold(row["Side"], float(row["line"]))
+        last = recent.get(int(row["player_id"]))
+        if threshold is None or last is None or len(last) < STEADY_GAMES:
+            continue
+        hits = int((last[nba_stat_model.STATS[row["stat_key"]].column] >= threshold).sum())
+        if hits / STEADY_GAMES < STEADY_MIN_RATE:
+            continue
+        found.append({"leg_id": int(index), "player": row["Player"],
+                      "player_id": int(row["player_id"]),
+                      "photo": nba_parlay.headshot_url(row["player_id"]),
+                      "game": row["Game"], "game_short": _short(row["Game"]),
+                      "stat": row["stat_key"], "bet": row["Leg"].split(" · ", 1)[-1],
+                      "threshold": threshold, "odds": int(row["Odds"]),
+                      "hits": hits, "games": STEADY_GAMES,
+                      "hit_pct": _num(100 * hits / STEADY_GAMES, 1),
+                      "price_pct": _num(100 * odds_math.implied_prob(row["Odds"]), 1)})
+    best: dict[tuple, dict] = {}
+    for item in sorted(found, key=lambda i: (-i["threshold"], -i["odds"])):
+        best.setdefault((item["player_id"], item["stat"]), item)
+    ranked = sorted(best.values(), key=lambda i: (-i["hits"], i["price_pct"], i["player"]))
+    return ranked[:STEADY_SHOWN]
+
+
 def ideas(date: str | None, book: str | None, model: str | None, style: str,
           game: str | None = None) -> list[dict]:
     """Suggested slips for a style; for one game when `game` is given (same-game slips)."""
@@ -202,7 +280,7 @@ def ideas(date: str | None, book: str | None, model: str | None, style: str,
             pool, top=IDEAS_SHOWN, min_chance=nba_parlay.STYLES[style],
             min_profit=nba_parlay.MIN_PROFIT[style], real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL,
             one_per_game=not game, bench=nba_parlay.bench_players(_averages()))
-    slips = cached(("ideas", chosen["date"], chosen["book"], chosen["model"], style, game), search,
+    slips = cached(("ideas", chosen["date"], chosen["book"], chosen["model"], style, game, tuple(table.index)), search,
                    300)
     return [{"legs": [int(i) for i in row["bets"]], "chance_pct": _num(row["Chance %"], 1),
              "pays": _num(row["Pays"] + 1.0, 2), "ev_pct": _num(row["EV %"], 1)}
@@ -215,7 +293,7 @@ def price_slip(date: str | None, book: str | None, model: str | None, leg_ids: l
     table, _ = candidates(date, book, model)
     missing = [i for i in leg_ids if i not in table.index]
     if missing:
-        raise NotFound(f"unknown legs {missing}")
+        raise NotFound("These selections are no longer on the board. Refresh the board and select them again.")
     if not leg_ids:
         return {"legs": 0}
     chosen = table.loc[leg_ids]

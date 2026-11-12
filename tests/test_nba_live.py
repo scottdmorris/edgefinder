@@ -1,6 +1,81 @@
 import pytest
+import requests
 
 from edgefinder.data import nba_live
+
+
+@pytest.mark.parametrize("operation", ["games", "box", "plays", "detail"])
+def test_live_requests_use_supported_compression_and_recover_bad_json(monkeypatch, operation):
+    from nba_api.live.nba.library.http import NBALiveHTTP
+
+    calls = []
+
+    class Session:
+        def get(self, **kwargs):
+            calls.append(kwargs)
+            response = requests.Response()
+            response.status_code = 200
+            response.url = kwargs["url"]
+            if len(calls) == 1:
+                response._content = b"<html>Temporary upstream error</html>"
+            elif "scoreboard/" in response.url:
+                response._content = b'{"scoreboard":{"gameDate":"2026-11-11","games":[]}}'
+            elif "boxscore/" in response.url:
+                response._content = (b'{"game":{"awayTeam":{"teamTricode":"WAS","players":[]},'
+                                     b'"homeTeam":{"teamTricode":"IND","players":[]}}}')
+            else:
+                response._content = b'{"game":{"actions":[]}}'
+            return response
+
+    monkeypatch.setattr(NBALiveHTTP, "get_session", lambda self: Session())
+    monkeypatch.setattr(requests.utils, "DEFAULT_ACCEPT_ENCODING", "gzip, deflate")
+    operations = {
+        "games": nba_live.fetch_games,
+        "box": lambda: nba_live.fetch_box("0022600217"),
+        "plays": lambda: nba_live.fetch_plays("0022600217", "WAS", "IND"),
+        "detail": lambda: nba_live.fetch_detail("0022600217", "WAS", "IND"),
+    }
+    operations[operation]()
+    assert len(calls) == (3 if operation == "detail" else 2)
+    assert all(call["headers"]["Accept-Encoding"] == "gzip, deflate" for call in calls)
+    assert all(call["timeout"] == nba_live.REQUEST_TIMEOUT for call in calls)
+    assert calls[1]["headers"]["Cache-Control"] == "no-cache"
+
+
+@pytest.mark.parametrize("payload", [None, {}, {"scoreboard": {}}, {"scoreboard": {"games": None}}])
+def test_invalid_scoreboard_is_retried_then_reported_not_treated_as_no_games(monkeypatch, payload):
+    from nba_api.live.nba.endpoints import scoreboard
+
+    calls = []
+
+    class Response:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+        def get_dict(self):
+            return payload
+
+    monkeypatch.setattr(scoreboard, "ScoreBoard", Response)
+    with pytest.raises(nba_live.LiveDataError, match="unreadable response after retrying"):
+        nba_live.fetch_games()
+    assert len(calls) == 2
+
+
+def test_persistent_bad_json_has_a_bounded_retry_and_clear_error(monkeypatch):
+    from json import JSONDecodeError
+    from nba_api.live.nba.endpoints import scoreboard
+
+    calls = []
+
+    def fail(**kwargs):
+        calls.append(kwargs)
+        raise JSONDecodeError("private response details", "", 0)
+
+    monkeypatch.setattr(scoreboard, "ScoreBoard", fail)
+    with pytest.raises(nba_live.LiveDataError, match="unreadable response after retrying") as error:
+        nba_live.fetch_games()
+    assert len(calls) == 2
+    assert "private" not in str(error.value)
 
 SCOREBOARD = {"scoreboard": {"games": [
     {"gameId": "0022600173", "gameStatus": 2, "gameStatusText": "2nd Qtr             ",
@@ -241,3 +316,33 @@ def test_a_failed_fetch_becomes_one_clear_error(monkeypatch):
         nba_live.fetch_games()
     assert "ConnectionError" in str(error.value)
     assert "secret details" not in str(error.value)
+
+
+def test_three_scheduled_games_can_start_independently(monkeypatch):
+    from nba_api.live.nba.endpoints import scoreboard, boxscore
+    from edgefinder.data import nba_live as live
+    class Response:
+        def __init__(self, value): self.value = value
+        def get_dict(self): return self.value
+    def payload(gid, status):
+        return {"gameId": gid, "gameStatus": status, "gameStatusText": "1st Qtr" if status == 2 else "7:00 pm ET",
+                "period": 1 if status == 2 else 0, "gameClock": "PT10M00S",
+                "awayTeam": {"teamTricode": "MIL", "score": 4},
+                "homeTeam": {"teamTricode": "BOS", "score": 6}}
+    monkeypatch.setattr(scoreboard, "ScoreBoard", lambda **kw: Response({"scoreboard": {
+        "games": [payload("one", 2), payload("two", 1), payload("three", 1)]}}))
+    monkeypatch.setattr(boxscore, "BoxScore", lambda gid, **kw: Response({"game": payload(gid, 2)}))
+    assert [g.status for g in live.fetch_games()] == [2, 2, 2]
+    def flaky(gid, **kw):
+        if gid == "three": raise RuntimeError("not available")
+        return Response({"game": payload(gid, 2)})
+    monkeypatch.setattr(boxscore, "BoxScore", flaky)
+    assert [g.status for g in live.fetch_games()] == [2, 2, 1]
+    monkeypatch.setattr(boxscore, "BoxScore", lambda gid, **kw: Response({"game": payload(gid, 1)}))
+    assert [g.status for g in live.fetch_games()] == [2, 1, 1]
+
+
+def test_status_confirmation_never_uses_a_different_game():
+    from edgefinder.data import nba_live as live
+    game = live.LiveGame("one", 1, "7:00 pm ET", 0, "", "MIL", "BOS", 0, 0)
+    assert live.confirmed_status(game, {"gameId": "other", "gameStatus": 2}) == game

@@ -8,7 +8,8 @@
   --color-line: #2f3336;
   --color-line-strong: #536471;
   --color-text: #e7e9ea;
-  --color-muted: #71767b;
+  --color-muted: #8b9198;
+  --color-accent: #8ec5ff;
   --color-button: #eff3f4;
   --color-button-text: #0f1419;
   --color-good: #00ba7c;
@@ -19,6 +20,9 @@
 
 html, body { background: var(--color-ink); color: var(--color-text); }
 body { -webkit-font-smoothing: antialiased; }
+button, a, input, summary, select { -webkit-tap-highlight-color: transparent; }
+:where(button, a, input, summary, select):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+button:disabled { opacity: .55; cursor: wait; }
 
 @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1) } 50% { opacity: .35; transform: scale(.7) } }
 @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }

@@ -7,7 +7,10 @@ screen can show instead of crashing.
 """
 
 import re
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field, replace
+
+import requests
 
 SCHEDULED, LIVE, FINAL = 1, 2, 3
 REQUEST_TIMEOUT = 10
@@ -16,6 +19,34 @@ _DURATION = re.compile(r"PT(?:(\d+)M)?(?:([\d.]+)S)?")
 
 class LiveDataError(Exception):
     pass
+
+
+def _fetch_payload(endpoint, *args, root: str) -> dict:
+    """Request supported compression and retry an unreadable feed once."""
+    from nba_api.live.nba.library.http import STATS_HEADERS
+
+    # nba_api advertises Brotli even when requests has no Brotli decoder.
+    # Compressed bytes then reach its JSON parser as text and fail to decode.
+    headers = {**STATS_HEADERS, "Accept": "application/json",
+               "Accept-Encoding": requests.utils.DEFAULT_ACCEPT_ENCODING}
+    for attempt in range(2):
+        try:
+            payload = endpoint(*args, headers=headers, timeout=REQUEST_TIMEOUT).get_dict()
+            if not isinstance(payload, dict) or not isinstance(payload.get(root), dict):
+                raise ValueError("Missing live-feed data")
+            if root == "scoreboard" and not isinstance(payload[root].get("games"), list):
+                raise ValueError("Missing scoreboard games")
+            return payload
+        except (ValueError, requests.RequestException):
+            if attempt:
+                raise
+            headers = {**headers, "Cache-Control": "no-cache", "Pragma": "no-cache"}
+
+
+def _failure_reason(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return "NBA returned an unreadable response after retrying"
+    return type(exc).__name__
 
 
 @dataclass(frozen=True)
@@ -58,6 +89,16 @@ class PlayerLine:
     turnovers: int = 0
     plus_minus: float = 0.0
     fouls: int = 0
+    technicals: int = 0
+    not_playing: str = ""    # the feed's reason when it lists a player as unavailable
+
+
+@dataclass(frozen=True)
+class Exit:
+    """How a player left the floor, from the play-by-play: thrown out, or subbed out and not back."""
+    ejected: bool = False
+    out_period: int = 0              # period of a "sub out" with no "sub in" after it; 0 otherwise
+    out_seconds_left: float = 0.0    # the period clock at that moment
 
 
 @dataclass(frozen=True)
@@ -189,8 +230,40 @@ def parse_boxscore(payload: dict) -> dict[int, PlayerLine]:
                 steals=int(stats.get("steals", 0)), blocks=int(stats.get("blocks", 0)),
                 turnovers=int(stats.get("turnovers", 0)),
                 plus_minus=float(stats.get("plusMinusPoints", 0.0)),
-                fouls=int(stats.get("foulsPersonal", 0)))
+                fouls=int(stats.get("foulsPersonal", 0)),
+                technicals=int(stats.get("foulsTechnical", 0)),
+                not_playing=_reason(player))
     return lines
+
+
+def _reason(player: dict) -> str:
+    text = player.get("notPlayingDescription") or player.get("notPlayingReason") or ""
+    return text.replace("_", " ").strip().capitalize()
+
+
+def seconds_from_duration(duration: str) -> float:
+    """'PT06M49.00S' -> 409.0. Empty or malformed input is 0."""
+    return minutes_from_duration(duration) * 60.0
+
+
+def parse_exits(payload: dict) -> dict[int, Exit]:
+    """Per player: an ejection, or the last substitution out that no substitution in has answered."""
+    exits: dict[int, Exit] = {}
+    actions = sorted(payload.get("game", {}).get("actions", []),
+                     key=lambda a: a.get("orderNumber", a.get("actionNumber", 0)))
+    for action in actions:
+        kind, player = action.get("actionType"), action.get("personId")
+        if not player:
+            continue
+        before = exits.get(int(player), Exit())
+        if kind == "ejection":
+            exits[int(player)] = replace(before, ejected=True)
+        elif kind == "substitution" and action.get("subType") == "out":
+            exits[int(player)] = replace(before, out_period=int(action.get("period", 0)),
+                                         out_seconds_left=seconds_from_duration(action.get("clock", "")))
+        elif kind == "substitution" and action.get("subType") == "in":
+            exits[int(player)] = replace(before, out_period=0, out_seconds_left=0.0)
+    return exits
 
 
 # the team numbers worth comparing, straight from the box score
@@ -252,19 +325,49 @@ def fetch_games() -> list[LiveGame]:
     """Today's games with live scores."""
     from nba_api.live.nba.endpoints import scoreboard
     try:
-        return parse_scoreboard(scoreboard.ScoreBoard(timeout=REQUEST_TIMEOUT).get_dict())
+        games = parse_scoreboard(_fetch_payload(scoreboard.ScoreBoard, root="scoreboard"))
     except Exception as exc:
-        raise LiveDataError(f"NBA live scores are unavailable ({type(exc).__name__})") from None
+        raise LiveDataError(f"NBA live scores are unavailable ({_failure_reason(exc)})") from None
+    # The aggregate scoreboard can lag individual games at tip-off. Check every
+    # scheduled game independently, so one game starting does not gate the others.
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return list(pool.map(_confirm_start, games))
+
+
+def _confirm_start(game: LiveGame) -> LiveGame:
+    if game.status != SCHEDULED:
+        return game
+    from nba_api.live.nba.endpoints import boxscore
+    try:
+        payload = _fetch_payload(boxscore.BoxScore, game.game_id, root="game")["game"]
+        return confirmed_status(game, payload)
+    except Exception:
+        # An unavailable pregame box is normal; it must not hide other games.
+        return game
+
+
+def confirmed_status(game: LiveGame, payload: dict) -> LiveGame:
+    """Promote only from the same game's explicit status, never from the wall clock."""
+    if payload.get("gameId") != game.game_id:
+        return game
+    status = int(payload.get("gameStatus", SCHEDULED))
+    if game.status != SCHEDULED or status not in (LIVE, FINAL):
+        return game
+    return replace(game, status=status, status_text=payload.get("gameStatusText", "").strip(),
+                   period=int(payload.get("period", 0)),
+                   clock=clock_from_duration(payload.get("gameClock", "")),
+                   away_score=int(payload["awayTeam"]["score"]),
+                   home_score=int(payload["homeTeam"]["score"]))
 
 
 def fetch_plays(game_id: str, away: str, home: str) -> list[Play]:
     """One game's play-by-play, oldest first."""
     from nba_api.live.nba.endpoints import playbyplay
     try:
-        payload = playbyplay.PlayByPlay(game_id, timeout=REQUEST_TIMEOUT).get_dict()
+        payload = _fetch_payload(playbyplay.PlayByPlay, game_id, root="game")
         return parse_playbyplay(payload, away, home)
     except Exception as exc:
-        raise LiveDataError(f"The play-by-play is unavailable ({type(exc).__name__})") from None
+        raise LiveDataError(f"The play-by-play is unavailable ({_failure_reason(exc)})") from None
 
 
 @dataclass(frozen=True)
@@ -276,25 +379,26 @@ class GameDetail:
     period_scores: dict[str, list[int]]
     shots: list[Shot]
     plays: list[Play]
+    exits: dict[int, Exit] = field(default_factory=dict)
 
 
 def fetch_detail(game_id: str, away: str, home: str) -> GameDetail:
     from nba_api.live.nba.endpoints import boxscore, playbyplay
     try:
-        box = boxscore.BoxScore(game_id, timeout=REQUEST_TIMEOUT).get_dict()
-        plays = playbyplay.PlayByPlay(game_id, timeout=REQUEST_TIMEOUT).get_dict()
+        box = _fetch_payload(boxscore.BoxScore, game_id, root="game")
+        plays = _fetch_payload(playbyplay.PlayByPlay, game_id, root="game")
         return GameDetail(
             players=parse_boxscore(box), team_stats=parse_team_stats(box),
             period_scores=parse_period_scores(box), shots=parse_shots(plays),
-            plays=parse_playbyplay(plays, away, home))
+            plays=parse_playbyplay(plays, away, home), exits=parse_exits(plays))
     except Exception as exc:
-        raise LiveDataError(f"The game details are unavailable ({type(exc).__name__})") from None
+        raise LiveDataError(f"The game details are unavailable ({_failure_reason(exc)})") from None
 
 
 def fetch_box(game_id: str) -> dict[int, PlayerLine]:
     """One game's box score."""
     from nba_api.live.nba.endpoints import boxscore
     try:
-        return parse_boxscore(boxscore.BoxScore(game_id, timeout=REQUEST_TIMEOUT).get_dict())
+        return parse_boxscore(_fetch_payload(boxscore.BoxScore, game_id, root="game"))
     except Exception as exc:
-        raise LiveDataError(f"The box score is unavailable ({type(exc).__name__})") from None
+        raise LiveDataError(f"The box score is unavailable ({_failure_reason(exc)})") from None

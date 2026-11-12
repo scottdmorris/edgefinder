@@ -4,6 +4,136 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Mid-game alerts, model picks on Parlay, and a shorter props list
+- Live now warns when a player on your slip looks done for the night while the bet is still
+  in play: **Fouled out** (6 fouls), **Ejected** (an ejection or 2 technicals), listed out by
+  NBA's feed, or off the floor for a long unbroken stretch of game time (10 minutes for a
+  starter, 16 off the bench). NBA's feed does not announce mid-game injuries, so a long
+  absence is a warning ("may be hurt or benched"), not a diagnosis. The warning shows above
+  the slip and outlines the bet.
+- A live game's period now comes from its latest play, like its score and clock, so the
+  scoreboard lagging at a quarter break cannot skew the alert's timing.
+- Parlay shows **Model picks** for the day (FanDuel points lines where a model sees value)
+  with an Add button, and they follow the Game filter. The Picks screen keeps the full table.
+- Points, Rebounds, Assists and 3PM pills are always shown. When the chosen price source has
+  no lines for a stat (FanDuel records points only), the screen says so and offers the other
+  source in one tap.
+- The props list shows the six biggest names until "Show all", and everyone once a game is
+  chosen or a search is typed. Each card names its stat, and a line explains the two
+  percentages.
+- A sentence under the Model pills says what the chosen model does.
+- Validation: 1,454 Python tests passed (3 expected failures); 17 front-end tests, lint and
+  the production build passed. The alert rule was run against tonight's three live games and
+  raised three warnings, including a starter with 5.6 minutes who had been off the floor for
+  30 game minutes. No ejection or foul-out occurred to observe; those rules are unit-tested.
+
+### Slips that survive price moves, and the pill layout restored
+- A saved selection is now identified by the bet itself (game, player, stat, side, line), not
+  its price. A later snapshot moving the odds no longer drops the leg or breaks Live tracking;
+  the Parlay screen notes the old and new price and the slip uses the new one. Slips saved
+  under the previous price-bound IDs appear once under "Review saved selections".
+- Looking at another day, price source or model on the Parlay screen no longer replaces the
+  slip Live is tracking. Live follows the slip you last changed.
+- Parlay is back to pills: game day, prices, model and game filters; a pill strip for each
+  player's alternate lines; Over/Under (or Yes/No) pill buttons. Price gaps, Steady and Ideas
+  sit above the props again instead of inside a collapsed section. Player search and the
+  "On my slip" filter stay. Stat pills list only stats the price source has lines for.
+- Live is back to the horizontal score strip with the first game open under its team-colour
+  header. Strip cards mark games that have bets on your slip. The freshness label no longer
+  warns "Stale data" on finished games.
+- The pill navigation returns in place of full-width underline tabs.
+- Correction to the entry below: the optional AI parlay analyst it describes was removed
+  before release and is not in the code. The app makes no language-model calls. The photo
+  slip review (local OCR via `rapidocr`, `onnxruntime`, `Pillow`) was added and is not
+  described below.
+- Validation: 1,446 Python tests passed (3 expected failures); 17 front-end tests, lint and
+  the production build passed. Checked in a browser against a fresh server on port 8001:
+  Parlay at desktop and phone width, selecting a leg, and Live tracking that slip.
+
+### Optional AI parlay analyst and live-feed recovery
+- Added an on-demand AI analyst to the React Parlay screen, defaulting to three
+  legs, +350 to +550 illustrative odds and Moderate risk. Results include short
+  rationales and a risk flag; applying a recommendation is a separate action.
+- Python filters existing estimated-positive-EV candidates, computes eligible
+  combinations and enforces exact leg count, odds range and risk thresholds.
+  This first version uses distinct players and games and a bounded shortlist.
+- The OpenAI request uses a stable system prompt, pipe-delimited data, low reasoning
+  effort, JSON mode, a 1,800-token completion budget, concurrency protection and a
+  15-second interval between calls. Credentials and model selection stay server-side.
+- Validate returned selections, odds, schema and word limits. Invented selections,
+  changed quotes, stale UI requests, malformed responses and unavailable configuration
+  cannot silently become slips. No automatic paid retries or simulated AI fallback.
+- Include historical hit counts and today's available injury report; exclude players
+  listed Out/Doubtful. Missing spread, pace, rest and matchup ranks remain explicit.
+- Correct NBA live-feed compression headers to match installed decoder support and
+  retry unreadable responses once across scoreboard, box score and play-by-play.
+  Restarted the previously stale running server and confirmed real API responses.
+- Added `AGENTS.md` requiring changelog updates for future user-facing changes.
+- Setup and limitations are documented in README. Live model execution still requires
+  `OPENAI_API_KEY` and `EDGEFINDER_AI_MODEL`; neither is configured in this environment.
+- Validation: 1,450 Python tests passed (3 expected failures); all 15 front-end tests,
+  front-end lint and the production build passed. Provider calls are mocked in tests;
+  no paid model request was made without credentials.
+
+### A clearer main app and a Live overview
+- React/FastAPI is the documented main interface at port 8000, with a build-and-run
+  launcher (`scripts/start_app.ps1`). Streamlit remains available for internal analysis.
+- Live shows all games in a responsive grid with scores, clocks and tracked selections.
+  Selecting a card opens its detailed game center. Final, pending and void states are labeled.
+- NBA response receipt times survive API cache hits; the browser shows their age separately
+  from its board refresh time. Missing game details, stale data and connection failures are
+  visible even when a previous successful response remains on screen. Receipt times do not
+  claim that the NBA source itself is current. Visibility refreshes cannot overlap a pending poll.
+- Props come first, with player search that ignores accents, stat filters and a selected-only
+  view. Price gaps, Steady and Ideas remain available under a collapsible suggestions section.
+- Prop rows emphasize target, price and the chosen side's slip estimate; the market/model
+  comparison expands on demand. Selecting No shows No probabilities. Selected controls use
+  an accent, checkmarks and accessible pressed states, with brighter secondary text and focus rings.
+- Saved slips retain their original selection details and first successful payout illustration.
+  Changed or unavailable quotes stay reviewable and removable instead of disappearing, and
+  each market's slip is restored when returning to it. Historical live grading remains unavailable.
+- Record leads with per-model performance, sample sizes, game-day coverage and fee assumptions.
+  Audit details are expandable; an invalid record still raises a warning above the results.
+- Validation: all 1,426 Python tests passed (3 expected failures). Front-end interaction tests,
+  lint and the production build passed. The running app, health, board and record endpoints
+  returned HTTP 200; the NBA board returned seven simultaneous live games with receipt times.
+
+### Reliable slips and clearer information
+- Streamlit's live caches store plain values and reconstruct game records when read,
+  preventing serialization errors from dataclass instances left over during a code reload.
+- The shared live feed now checks scheduled games against their individual box-score status
+  in parallel. A delayed aggregate scoreboard can no longer hold a game in pregame when its
+  own feed confirms it has started. A failed feed for one game leaves the others available;
+  scheduled time alone never marks a game live. Applies to both React and Streamlit.
+- Web selections now use deterministic quote IDs rather than table positions. Adding or
+  reordering lines cannot turn a saved selection into another bet; a changed price or blended
+  probability invalidates the old quote. Older positional browser slips are deliberately not
+  restored, with a migration explanation in the Parlay screen.
+- Slip calculations are bound to the exact market, selections and stake. Pending or failed
+  requests cannot display a previous payout, including in the mobile bar.
+- Live tracking rejects slips outside today's Eastern game day rather than matching an old
+  selection to a new game with the same teams. Historical live tracking remains unavailable.
+- A Kalshi-only ledger no longer hides the Record screen. FanDuel model summaries remain
+  explicitly separate from the other-source breakdowns.
+- The web app uses descriptive model names (Recent average, Minutes, Context, Shot profile),
+  shows market/model/blended probabilities together, explains the 30/70 blend, and labels
+  multiplied-price payouts as illustrations rather than executable quotes. Kalshi fees are
+  explicitly excluded; the underlying pricing and prediction models are unchanged.
+- Added a recorded-board refresh action and load time, retry feedback, and periodic job-health
+  refresh. The board explains that recorded prices are not live executable prices.
+- Added regression coverage for stable selection identity, changed quotes, old-game tracking,
+  Kalshi-only records and delayed/failed front-end slip pricing. Front-end tests now run in CI.
+- Validation: 1,424 Python tests passed (3 expected failures), both front-end tests passed,
+  and front-end lint and production build passed. A Streamlit runtime smoke test loaded
+  the real scoreboard, box score and game details without serialization errors; the feed
+  reported three simultaneous live games. Independent start recovery is covered by simulation.
+
+### A Steady list on the Parlay screen
+- **Steady** (`api/service.py` `steady_for`, `web/src/screens/Parlay.tsx`): tonight's legs a
+  player reached in 18+ of his last 20 games, one per player and stat (the highest number that
+  still qualifies), each shown next to what it costs. A convenience for building slips, not an
+  edge: the season backtest found these hit 87% of the time at an 88-cent price.
+
 ### A full-season test against Kalshi
 - **Kalshi's archive** (`data/kalshi_history.py`, `scripts/kalshi_history_download.py`): every
   settled 2025-26 player-points market and its hourly prices, free and keyless, cached and

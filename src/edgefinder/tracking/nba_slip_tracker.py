@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from ..data.nba_live import FINAL, LIVE, LiveGame, PlayerLine
+from ..data.nba_live import FINAL, LIVE, Exit, LiveGame, PlayerLine
 
 HIT, ALIVE, MISSED, NOT_STARTED, VOID = "Hit", "Alive", "Missed", "Not started", "Didn't play"
 
@@ -64,6 +64,56 @@ def leg_progress(is_over: bool, line: float, game_status: int,
         return Progress(HIT, have, target, f"finished with {have}, under the line")
     return Progress(ALIVE, have, target,
                     f"{have} {unit} so far, can add {target - 1 - have} more and still win")
+
+
+FOUL_LIMIT = 6
+TECHNICAL_LIMIT = 2
+PERIOD_MINUTES, OVERTIME_MINUTES, REGULATION_PERIODS = 12.0, 5.0, 4
+LONG_SIT_STARTER = 10.0      # game minutes on the bench before a starter's absence is worth a warning
+LONG_SIT_BENCH = 16.0
+
+
+def game_minutes(period: int, seconds_left: float) -> float:
+    """Game time played when the clock shows `seconds_left` in `period`."""
+    if period <= 0:
+        return 0.0
+    before = (min(period - 1, REGULATION_PERIODS) * PERIOD_MINUTES
+              + max(period - 1 - REGULATION_PERIODS, 0) * OVERTIME_MINUTES)
+    length = PERIOD_MINUTES if period <= REGULATION_PERIODS else OVERTIME_MINUTES
+    return before + length - min(seconds_left / 60.0, length)
+
+
+def _clock_seconds(clock: str) -> float:
+    minutes, _, seconds = (clock or "0:00").partition(":")
+    try:
+        return int(minutes) * 60.0 + float(seconds or 0)
+    except ValueError:
+        return 0.0
+
+
+def exit_alert(player: PlayerLine | None, exit: Exit | None, game: LiveGame) -> str:
+    """Why a player who has played may be done for the night, or '' when nothing says so.
+
+    Certain when the box score says it (fouled out, ejected, listed out). A long stretch on the
+    bench is only a warning: NBA's feed does not announce a mid-game injury, so the absence is
+    the signal."""
+    if player is None or not player.played or game.status != LIVE:
+        return ""
+    if (exit and exit.ejected) or player.technicals >= TECHNICAL_LIMIT:
+        return "Ejected"
+    if player.fouls >= FOUL_LIMIT:
+        return "Fouled out"
+    if player.on_court:
+        return ""
+    if player.not_playing:
+        return f"Listed out: {player.not_playing}"
+    if exit is None or not exit.out_period:
+        return ""
+    sat = (game_minutes(game.period, _clock_seconds(game.clock))
+           - game_minutes(exit.out_period, exit.out_seconds_left))
+    if sat >= (LONG_SIT_STARTER if player.starter else LONG_SIT_BENCH):
+        return f"Off the floor for the last {sat:.0f} minutes of game time. May be hurt or benched"
+    return ""
 
 
 def slip_status(statuses: list[str]) -> str:

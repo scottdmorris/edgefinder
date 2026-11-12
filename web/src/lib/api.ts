@@ -18,6 +18,8 @@ export type Leg = {
   market_pct: number | null
   chance_pct: number | null
   ev_pct: number | null
+  projection?: number | null
+  projection_model?: string
   average: { season: number | null; last10: number | null } | null
 }
 
@@ -36,6 +38,24 @@ export type Gap = {
   estimated: boolean
 }
 
+// A leg the player has reached in nearly all of his recent games, with what it costs.
+export type Steady = {
+  leg_id: number
+  player: string
+  player_id: number
+  photo: string
+  game: string
+  game_short: string
+  stat: string
+  bet: string
+  threshold: number
+  odds: number
+  hits: number
+  games: number
+  hit_pct: number
+  price_pct: number
+}
+
 export type Board = {
   date: string
   day_label: string
@@ -48,11 +68,20 @@ export type Board = {
   games: { game: string; short: string }[]
   legs: Leg[]
   gaps: Gap[]
+  steady: Steady[]
   styles: string[]
   default_style: string
 }
 
 export type Idea = { legs: number[]; chance_pct: number; pays: number; ev_pct: number }
+
+export type SlipMatches = { matches: { player: string; text: string; candidate_ids: number[]; status: string }[]; note: string }
+export type SlipReviewResult = {
+  chance_pct: number; ev_pct: number; notes: string[]
+  legs: { id: number; player: string; bet: string; projection: number | null; chance_pct: number; ev_pct: number; assessment: string; reason: string; without_chance_pct: number | null }[]
+  additions: { id: number; player: string; bet: string; ev_pct: number; with_chance_pct: number }[]
+}
+
 
 export type SlipPrice = {
   legs: number
@@ -92,6 +121,9 @@ export type GameCard = {
   id: string
   state: 'upcoming' | 'live' | 'final'
   status: string
+  received_at?: string
+  detail_received_at?: string | null
+  detail_available?: boolean
   away: Side
   home: Side
 }
@@ -143,6 +175,8 @@ export type GameDetail = GameCard & {
 
 export type TrackedLeg = {
   id: number
+  game_id?: string | null
+  game_state?: 'upcoming' | 'live' | 'final' | null
   player: string
   bet: string
   photo: string
@@ -152,6 +186,8 @@ export type TrackedLeg = {
   progress: number
   detail: string
   game: string
+  /** why the player may be done for the night: fouled out, ejected, or a long stretch off the floor */
+  alert?: string
 }
 
 export type Tracked = { status: string; legs: TrackedLeg[] }
@@ -275,6 +311,15 @@ async function get<T>(path: string, params: Record<string, string | undefined> =
 }
 
 export const api = {
+  readSlip: async (files: File[]) => {
+    const form = new FormData()
+    files.forEach((file) => form.append('images', file))
+    const response = await fetch('/api/slip/read', { method: 'POST', body: form })
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail ?? 'Could not read images')
+    return response.json() as Promise<{ images: { text: string; low_confidence: boolean; lines: number }[] }>
+  },
+  matchSlip: (market: Market, text: string) => send<SlipMatches>('/api/slip/match', { ...market, text }),
+  reviewSlip: (market: Market, legs: number[], confirmed: boolean) => send<SlipReviewResult>('/api/slip/review', { ...market, legs, confirmed }),
   health: () => get<Health>('/api/health'),
   board: (market: Market) => get<Board>('/api/board', market),
   ideas: (market: Market, style: string, game?: string) =>

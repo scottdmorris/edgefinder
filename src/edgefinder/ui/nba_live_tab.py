@@ -6,7 +6,7 @@ builder tab; any game on the slate can be opened for its play-by-play and
 box score.
 """
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import pandas as pd
 import streamlit as st
@@ -29,18 +29,37 @@ BADGES = {
 
 
 @st.cache_data(ttl=DATA_TTL, show_spinner=False)
+def _game_rows() -> list[dict]:
+    # Cache plain values: hot reloads can leave instances of an older dataclass
+    # in flight, which pickle cannot resolve against the newly imported class.
+    return [asdict(game) for game in nba_live.fetch_games()]
+
+
 def _games() -> list[nba_live.LiveGame]:
-    return nba_live.fetch_games()
+    return [nba_live.LiveGame(**row) for row in _game_rows()]
 
 
 @st.cache_data(ttl=DATA_TTL, show_spinner=False)
+def _box_rows(game_id: str) -> dict[int, dict]:
+    return {pid: asdict(player) for pid, player in nba_live.fetch_box(game_id).items()}
+
+
 def _box(game_id: str) -> dict[int, nba_live.PlayerLine]:
-    return nba_live.fetch_box(game_id)
+    return {pid: nba_live.PlayerLine(**row) for pid, row in _box_rows(game_id).items()}
 
 
 @st.cache_data(ttl=DATA_TTL, show_spinner=False)
+def _detail_rows(game_id: str, away: str, home: str) -> dict:
+    return asdict(nba_live.fetch_detail(game_id, away, home))
+
+
 def _detail(game_id: str, away: str, home: str) -> nba_live.GameDetail:
-    return nba_live.fetch_detail(game_id, away, home)
+    rows = _detail_rows(game_id, away, home)
+    return nba_live.GameDetail(
+        players={pid: nba_live.PlayerLine(**row) for pid, row in rows["players"].items()},
+        team_stats=rows["team_stats"], period_scores=rows["period_scores"],
+        shots=[nba_live.Shot(**row) for row in rows["shots"]],
+        plays=[nba_live.Play(**row) for row in rows["plays"]])
 
 
 def render() -> None:

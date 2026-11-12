@@ -30,6 +30,16 @@ export function Record() {
       <p className="mt-1 max-w-2xl text-sm text-muted">
         Every pick is written down before the game and graded after it. Only the result is filled in later.
       </p>
+      <p className="mt-2 text-sm text-muted">Paper results at recorded prices, before trading fees. Each model is scored separately; picks can overlap.</p>
+      <p className="mt-1 text-xs text-muted">{data.days.length ? `Game days: ${data.days.map((day) => day.day).sort()[0]} through ${data.days.map((day) => day.day).sort().at(-1)}.` : 'No game-day history yet.'} Sample size is shown for each model; a winning record alone does not establish an edge.</p>
+      {data.chain.started && (!data.chain.intact || !data.chain.clean) && <p role="alert" className="mt-3 font-bold text-bad">The record does not match its log. Do not trust these results.</p>}
+      {integrity.after_tip > 0 && <p role="alert" className="mt-3 text-sm text-warn">{integrity.after_tip} picks were recorded after tip-off. Review the audit trail before interpreting these results.</p>}
+      {data.models.length === 0 && <p className="mt-4 text-sm text-muted">No FanDuel lines recorded. Other sources are shown separately below.</p>}
+      <Models models={data.models} />
+      <Profit running={data.running} models={data.models} />
+      <ByBook data={data} />
+      <details className="mt-8 rounded-2xl border border-line p-4">
+        <summary className="cursor-pointer font-bold">Recording integrity and audit trail</summary>
       <div className="mt-5">
         <StatStrip items={[
           { value: integrity.picks, label: 'FanDuel picks locked' },
@@ -45,10 +55,8 @@ export function Record() {
         )}
       </div>
 
-      <Models models={data.models} />
-      <Profit running={data.running} models={data.models} />
-      <ByBook data={data} />
       <Chain chain={data.chain} />
+      </details>
       <Clv data={data} />
       <Days days={data.days} models={data.models} />
       <Log log={data.log} models={data.models} />
@@ -70,7 +78,7 @@ function Models({ models }: { models: ModelRecord[] }) {
             <div className="mt-2 flex items-end justify-between">
               <div>
                 <div className="text-2xl font-black">{m.record}</div>
-                <div className="text-[11px] uppercase tracking-wider text-muted">record</div>
+                <div className="text-xs text-muted">{m.settled} graded · {m.picks} locked</div>
               </div>
               <div className="text-right">
                 <div className={`text-2xl font-black ${tone(m.units)}`}>{units(m.units)}</div>

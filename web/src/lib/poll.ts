@@ -2,25 +2,29 @@
 // shouldn't keep hitting the API). A failed refresh keeps the last good data and reports the error.
 import { useEffect, useRef, useState } from 'react'
 
-type Loaded<T> = { key: string; data: T | null; error: string | null }
+type Loaded<T> = { key: string; data: T | null; error: string | null; receivedAt: number | null }
 
 export function usePoll<T>(load: () => Promise<T>, ms: number, key: string) {
-  const [loaded, setLoaded] = useState<Loaded<T>>({ key, data: null, error: null })
+  const [loaded, setLoaded] = useState<Loaded<T>>({ key, data: null, error: null, receivedAt: null })
   const loader = useRef(load)
   useEffect(() => { loader.current = load })
 
   useEffect(() => {
     let live = true
     let timer: number | undefined
+    let pending = false
     const tick = async () => {
       window.clearTimeout(timer)
-      if (document.hidden) return
+      if (document.hidden || pending) return
+      pending = true
       try {
         const data = await loader.current()
-        if (live) setLoaded({ key, data, error: null })
+        if (live) setLoaded({ key, data, error: null, receivedAt: Date.now() })
       } catch (e) {
-        if (live) setLoaded((old) => ({ key, data: old.key === key ? old.data : null, error: (e as Error).message }))
+        if (live) setLoaded((old) => ({ key, data: old.key === key ? old.data : null,
+          receivedAt: old.key === key ? old.receivedAt : null, error: (e as Error).message }))
       }
+      pending = false
       if (live) timer = window.setTimeout(tick, ms)
     }
     const onVisible = () => { if (!document.hidden) void tick() }
@@ -30,7 +34,8 @@ export function usePoll<T>(load: () => Promise<T>, ms: number, key: string) {
   }, [ms, key])
 
   // data fetched for an earlier key (another game, another slip) is never shown for this one
-  return loaded.key === key ? { data: loaded.data, error: loaded.error } : { data: null, error: null }
+  return loaded.key === key ? { data: loaded.data, error: loaded.error, receivedAt: loaded.receivedAt }
+    : { data: null, error: null, receivedAt: null }
 }
 
 /** The value before it last changed (undefined until it has changed once), for spotting what is

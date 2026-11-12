@@ -5,6 +5,7 @@ every few seconds however many people have the page open. Live games take their 
 from the latest play, because NBA's scoreboard can trail its own play-by-play by a minute.
 """
 
+import datetime as dt
 from dataclasses import replace
 
 from ..data import nba_live
@@ -22,15 +23,28 @@ ORDER = {nba_live.LIVE: 0, nba_live.SCHEDULED: 1, nba_live.FINAL: 2}
 
 # ---- the feed, cached ----------------------------------------------------------------------------
 
+def _received(fetch):
+    value = fetch()
+    return {"value": value, "received_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+
+
+def _scoreboard_feed() -> dict:
+    return service.cached(("live", "games"), lambda: _received(nba_live.fetch_games), FEED_SECONDS)
+
+
 def _scoreboard() -> list[LiveGame]:
-    return service.cached(("live", "games"), nba_live.fetch_games, FEED_SECONDS)
+    return _scoreboard_feed()["value"]
+
+
+def _detail_feed(game: LiveGame) -> dict:
+    return service.cached(("live", "detail", game.game_id),
+                          lambda: _received(lambda: nba_live.fetch_detail(
+                              game.game_id, game.away, game.home)), FEED_SECONDS)
 
 
 def _detail(game: LiveGame) -> GameDetail | None:
     try:
-        return service.cached(("live", "detail", game.game_id),
-                              lambda: nba_live.fetch_detail(game.game_id, game.away, game.home),
-                              FEED_SECONDS)
+        return _detail_feed(game)["value"]
     except nba_live.LiveDataError:
         return None
 
@@ -46,7 +60,17 @@ def freshest(game: LiveGame, detail: GameDetail | None) -> LiveGame:
         return game
     latest = detail.plays[-1]
     return replace(game, away_score=latest.away_score, home_score=latest.home_score,
-                   status_text=nba_live.period_status(latest.period), clock=latest.clock)
+                   status_text=nba_live.period_status(latest.period), clock=latest.clock,
+                   period=_period_number(latest.period) or game.period)
+
+
+def _period_number(label: str) -> int:
+    """'Q3' -> 3, 'OT1' -> 5; 0 when the label is neither."""
+    if label.startswith("Q") and label[1:].isdigit():
+        return int(label[1:])
+    if label.startswith("OT") and label[2:].isdigit():
+        return nba_live.REGULATION_PERIODS + int(label[2:])
+    return 0
 
 
 def current_games() -> list[tuple[LiveGame, GameDetail | None]]:
@@ -83,6 +107,9 @@ def game_card(game: LiveGame, detail: GameDetail | None = None) -> dict:
     return {
         "id": game.game_id, "state": STATES.get(game.status, "upcoming"),
         "status": _status(game),
+        "received_at": _scoreboard_feed()["received_at"],
+        "detail_received_at": _detail_feed(game)["received_at"] if detail is not None else None,
+        "detail_available": detail is not None,
         "away": _side(game, game.away, away_color, detail),
         "home": _side(game, game.home, home_color, detail),
     }
@@ -167,21 +194,39 @@ def board() -> list[dict]:
     return [game_card(g, d) for g, d in current_games()]
 
 
+def _alert(row, game: LiveGame | None, detail: GameDetail | None) -> str:
+    """A warning for a bet still in play whose player looks done for the night."""
+    if game is None or detail is None or row.Status != nba_slip_tracker.ALIVE:
+        return ""
+    return nba_slip_tracker.exit_alert(detail.players.get(int(row.player_id)),
+                                       detail.exits.get(int(row.player_id)), game)
+
+
 def track(date: str | None, book: str | None, model: str | None, leg_ids: list[int]) -> dict:
     """How each bet on a slip is doing right now, and the slip overall."""
-    table, _ = service.candidates(date, book, model)
+    table, market = service.candidates(date, book, model)
     missing = [i for i in leg_ids if i not in table.index]
     if missing:
-        raise service.NotFound(f"unknown legs {missing}")
+        raise service.NotFound("Some saved selections are no longer on the board. Review the slip on the Parlay screen.")
     if not leg_ids:
         return {"status": nba_slip_tracker.NOT_STARTED, "legs": []}
+    if market["date"] != service.today().isoformat():
+        raise ValueError("Live tracking is available only for today's game day. This saved slip is from "
+                         + market["date"] + "; its result cannot be inferred from today's games.")
     chosen = table.loc[leg_ids]
-    games = [g for g, _ in current_games()]
+    pairs = current_games()
+    games = [g for g, _ in pairs]
+    details = {g.game_id: d for g, d in pairs if d is not None}
     progress = nba_slip_tracker.track_slip(chosen, games, _box)
     legs = []
     for leg_id, row in zip(leg_ids, progress.itertuples()):
         player, bet = row.Leg.split(" · ", 1)
+        selection = chosen.loc[leg_id]
+        game = nba_slip_tracker.find_game(games, selection.away_abbr, selection.home_abbr)
         legs.append({"id": leg_id, "player": player, "bet": bet,
+                     "alert": _alert(row, game, details.get(game.game_id) if game else None),
+                     "game_id": game.game_id if game else None,
+                     "game_state": STATES.get(game.status, "upcoming") if game else None,
                      "photo": nba_parlay.headshot_url(row.player_id), "status": row.Status,
                      "have": None if row.Have is None or row.Have != row.Have else int(row.Have),
                      "target": int(row.Target), "progress": float(row.Progress),

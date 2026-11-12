@@ -49,8 +49,8 @@ def _models(ledger: pd.DataFrame) -> list[dict]:
         accuracy = nba_paper.calibration_summary(ledger, model_version=version)
         bins = nba_record.calibration_bins(ledger, version)
         out.append({
-            "id": version, "name": nba_parlay.model_name(version),
-            "short": nba_parlay.short_model_name(version),
+            "id": version, "name": service.model_name(version),
+            "short": service.model_short(version),
             "record": picks["record"], "picks": picks["picks"], "settled": picks["settled"],
             "units": service._num(picks["units"]), "roi_pct": service._num(picks["roi_pct"], 1),
             "verdict": _plain(nba_record.verdict(accuracy["brier_model"],
@@ -127,7 +127,7 @@ def record() -> dict:
     def build() -> dict:
         everything = service.load_ledger()
         ledger = nba_paper.scope(everything, book=nba_paper.DEFAULT_BOOK)
-        if ledger.empty:
+        if everything.empty:
             return {"empty": True}
         locked = nba_record.locked_picks(ledger)
         report = nba_record.integrity(ledger)

@@ -1,18 +1,23 @@
-// Live: tonight's games as a score strip, your slip bet by bet, and the chosen game in full.
+// Live: every game at a glance, your slip bet by bet, and the chosen game in full.
 // Everything refreshes every 10 seconds from NBA's own live feed while the page is open.
 import { useState } from 'react'
-import { api, type GameCard, type Side, type Tracked } from '../lib/api'
+import { api, type GameCard, type Side, type Tracked, type TrackedLeg } from '../lib/api'
 import { shortStatus } from '../lib/format'
 import { usePoll, usePrevious } from '../lib/poll'
 import { savedSlip } from '../lib/slip'
 import { Empty, Photo } from '../components/ui'
 import { GameCenter } from '../components/GameCenter'
+import { Freshness } from '../components/Freshness'
 
 const REFRESH_MS = 10_000
 
 export function Live() {
   const games = usePoll(api.live, REFRESH_MS, 'games')
   const [chosen, setChosen] = useState<string | null>(null)
+  const slip = savedSlip()
+  const slipKey = slip ? `${slip.market.date}|${slip.market.book}|${slip.market.model}|${slip.legs.join(',')}` : 'none'
+  const tracked = usePoll<Tracked | null>(
+    () => (slip ? api.track(slip.market, slip.legs) : Promise.resolve(null)), REFRESH_MS, slipKey)
   const list = games.data ?? []
   const id = chosen && list.some((g) => g.id === chosen) ? chosen : list[0]?.id ?? null
 
@@ -24,31 +29,33 @@ export function Live() {
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-black tracking-tight">Live</h1>
-        <span className="flex items-center gap-1.5 text-xs text-muted">
-          <span className={`size-1.5 rounded-full ${games.error ? 'bg-warn' : 'live-dot bg-good'}`} />
-          {games.error ? 'Reconnecting…' : 'Updates every 10 seconds'}
-        </span>
+        <Freshness receivedAt={games.receivedAt} error={games.error} label="Board received" />
       </div>
-      <Strip games={list} chosen={id} onChoose={setChosen} />
-      <SlipTracker />
+      {games.error && <p role="alert" className="mt-3 text-sm text-warn">Showing the last successful board. {games.error}</p>}
+      <Overview games={list} chosen={id} onChoose={setChosen} legs={tracked.error ? [] : tracked.data?.legs ?? []} />
+      <SlipTracker slip={slip} tracked={tracked} />
       {id && <Game key={id} id={id} card={list.find((g) => g.id === id)!} />}
     </div>
   )
 }
 
-function Strip({ games, chosen, onChoose }: { games: GameCard[]; chosen: string | null; onChoose: (id: string) => void }) {
+export function Overview({ games, chosen, onChoose, legs }: {
+  games: GameCard[]; chosen: string | null; onChoose: (id: string) => void; legs: TrackedLeg[]
+}) {
   return (
-    <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" role="tablist" aria-label="Games">
+    <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label="Games">
       {games.map((g) => {
         const on = g.id === chosen
+        const mine = legs.filter((leg) => leg.game_id === g.id).length
         return (
-          <button key={g.id} type="button" role="tab" aria-selected={on} onClick={() => onChoose(g.id)}
+          <button key={g.id} type="button" aria-pressed={on} aria-label={`${g.away.team} at ${g.home.team}`} onClick={() => onChoose(g.id)}
             className={`min-w-[150px] shrink-0 rounded-2xl border px-3 py-2 text-left transition-colors ${on ? 'border-line-strong bg-raised-2' : 'border-line hover:border-line-strong'}`}>
-            <div className="flex items-center justify-between text-[11px] font-semibold text-muted">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-muted">
               <span className="flex items-center gap-1">
                 {g.state === 'live' && <span className="live-dot size-1.5 rounded-full bg-bad" />}
                 {g.state === 'final' ? 'Final' : shortStatus(g.status)}
               </span>
+              {mine > 0 && <span className="rounded-full bg-accent/15 px-1.5 text-accent">{mine} on slip</span>}
             </div>
             {[g.away, g.home].map((side) => (
               <div key={side.team} className="mt-0.5 flex items-center gap-1.5 text-sm">
@@ -57,6 +64,7 @@ function Strip({ games, chosen, onChoose }: { games: GameCard[]; chosen: string 
                 {g.state !== 'upcoming' && <span className="font-black tabular-nums">{side.score}</span>}
               </div>
             ))}
+            {g.state === 'live' && g.detail_available === false && <div className="mt-0.5 text-[11px] text-warn">Score only for now</div>}
           </button>
         )
       })}
@@ -72,6 +80,8 @@ function Game({ id, card }: { id: string; card: GameCard }) {
   return (
     <div className="mt-5">
       <Hero game={{ ...shown, ...card }} />
+      {card.state === 'live' && <div className="mt-2"><Freshness receivedAt={detail.data?.detail_received_at} error={detail.error} label="Game details received" /></div>}
+      {started && (detail.error || (detail.data && !detail.data.detail)) && <p role="alert" className="mt-2 text-sm text-warn">{detail.error ?? 'NBA game details are temporarily unavailable'}. {shown.detail ? 'Showing previous game details.' : 'Retrying automatically.'}</p>}
       {!started && <p className="mt-3 text-sm text-muted">Tips off at {card.status}. Shots, plays and the box score appear once the game starts.</p>}
       {started && !detail.data && !detail.error && <div className="mt-5 h-64 animate-pulse rounded-2xl bg-raised" />}
       {started && detail.error && !detail.data && <p className="mt-3 text-sm text-warn">{detail.error}. Trying again…</p>}
@@ -140,11 +150,10 @@ const BADGE: Record<string, string> = {
   'Not started': 'bg-raised-2 text-muted', "Didn't play": 'bg-raised-2 text-muted',
 }
 
-function SlipTracker() {
-  const slip = savedSlip()
-  const key = slip ? `${slip.market.date}|${slip.market.book}|${slip.market.model}|${slip.legs.join(',')}` : 'none'
-  const tracked = usePoll<Tracked | null>(
-    () => (slip ? api.track(slip.market, slip.legs) : Promise.resolve(null)), REFRESH_MS, key)
+function SlipTracker({ slip, tracked }: {
+  slip: ReturnType<typeof savedSlip>
+  tracked: { data: Tracked | null; error: string | null; receivedAt: number | null }
+}) {
   const previous = usePrevious(tracked.data)
   if (!slip) return null
   const before = new Map(previous?.legs.map((l) => [l.id, l.status]) ?? [])
@@ -155,7 +164,19 @@ function SlipTracker() {
         <h2 className="text-lg font-extrabold">Your slip</h2>
         {data && <span className={`rounded-full px-3 py-1 text-xs font-bold ${BADGE[data.status] ?? ''}`}>{data.status}</span>}
       </div>
-      {tracked.error && !data && <p className="text-sm text-warn">{tracked.error}</p>}
+      {data?.legs.some((leg) => leg.alert) && <div role="alert" className="mb-2 rounded-2xl border border-warn/50 bg-warn/10 px-4 py-3 text-sm text-warn">
+        {data.legs.filter((leg) => leg.alert).map((leg) => <p key={leg.id}><b>{leg.player}</b>: {leg.alert}.</p>)}
+      </div>}
+      {tracked.error && <p role="alert" className="text-sm text-warn">{tracked.error}{data ? ". Displayed progress is from the last successful update." : ""}</p>}
+      {data && <Freshness receivedAt={tracked.receivedAt} error={tracked.error} label="Slip progress received" />}
+      {tracked.error && <div className="mt-3 space-y-2 rounded-2xl border border-warn/40 p-4">
+        <p className="text-sm text-muted">Saved selections for {slip.market.date}. Results cannot be verified from the current feed.</p>
+        {slip.legs.map((id) => {
+          const leg = slip.snapshots[id]
+          return <p key={id} className="text-sm">{leg ? `${leg.player} · ${leg.bet}` : 'Saved selection'} <span className="text-warn">· Needs review</span></p>
+        })}
+        <a href="#/parlay" className="inline-block min-h-11 py-2 text-sm font-bold text-accent">Review the saved slip →</a>
+      </div>}
       {!data && !tracked.error && <div className="h-20 animate-pulse rounded-2xl bg-raised" />}
       {data && data.legs.every((leg) => leg.game === 'no live game') && (
         <div className="rounded-2xl border border-dashed border-line px-4 py-4 text-sm text-muted">
@@ -168,12 +189,12 @@ function SlipTracker() {
           {data.legs.map((leg) => {
             const flipped = before.has(leg.id) && before.get(leg.id) !== leg.status
             return (
-              <div key={leg.id} className={`rounded-2xl border border-line bg-raised p-3 ${flipped ? 'flash' : ''}`}>
+              <div key={leg.id} className={`rounded-2xl border bg-raised p-3 ${leg.alert ? 'border-warn/60' : 'border-line'} ${flipped ? 'flash' : ''}`}>
                 <div className="flex items-center gap-3">
                   <Photo src={leg.photo} size={40} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold">{leg.player} <span className="font-semibold text-muted">· {leg.bet}</span></div>
-                    <div className="truncate text-xs text-muted">{leg.detail} · {leg.game}</div>
+                    <div className="truncate text-xs text-muted">{leg.game_state === 'final' ? 'Final · ' : leg.game_state === 'upcoming' ? 'Pending · ' : ''}{leg.status === "Didn't play" ? 'Void · ' : ''}{leg.detail} · {leg.game}</div>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[leg.status] ?? ''}`}>{leg.status}</span>
                 </div>

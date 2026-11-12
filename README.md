@@ -58,6 +58,20 @@ version is the Record tab; regenerate this table with
 - **Built to run unattended**, with job heartbeats, retries, and an app notice
   when snapshots fall behind.
 
+## Local Python modeling
+
+Player projections, candidate filtering, parlay suggestions, odds and correlation
+calculations run locally in Python. React displays the results through FastAPI.
+No OpenAI or Anthropic API key is needed. The optional language-model analyst was
+removed; there are no paid LLM calls. Price collection may still require the existing
+Odds API key, separately from modeling.
+
+The props screen opens on Points, with Rebounds, Assists and Threes tabs. Choose a
+game and player, then an Over/Under price (or Yes/No for Kalshi). Alternate lines
+are in each player's line selector. Model comparisons and local suggestions are
+collapsed to keep the main list compact. Live games appear as rows; open a game
+for its detailed box score and plays.
+
 ## How it fits together
 
 ```mermaid
@@ -86,23 +100,26 @@ flowchart LR
 
 ## Quick start
 
+The main app is the React interface served by FastAPI at **http://localhost:8000**.
+Streamlit at port 8501 remains available for internal analysis; its browser slips are separate.
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\streamlit run app.py
+.\scripts\start_app.ps1
 ```
 
-Runs at http://localhost:8501. The newer web app is a FastAPI service plus a
-React front end, served together on one port:
+The launcher installs front-end dependencies if missing, builds the interface, then starts
+the server. Run it again after front-end changes. To start an existing build:
 
 ```powershell
-cd web; npm install; npm run build; cd ..     # once, and after front-end changes
 .venv\Scripts\uvicorn edgefinder.api.app:app --app-dir src --port 8000
 ```
 
 Then open http://localhost:8000 (the API is documented at
 http://localhost:8000/api/docs). For front-end work, `npm run dev` in `web/`
 serves the app with hot reload and passes `/api` through to port 8000.
+To use the internal Streamlit interface, run `.venv\Scripts\streamlit run app.py`.
 
 Both apps only read files the scheduled jobs
 write, so it works without an API key and never spends Odds API requests. To

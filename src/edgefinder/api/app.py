@@ -9,13 +9,15 @@ serves the app itself at "/", so one address works on a PC or a phone.
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 
 from ..data import nba_live
-from . import live, picks, players, record, service
+from . import live, picks, players, record, service, slip_review
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
@@ -66,6 +68,40 @@ def ideas(style: str, date: str | None = None, book: str | None = None,
 def slip(request: SlipRequest) -> dict:
     return _guard(lambda: service.price_slip(request.date, request.book, request.model,
                                              request.legs, request.stake))
+
+
+def _review(call):
+    try:
+        return _guard(call)
+    except slip_review.ReviewError as error:
+        raise HTTPException(status_code=error.status, detail=str(error)) from None
+
+
+@app.post("/api/slip/read")
+async def read_slip_images(request: Request) -> dict:
+    async with request.form(max_files=5, max_fields=0) as form:
+        files = [value for _, value in form.multi_items() if isinstance(value, UploadFile)]
+        if not 1 <= len(files) <= 5:
+            raise HTTPException(422, "Choose between one and five images.")
+        if sum(file.size or 0 for file in files) > 20 * 1024 * 1024:
+            raise HTTPException(413, "Images must total no more than 20 MB.")
+        outputs = []
+        for file in files:
+            if (file.size or 0) > slip_review.MAX_FILE_BYTES:
+                raise HTTPException(413, "Each image must be no larger than 8 MB.")
+            data = await file.read(slip_review.MAX_FILE_BYTES + 1)
+            outputs.append(await run_in_threadpool(lambda: _review(lambda: slip_review.read_image(data))))
+        return {"images": outputs}
+
+
+@app.post("/api/slip/match")
+def match_slip(request: slip_review.MatchRequest) -> dict:
+    return _review(lambda: slip_review.match_text(request.text, slip_review._table(request)))
+
+
+@app.post("/api/slip/review")
+def review_slip(request: slip_review.ReviewRequest) -> dict:
+    return _review(lambda: slip_review.review(request))
 
 
 class TrackRequest(BaseModel):

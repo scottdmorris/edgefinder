@@ -1,5 +1,7 @@
 """The web app's API, run against a small made-up ledger (no files, no network)."""
 
+import datetime as dt
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -42,6 +44,7 @@ def _alt() -> pd.DataFrame:
 @pytest.fixture
 def client(monkeypatch):
     service.clear_cache()
+    monkeypatch.setattr(service, "today", lambda: dt.date.fromisoformat(DAY))
     monkeypatch.setattr(service, "load_ledger", _ledger)
     monkeypatch.setattr(service, "load_alt", _alt)
     monkeypatch.setattr(service, "load_games", pd.DataFrame)
@@ -72,7 +75,40 @@ def test_board_defaults_to_the_latest_day_and_lists_every_leg(client):
     assert {leg["player"] for leg in board["legs"]} == {"Jaylen Brown", "Jalen Brunson"}
     leg = board["legs"][0]
     assert {"id", "odds", "market_pct", "model_pct", "photo", "game_short", "bet"} <= set(leg)
+    assert leg["projection"] in (27.0, 34.0)
+    assert leg["projection_model"] == "Minutes"
     assert board["default_style"] in board["styles"]
+
+
+def _steady_logs() -> pd.DataFrame:
+    """Brown scored 25+ in 19 of his last 20 games; Brunson has only played five."""
+    rows = []
+    for pid, count in ((1, 24), (2, 5)):
+        for n in range(count):
+            day = pd.Timestamp("2026-10-01") + pd.Timedelta(days=n)
+            pts = 10 if n in (0, 1, 2, 3, 12) else 30        # four early misses fall out of the 20
+            rows.append({"player_id": pid, "game_date": day, "pts": pts, "reb": 5, "ast": 4,
+                         "fg3m": 2, "minutes": 34.0, "season": "2026-27"})
+    rows.append({"player_id": 1, "game_date": pd.Timestamp(DAY), "pts": 0, "reb": 0, "ast": 0,
+                 "fg3m": 0, "minutes": 30.0, "season": "2026-27"})       # tonight: must not count
+    return pd.DataFrame(rows)
+
+
+def test_steady_lists_legs_a_player_nearly_always_reaches_with_the_price(client, monkeypatch):
+    monkeypatch.setattr(service, "load_games", _steady_logs)
+    monkeypatch.setattr(service, "_averages", dict)
+    board = client.get("/api/board").json()
+    assert [s["player"] for s in board["steady"]] == ["Jaylen Brown"]      # one leg, not three
+    steady = board["steady"][0]
+    assert (steady["hits"], steady["games"], steady["hit_pct"]) == (19, 20, 95.0)
+    assert steady["threshold"] == 25 and steady["odds"] == 130             # the better price
+    assert steady["price_pct"] == pytest.approx(43.5, abs=0.1)
+    leg = next(leg for leg in board["legs"] if leg["id"] == steady["leg_id"])
+    assert leg["player"] == "Jaylen Brown" and leg["side"] != "Under"
+
+
+def test_steady_is_empty_without_game_logs(client):
+    assert client.get("/api/board").json()["steady"] == []
 
 
 def test_an_unknown_model_falls_back_to_one_that_has_lines(client):
@@ -200,6 +236,28 @@ def test_a_game_that_has_not_started_has_no_detail(feed):
     assert feed.get("/api/live/g2").json()["detail"] is None
 
 
+def test_live_receipt_times_are_cached_source_times_not_browser_request_times(feed):
+    first = feed.get("/api/live").json()
+    second = feed.get("/api/live").json()
+    assert first[0]["received_at"] == second[0]["received_at"]
+    assert first[0]["detail_received_at"] == second[0]["detail_received_at"]
+    assert dt.datetime.fromisoformat(first[0]["received_at"]).tzinfo is not None
+    assert first[0]["detail_available"] is True
+    upcoming = next(game for game in first if game["state"] == "upcoming")
+    assert upcoming["detail_received_at"] is None
+
+
+def test_a_failed_game_detail_keeps_the_scoreboard_and_reports_unavailability(feed, monkeypatch):
+    def down(*args):
+        raise nba_live.LiveDataError("Game feed unavailable")
+    monkeypatch.setattr(nba_live, "fetch_detail", down)
+    response = feed.get("/api/live")
+    assert response.status_code == 200
+    game = response.json()[0]
+    assert game["state"] == "live" and game["received_at"]
+    assert game["detail_available"] is False and game["detail_received_at"] is None
+
+
 def test_an_unknown_game_is_a_404(feed):
     assert feed.get("/api/live/zzz").status_code == 404
 
@@ -289,3 +347,66 @@ def test_picks_list_each_line_with_every_model_and_the_liked_bets(client):
 
 def test_picks_for_a_day_without_lines_is_a_404(client):
     assert client.get("/api/picks", params={"date": "2020-01-01"}).status_code == 404
+
+
+def test_saved_quote_ids_survive_new_players_and_row_reordering(client, monkeypatch):
+    before = client.get("/api/board").json()["legs"]
+    ledger = _ledger()
+    added = ledger.iloc[[0]].copy()
+    added["player"], added["player_id"] = "Aaron Example", 999
+    monkeypatch.setattr(service, "load_ledger",
+                        lambda: pd.concat([added, ledger.iloc[::-1]], ignore_index=True))
+    service.clear_cache()
+    after = {leg["id"]: leg for leg in client.get("/api/board").json()["legs"]}
+    for leg in before:
+        assert after[leg["id"]] == leg
+        assert 0 <= leg["id"] < 2**53
+
+
+def test_saved_selection_survives_a_price_move_and_shows_the_new_price(client, monkeypatch):
+    before = client.get("/api/board").json()["legs"]
+    leg = next(l for l in before if l["side"] == "Over")
+    changed = _ledger()
+    changed.loc[changed.player_id == leg["player_id"], "over_odds"] = 125
+    monkeypatch.setattr(service, "load_ledger", lambda: changed)
+    service.clear_cache()
+    after = {l["id"]: l for l in client.get("/api/board").json()["legs"]}
+    assert after[leg["id"]]["odds"] == 125          # the same bet, at its new price
+    assert client.post("/api/slip", json={"legs": [leg["id"]]}).status_code == 200
+
+
+def test_a_bet_that_left_the_board_is_rejected_not_repriced(client, monkeypatch):
+    leg = next(l for l in client.get("/api/board").json()["legs"] if l["side"] == "Under")
+    gone = _ledger()
+    monkeypatch.setattr(service, "load_ledger", lambda: gone[gone.player_id != leg["player_id"]])
+    service.clear_cache()
+    response = client.post("/api/slip", json={"legs": [leg["id"]]})
+    assert response.status_code == 404
+    assert "Refresh" in response.json()["detail"]
+
+
+def test_old_slip_cannot_be_graded_against_todays_matchup(feed, monkeypatch):
+    leg = feed.get("/api/board").json()["legs"][0]["id"]
+    monkeypatch.setattr(service, "today", lambda: dt.date(2026, 11, 12))
+    response = feed.post("/api/live/track", json={"date": DAY, "legs": [leg]})
+    assert response.status_code == 422
+    assert "cannot be inferred" in response.json()["detail"]
+
+
+def test_kalshi_only_ledger_is_not_an_empty_record(client, monkeypatch):
+    monkeypatch.setattr(service, "load_ledger", lambda: _ledger().assign(book="kalshi"))
+    result = client.get("/api/record")
+    assert result.status_code == 200
+    assert result.json()["empty"] is False
+    assert result.json()["models"] == []  # FanDuel models stay scoped to FanDuel
+
+
+def test_old_positional_leg_ids_are_rejected(client):
+    assert client.post("/api/slip", json={"legs": [0]}).status_code == 404
+
+
+def test_a_live_game_takes_its_period_from_the_latest_play_not_the_lagging_scoreboard():
+    from edgefinder.api import live
+    game = nba_live.LiveGame("1", nba_live.LIVE, "Q1", 1, "0:00", "MIL", "BOS", 0, 0)
+    assert live.freshest(game, _detail()).period == 2
+    assert live._period_number("OT2") == 6
