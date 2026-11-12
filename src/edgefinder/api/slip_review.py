@@ -100,6 +100,11 @@ def match_text(text: str, table: pd.DataFrame) -> dict:
     for n, (start, player) in enumerate(anchors):
         end = min(start + 6, anchors[n + 1][0] if n + 1 < len(anchors) else len(lines))
         block = " ".join(lines[start:end])
+        # Kalshi prints the whole bet on the player's line ("Name: 8+ rebounds"). Read that line
+        # alone, so the lines after it (other players, not on the board) cannot confuse the stat.
+        own = lines[start].lower()
+        if re.search(r"\d", own) and any(re.search(pattern, own) for pattern in STAT_PATTERNS.values()):
+            block = lines[start]
         lower = block.lower()
         # Combined stats need their own model; never interpret PRA as points.
         combined = bool(re.search(r"\bpra\b|points\s*[+&/]\s*rebounds", lower))

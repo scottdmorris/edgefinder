@@ -244,6 +244,20 @@ def backfill_models(models: Models, now: dt.datetime, dry_run: bool) -> None:
             log.info("%s: %s", matchup, describe(record_lines(event, lines, models)))
 
 
+def plan_kalshi_only(events: list[dict], now: dt.datetime) -> list[nba_snapshot_plan.SnapshotTask]:
+    """Games past the Odds API budget that are due for Kalshi's free prices. Planning them
+    reads only local files, and a failure here must not stop the FanDuel snapshot."""
+    try:
+        ledger = nba_paper.load_ledger()
+        priced = set(ledger.loc[ledger["book"] == "kalshi", "event_id"])
+        closed = set(nba_kalshi_ledger.load_snapshots()["event_id"])
+        return nba_snapshot_plan.plan_kalshi_only(
+            events, nba_props.load_snapshots(), now, priced, closed)
+    except Exception:
+        log.exception("Could not plan the Kalshi-only games; the FanDuel snapshot is unaffected")
+        return []
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dry-run", action="store_true")
@@ -267,12 +281,16 @@ def main() -> None:
         job_health.record("snapshot", job_health.FAILED, f"could not list games: {exc}")
         sys.exit(1)
     tasks = nba_snapshot_plan.plan_snapshots(events, nba_props.load_snapshots(), now)
-    if not tasks:
+    kalshi_only = plan_kalshi_only(events, now)
+    if not tasks and not kalshi_only:
         log.info("Nothing due right now.")
         job_health.record("snapshot", job_health.NOTHING_DUE)
         return
     for task in tasks:
         log.info("due: %-5s %s @ %s", task.phase, task.event["away"], task.event["home"])
+    for task in kalshi_only:
+        log.info("due: %-5s %s @ %s (Kalshi only: past the Odds API budget)",
+                 task.phase, task.event["away"], task.event["home"])
     if args.dry_run:
         log.info("(dry run: no requests spent)")
         return
@@ -301,14 +319,17 @@ def main() -> None:
             record_alt_lines(task.event, models)
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
     early_events = [task.event for task in tasks if task.phase == "early"]
+    kalshi_early = [task.event for task in kalshi_only if task.phase == "early"]
+    if early_events or kalshi_early:
+        record_kalshi(early_events + kalshi_early, models)
     if early_events:
-        record_kalshi(early_events, models)
         log_price_gaps(early_events)
-    late_events = [task.event for task in tasks if task.phase == "late"]
+    late_events = [task.event for task in tasks + kalshi_only if task.phase == "late"]
     if late_events:
         archive_kalshi_closing(late_events)
     detail = f"{archived} of {len(tasks)} due snapshots recorded" + (
-        f"; stopped: {stopped}" if stopped else "")
+        f"; stopped: {stopped}" if stopped else "") + (
+        f"; {len(kalshi_only)} Kalshi-only" if kalshi_only else "")
     failed = api_failed and archived == 0
     job_health.record("snapshot", job_health.FAILED if failed else job_health.OK, detail)
 

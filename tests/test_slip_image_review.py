@@ -91,3 +91,10 @@ def test_ocr_failure_does_not_expose_text_or_internal_paths(client, monkeypatch)
     response = client.post('/api/slip/read', files={'images': ('a.png', png(), 'image/png')})
     assert response.status_code == 503
     assert 'private' not in response.text
+
+
+def test_a_bet_printed_on_the_players_own_line_ignores_the_lines_after_it(client):
+    # Kalshi's layout; the players after Jokic are not on the board and name other stats
+    text = "Nikola Jokic: 25+ points\nGS Warriors vs HOU Rockets\nSome Guard: 3+ threes\nSome Center: 4+ assists"
+    matches = client.post('/api/slip/match', json={**MARKET, "text": text}).json()["matches"]
+    assert [m["candidate_ids"] for m in matches] == [[22]]

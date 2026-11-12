@@ -4,6 +4,30 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Kalshi prices for every game, not just the first six
+- The snapshot job records FanDuel lines for the first six games of a night to protect the
+  Odds API budget, and Kalshi's free prices used to be recorded only for those same six.
+  Games past the budget now get Kalshi's prices too: once in the early window (2.5 to 4
+  hours before tip) and once as a closing price in the last 90 minutes. This spends no Odds
+  API requests. Those games appear on the Kalshi board and count in the Kalshi paper record;
+  they have no FanDuel lines, model picks or price-gap entries.
+- Unchanged: Kalshi markets with a wide spread or little trading are still skipped, which is
+  why low numbers (a star at 10+ points) are often not on the board.
+- Validation: 1,461 Python tests passed (3 expected failures). The job's dry run was clean.
+  A rehearsal priced two real games that had no FanDuel snapshot into a temporary file (366
+  rows, all with a projection) and left the real ledger untouched. The new path has not yet
+  run on a real night; the first chance is the next slate with more than six games.
+
+### Photo slip matching reads one-line bets correctly
+- A bet printed on the player's own line (Kalshi's "Name: 8+ rebounds") is now matched from
+  that line alone. Before, text from the following lines (players not on the board, other
+  stats) could make a recorded bet come back unmatched.
+- Validation: tested on a real 20-leg Kalshi screenshot. All 20 legs were read correctly;
+  4 matched a recorded line (3 before this fix). The other 16 are not on the recorded board:
+  9 player bets in three games the board does not have, 2 team-to-win bets, and 5 player
+  bets at numbers the board does not record (4 below its lowest, 1 between two it has).
+  1,455 Python tests passed (3 expected failures).
+
 ### Mid-game alerts, model picks on Parlay, and a shorter props list
 - Live now warns when a player on your slip looks done for the night while the bet is still
   in play: **Fouled out** (6 fouls), **Ejected** (an ejection or 2 technicals), listed out by
