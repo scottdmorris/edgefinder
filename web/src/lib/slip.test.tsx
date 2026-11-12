@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { savedSlip, useSlip } from './slip'
+import { savedSlip, slipForDate, useSlip } from './slip'
 import type { Leg } from './api'
 
 beforeEach(() => localStorage.clear())
@@ -52,4 +52,11 @@ it('keeps a selection whose price moved and reports the move', () => {
   hook.rerender({ board: new Map([[12, { ...leg, odds: 125 }]]) })
   expect(hook.result.current.legs).toEqual([12])
   expect(hook.result.current.moved).toEqual([{ id: 12, player: 'Example', was: 110, now: 125 }])
+})
+
+it('finds the slip built for a game day, as it was when added', () => {
+  const hook = renderHook(() => useSlip(market, new Map([[12, leg]])))
+  act(() => hook.result.current.toggle(12))
+  expect(slipForDate('2026-11-11')?.legs.map((l) => l.player)).toEqual(['Example'])
+  expect(slipForDate('2026-11-10')).toBeNull()
 })

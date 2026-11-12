@@ -25,6 +25,7 @@ IDEAS_SHOWN = 3
 STEADY_GAMES = 20             # the same window the season backtest measured
 STEADY_MIN_RATE = 0.9
 STEADY_SHOWN = 8
+RECOMMEND_MIN_LINES = 100     # graded lines every model priced before one is recommended
 BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
 _cache: dict[tuple, tuple[float, object]] = {}
 
@@ -123,8 +124,37 @@ def _choose(date: str | None, book: str | None, model: str | None) -> tuple[str,
     books = nba_parlay.books_on(found)
     book = book if book in found else books[0]
     versions = nba_parlay.model_versions(found, book)
-    model = model if model in versions else versions[0]
+    model = model if model in versions else recommended_model(versions, book)
     return date, book, model, found
+
+
+def model_standing(book: str) -> dict[str, dict]:
+    """Each model's graded points record on a price source, and its accuracy on the lines every
+    model priced (lower is better), so no model is flattered by an easier set of lines."""
+    def build() -> dict[str, dict]:
+        ledger = load_ledger()
+        if ledger.empty:
+            return {}
+        head_to_head = nba_paper.compare_versions(ledger, stat="points", book=book)
+        out = {}
+        for version in nba_paper.scope(ledger, book=book)["model_version"].dropna().unique():
+            picks = nba_paper.summary(ledger, model_version=version, stat="points", book=book)
+            scored = version in head_to_head.index
+            out[version] = {
+                "record": picks["record"], "settled": picks["settled"],
+                "lines": int(head_to_head.loc[version, "n"]) if scored else 0,
+                "brier": float(head_to_head.loc[version, "brier_model"]) if scored else None}
+        return out
+    return cached(("standing", book), build, 300)
+
+
+def recommended_model(versions: list[str], book: str) -> str:
+    """The most accurate model so far on this source, once enough lines are graded; until
+    then the newest."""
+    standing = model_standing(book)
+    scored = [v for v in versions if standing.get(v, {}).get("brier") is not None
+              and standing[v]["lines"] >= RECOMMEND_MIN_LINES]
+    return min(scored, key=lambda v: standing[v]["brier"]) if scored else versions[0]
 
 
 def quote_id(date: str, book: str, model: str, row: pd.Series) -> int:
@@ -195,9 +225,7 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
         "book": chosen["book"],
         "books": [{"id": b, "name": BOOK_NAMES.get(b, b)} for b in nba_parlay.books_on(found)],
         "model": chosen["model"],
-        "models": [{"id": v, "short": model_short(v),
-                    "name": model_name(v)}
-                   for v in nba_parlay.model_versions(found, chosen["book"])],
+        "models": _model_options(nba_parlay.model_versions(found, chosen["book"]), chosen["book"]),
         "summary": {"games": len(games),
                     "props": int(table[["player_id", "stat_key"]].drop_duplicates().shape[0]),
                     "gaps": len(gaps)},
@@ -205,6 +233,17 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
         "steady": steady_for(chosen["date"], table),
         "styles": list(nba_parlay.STYLES), "default_style": nba_parlay.DEFAULT_STYLE,
     }
+
+
+def _model_options(versions: list[str], book: str) -> list[dict]:
+    """The models to choose from, the recommended one first, each with its graded record."""
+    standing, best = model_standing(book), recommended_model(versions, book)
+    proven = standing.get(best, {}).get("lines", 0) >= RECOMMEND_MIN_LINES
+    options = [{"id": v, "short": model_short(v), "name": model_name(v),
+                "record": standing.get(v, {}).get("record"),
+                "settled": standing.get(v, {}).get("settled", 0),
+                "recommended": proven and v == best} for v in versions]
+    return sorted(options, key=lambda option: not option["recommended"])
 
 
 def gaps_for(date: str, book: str, table: pd.DataFrame) -> list[dict]:

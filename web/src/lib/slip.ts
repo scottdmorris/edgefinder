@@ -27,6 +27,24 @@ export function savedSlip() {
   } catch { return null }
 }
 
+export type DatedSlip = { market: string; legs: Leg[] }
+
+/** The slip built in this browser for a game day, as it was when added: the one with the most
+ *  legs if several markets (price source, model) have one. Null when there is none. */
+export function slipForDate(date: string): DatedSlip | null {
+  let best: DatedSlip | null = null
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith(`${KEY}:${date}|`)) continue
+      const stored = JSON.parse(localStorage.getItem(key) ?? 'null') as Slip | null
+      const legs = (stored?.legs ?? []).flatMap((id) => stored?.snapshots?.[id] ?? [])
+      if (stored?.market && legs.length > (best?.legs.length ?? 0)) best = { market: stored.market, legs }
+    }
+  } catch { /* storage blocked: there is no slip to show */ }
+  return best
+}
+
 export function useSlip(market: string | null, legsById: Map<number, Leg>) {
   const [slip, setSlip] = useState<Slip>(() => read(market))
   if (slip.market !== market) setSlip(read(market))

@@ -63,7 +63,8 @@ export type Board = {
   book: string
   books: { id: string; name: string }[]
   model: string
-  models: { id: string; short: string; name: string }[]
+  /** the recommended model first; `record` is its graded points record on this price source */
+  models: { id: string; short: string; name: string; record?: string | null; settled?: number; recommended?: boolean }[]
   summary: { games: number; props: number; gaps: number }
   games: { game: string; short: string }[]
   legs: Leg[]
@@ -292,6 +293,43 @@ export type Picks = {
   }[]
 }
 
+// ---- last night ------------------------------------------------------------------------------------
+
+export type ReviewPick = {
+  player: string
+  player_id: number
+  photo: string
+  bet: string
+  game_short: string
+  odds: number | null
+  models: string[]
+  projects: number | null
+  actual: number | null
+  status: 'Hit' | 'Missed' | "Didn't play" | 'Not graded yet'
+  off_by: number | null
+  note: string
+}
+
+export type Review = {
+  date: string
+  label: string
+  days: { date: string; label: string }[]
+  models: { id: string; short: string; record: string; picks: number; settled: number; units: number | null }[]
+  picks: ReviewPick[]
+  misses: ReviewPick[]
+  pending: number
+  kalshi: { record: string; settled: number; units: number | null } | null
+}
+
+export type SlipLegQuery = { player_id: number; stat: string; side: string; line: number }
+export type GradedSlip = {
+  date: string
+  status: string
+  hit: number
+  missed: number
+  legs: (SlipLegQuery & { actual: number | null; status: string; note: string })[]
+}
+
 async function send<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
@@ -330,6 +368,8 @@ export const api = {
   game: (id: string) => get<GameDetail>(`/api/live/${encodeURIComponent(id)}`),
   track: (market: Market, legs: number[]) => send<Tracked>('/api/live/track', { ...market, legs }),
   record: () => get<RecordData>('/api/record'),
+  review: (date?: string) => get<Review>('/api/review', { date }),
+  gradeSlip: (date: string, legs: SlipLegQuery[]) => send<GradedSlip>('/api/review/slip', { date, legs }),
   players: () => get<PlayerOption[]>('/api/players'),
   player: (id: number) => get<PlayerProfile>(`/api/players/${id}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),

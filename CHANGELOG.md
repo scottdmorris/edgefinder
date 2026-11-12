@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A recommended model and a Last night review
+- The Parlay screen now opens on the model that has been most accurate so far, instead of
+  whichever sorts first. Accuracy is measured on the graded points lines every model priced
+  for that price source, and a model is only recommended once 100 such lines are graded.
+  The chosen model shows its graded record and a "Recommended" tag; "Compare models" lists
+  the others with their records. Today that is Shot profile on both FanDuel and Kalshi.
+- New **Last night** screen: for any graded game day, how many model picks hit, each
+  model's record and units that night, the misses furthest from the projection, and every
+  pick. A miss on a short night says so ("Played 8 minutes, usually 30").
+- Last night also grades the slip you built in this browser for that day against the box
+  scores, leg by leg, and marks the leg that sank it with the chance it showed when added.
+  Slips placed outside the app are not included, and mid-game alerts are not kept.
+- Validation: 1,470 Python tests passed (3 expected failures); 20 front-end tests, lint and
+  the production build passed. Checked in the browser on real data: Parlay opened on Shot
+  profile 36-30, and Last night showed Nov 10 (24 of 38 picks hit) and graded a two-leg
+  test slip correctly.
+
 ### Kalshi prices for every game, not just the first six
 - The snapshot job records FanDuel lines for the first six games of a night to protect the
   Odds API budget, and Kalshi's free prices used to be recorded only for those same six.

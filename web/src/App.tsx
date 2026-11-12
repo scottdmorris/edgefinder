@@ -6,11 +6,13 @@ import { Parlay } from './screens/Parlay'
 import { Picks } from './screens/Picks'
 import { Players } from './screens/Players'
 import { Record } from './screens/Record'
+import { Review } from './screens/Review'
 
 // Screens are switched by the address (#/parlay, #/live…) so the back button and links work.
 const SCREENS = [
   { id: 'parlay', label: 'Parlay' },
   { id: 'live', label: 'Live' },
+  { id: 'review', label: 'Last night' },
   { id: 'players', label: 'Players' },
   { id: 'picks', label: 'Picks' },
   { id: 'record', label: 'Record' },
@@ -80,6 +82,7 @@ export default function App() {
       <main>
         {screen === 'parlay' && <Parlay />}
         {screen === 'live' && <Live />}
+        {screen === 'review' && <Review />}
         {screen === 'players' && <Players />}
         {screen === 'picks' && <Picks />}
         {screen === 'record' && <Record />}

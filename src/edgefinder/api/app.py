@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from ..data import nba_live
-from . import live, picks, players, record, service, slip_review
+from . import live, picks, players, record, review, service, slip_review
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
@@ -132,6 +132,28 @@ def live_game(game_id: str) -> dict:
 @app.post("/api/live/track")
 def live_track(request: TrackRequest) -> dict:
     return _feed(lambda: live.track(request.date, request.book, request.model, request.legs))
+
+
+class SlipLeg(BaseModel):
+    player_id: int
+    stat: str = Field(max_length=20)
+    side: str = Field(max_length=10)
+    line: float
+
+
+class GradeRequest(BaseModel):
+    date: str = Field(max_length=10)
+    legs: list[SlipLeg] = Field(max_length=25)
+
+
+@app.get("/api/review")
+def last_night(date: str | None = None) -> dict:
+    return _guard(lambda: review.review(date))
+
+
+@app.post("/api/review/slip")
+def grade_slip(request: GradeRequest) -> dict:
+    return _guard(lambda: review.grade_slip(request.date, [leg.model_dump() for leg in request.legs]))
 
 
 @app.get("/api/record")

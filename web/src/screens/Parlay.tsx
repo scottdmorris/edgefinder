@@ -20,6 +20,7 @@ export function Parlay() {
   const [loading, setLoading] = useState(false)
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
   const [picks, setPicks] = useState<Picks['liked']>([])
+  const [compare, setCompare] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -85,11 +86,26 @@ export function Parlay() {
         <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
           <Pills label="Prices" value={board.book} options={board.books.map((b) => ({ id: b.id, label: b.name }))}
             onChange={(book) => setMarket({ date: board.date, book })} />
-          <Pills label="Model" value={board.model} options={board.models.map((m) => ({ id: m.id, label: m.short }))}
-            onChange={(model) => setMarket({ ...chosen, model })} />
+          <div>
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">Model</div>
+            {compare || !model?.recommended ? (
+              <Pills value={board.model} onChange={(id) => setMarket({ ...chosen, model: id })}
+                options={board.models.map((m) => ({ id: m.id, label: `${m.short}${m.record ? ` ${m.record}` : ''}${m.recommended ? ' ★' : ''}` }))} />
+            ) : (
+              <div className="flex min-h-10 flex-wrap items-center gap-2">
+                <span className="rounded-full border border-button bg-button px-4 py-2 text-sm font-semibold text-button-text">{model.short}{model.record ? ` ${model.record}` : ''}</span>
+                <span className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-bold text-accent">Recommended</span>
+                <button type="button" onClick={() => setCompare(true)} className="min-h-10 px-2 text-xs font-semibold text-muted underline hover:text-text">Compare models</button>
+              </div>
+            )}
+          </div>
         </div>
         {model && <p className="mt-2 text-xs text-muted">
-          The model is how each player's chance is estimated. {model.name}. Prices and lines are the same whichever you pick.
+          {model.name}.{' '}
+          {model.recommended ? 'Recommended because it has been the most accurate on graded lines so far; none has beaten the sportsbook yet.'
+            : board.models.some((m) => m.recommended) ? `★ marks the most accurate so far (${board.models.find((m) => m.recommended)?.short}).`
+              : 'Too few graded lines to recommend one yet.'}
+          {model.record && ` ${model.record} is its graded record on points picks.`}
         </p>}
         <div className="mt-5">
           <Pills label="Game" value={game} onChange={setGame}
