@@ -29,6 +29,6 @@ def recommended_stake(
     """Fractional-Kelly stake, capped at max_fraction of bankroll."""
     if bankroll <= 0:
         return 0.0
-    fraction = kelly_fraction(true_prob, decimal_odds) * kelly_multiplier
-    fraction = min(fraction, max_fraction)
+    fraction = kelly_fraction(true_prob, decimal_odds) * max(kelly_multiplier, 0.0)
+    fraction = max(0.0, min(fraction, max_fraction))
     return round(bankroll * fraction, 2)

@@ -1,3 +1,24 @@
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/edgefinder"]
+
+[tool.coverage.report]
+fail_under = 90
+
+[tool.ruff]
+line-length = 110
+src = ["src", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B"]
+# line length is kept readable by hand; zip() here always pairs equal-length columns
+ignore = ["E501", "B905", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/nba_kalshi_backtest.py" = ["B023"]   # its loop lambdas are called before the loop moves on
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "web"]

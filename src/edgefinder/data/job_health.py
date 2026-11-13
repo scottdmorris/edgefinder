@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import safe_write
+
 log = logging.getLogger(__name__)
 
 HEARTBEAT_PATH = Path(__file__).resolve().parents[3] / "data" / "job_heartbeat.json"
@@ -44,8 +46,7 @@ def record(job: str, outcome: str, detail: str = "", path: Path | None = None,
         beats = load(path)
         beats[job] = {"ran_at": (now or dt.datetime.now(dt.timezone.utc)).isoformat(),
                       "outcome": outcome, "detail": detail}
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(beats, indent=2), encoding="utf-8")
+        safe_write.write_text(path, json.dumps(beats, indent=2))
     except Exception:       # noqa: BLE001 - see docstring
         log.exception("could not write the %s heartbeat", job)
 

@@ -6,6 +6,8 @@ import json
 import time
 from pathlib import Path
 
+from . import safe_write
+
 CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "cache"
 
 
@@ -28,6 +30,5 @@ def get(key: str, max_age_seconds: float):
 
 
 def put(key: str, value) -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     wrapper = {"saved_at": time.time(), "value": value}
-    _path_for(key).write_text(json.dumps(wrapper), encoding="utf-8")
+    safe_write.write_text(_path_for(key), json.dumps(wrapper))

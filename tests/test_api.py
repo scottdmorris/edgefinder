@@ -176,7 +176,6 @@ def test_built_files_are_served_but_nothing_outside_the_build(tmp_path):
 
 # ---- live -----------------------------------------------------------------------------------------
 
-from edgefinder.api import live as live_api  # noqa: E402
 from edgefinder.data import nba_live  # noqa: E402
 from edgefinder.data.nba_live import GameDetail, LiveGame, Play, PlayerLine, Shot  # noqa: E402
 

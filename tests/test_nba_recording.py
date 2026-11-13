@@ -1,4 +1,3 @@
-import pytest
 
 from edgefinder.tracking import nba_paper, nba_recording
 

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import safe_write
+
 logger = logging.getLogger(__name__)
 
 NBA_DIR = Path(__file__).resolve().parents[3] / "data" / "nba"
@@ -122,6 +124,5 @@ def load_season(
             logger.warning("NBA refresh for %s failed (%s); using stale cache", season, exc)
             return _read(path)
         raise NbaDataError(f"Could not fetch NBA {season} game logs: {exc}") from exc
-    directory.mkdir(parents=True, exist_ok=True)
-    games.to_csv(path, index=False)
+    safe_write.write_csv(games, path)
     return games

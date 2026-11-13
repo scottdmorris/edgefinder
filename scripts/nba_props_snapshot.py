@@ -325,7 +325,7 @@ def main() -> None:
             stopped = "request reserve reached"
             break
         try:
-            books = with_retries(lambda: nba_props.fetch_event_books(task.event))
+            books = with_retries(lambda task=task: nba_props.fetch_event_books(task.event))
         except nba_props.PropsApiError as exc:
             log.info("Stopping: %s", exc)
             stopped, api_failed = str(exc)[:120], True

@@ -4,6 +4,32 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Audit clean-up: Streamlit removed, safer saves, security and coverage checks
+- **The Streamlit app is gone.** The React app is the product; `app.py`, the Streamlit
+  screens and their tests are removed, along with the player-questions code only they
+  used. The About screen went with it; its content is in `docs/METHODOLOGY.md`. Team
+  colours moved to `data/team_colors.py` because the web API uses them.
+- **The old odds client is gone.** Its MLB, soccer, UFC and Pinnacle functions were no
+  longer called, and their error messages could include the request URL, which carries
+  the API key. Only the key lookup and the quota reading remain.
+- **Ledger saves are crash-safe.** The ledgers, the price-gap log, the job heartbeat, the
+  caches and the saved box scores are now written to a temporary file and swapped in, so
+  a crash or a sync client grabbing the file mid-write cannot leave half a file. A briefly
+  locked file is retried.
+- **Three small bugs fixed** (previously parked as expected failures): a negative Kelly
+  multiplier can no longer produce a negative stake; removing the margin from a two-way
+  price refuses a negative input; and a game whose id is all digits is no longer recorded
+  again on every run.
+- **Pillow upgraded from 12.3.0 to 13.0.0.** The dependency scan found two known
+  vulnerabilities in the version that reads uploaded slip photos.
+- **Checks added.** Python dependencies are pinned to exact versions, with
+  `requirements-dev.txt` for the test and checking tools. CI now also runs the linter
+  (ruff), a security scan (bandit) and fails if test coverage drops below 90%.
+- Validation: 1,339 Python tests passed with 97% coverage (the count fell because the
+  Streamlit tests were removed; 13 are new). ruff and bandit report nothing, and
+  `pip-audit` reports no known vulnerabilities. A real photo read, a snapshot dry run and
+  `scripts/verify_record.py` (log intact, all 9,440 rows match) were run afterwards.
+
 ### Tested and not adopted: matching training to the injury report, and more history
 - The audit found that `context-v1` and `context-v2` are trained with every recent-roster
   player missing from a box score counted as out (about 52 lost minutes per player-game),

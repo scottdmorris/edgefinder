@@ -6,7 +6,7 @@ module doesn't ask anyone to take that on trust. It measures it, counting
 how many picks were recorded after tip-off (there should be none) and
 showing when each was locked.
 
-Pure shaping with no Streamlit in it.
+Pure shaping with no web framework in it.
 """
 
 import pandas as pd

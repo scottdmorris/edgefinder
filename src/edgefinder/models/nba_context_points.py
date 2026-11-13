@@ -92,7 +92,8 @@ def project_event(
     rows = slate_features[slate_features["player_id"].isin(set(matched.values()))].copy()
     rows["is_home"] = (rows["team"] == home).astype(float)
     for column in nba_context.CONTEXT_COLUMNS:
-        rows[column] = rows["team"].map(lambda team: context.get(team, {}).get(column, np.nan))
+        rows[column] = rows["team"].map(
+            lambda team, column=column: context.get(team, {}).get(column, np.nan))
     by_player = dict(zip(rows["player_id"], model.predict(rows)))
     has_history = rows.set_index("player_id")["rate_ewma_05"].notna().to_dict()
     return {

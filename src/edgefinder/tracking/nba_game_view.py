@@ -1,6 +1,6 @@
 """What the game center shows, worked out from a game's live numbers.
 
-Pure shaping with no Streamlit in it: the court drawing, shot totals, team
+Pure shaping with no web framework in it: the court drawing, shot totals, team
 comparison rows, leaders and the quarter-by-quarter table.
 """
 

@@ -1,4 +1,4 @@
-"""What the web app shows, computed from the same functions the Streamlit app uses.
+"""What the web app shows, computed by the functions in `tracking/`.
 
 Nothing here prices, projects or grades anything new: it gathers the ledger, the legs, the ideas
 and the price gaps that `tracking/` already produces and shapes them for the API. Results are

@@ -1,7 +1,7 @@
 import re
 
 from edgefinder.data import nba_live
-from edgefinder.ui import team_colors
+from edgefinder.data import team_colors
 
 
 def test_every_team_has_a_color_and_nothing_extra():

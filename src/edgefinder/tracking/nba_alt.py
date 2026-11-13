@@ -26,6 +26,7 @@ import pandas as pd
 from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
+from ..data import safe_write
 from ..models import nba_context_points, nba_context_v2, nba_minutes_points, nba_points
 from .nba_paper import (  # noqa: F401 - MIN_MODEL_P/MAX_DISAGREEMENT re-exported
     MAX_DISAGREEMENT, MIN_EV_TO_RECORD, MIN_MODEL_P, MODEL_WEIGHT, can_void, latest_logged,
@@ -134,8 +135,7 @@ def load_ledger(path: Path | None = None) -> pd.DataFrame:
 
 def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:
     path = path or LEDGER_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    ledger.to_csv(path, index=False)
+    safe_write.write_csv(ledger, path)
 
 
 def append_rows(rows: list[dict], path: Path | None = None) -> int:

@@ -15,8 +15,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -r requirements.txt
-      - run: python -m pytest -q
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check src scripts tests
+      - run: python -m bandit -q -r src scripts -ll
+      # fails below the coverage floor set in pyproject.toml
+      - run: python -m pytest -q --cov
 
   web:
     # Type-checks and builds the React front end, so a broken build never reaches main.

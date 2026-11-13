@@ -90,7 +90,8 @@ async def read_slip_images(request: Request) -> dict:
             if (file.size or 0) > slip_review.MAX_FILE_BYTES:
                 raise HTTPException(413, "Each image must be no larger than 8 MB.")
             data = await file.read(slip_review.MAX_FILE_BYTES + 1)
-            outputs.append(await run_in_threadpool(lambda: _review(lambda: slip_review.read_image(data))))
+            outputs.append(await run_in_threadpool(
+                lambda data=data: _review(lambda: slip_review.read_image(data))))
         return {"images": outputs}
 
 

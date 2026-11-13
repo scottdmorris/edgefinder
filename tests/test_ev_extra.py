@@ -119,9 +119,5 @@ def test_stake_stays_between_zero_and_the_cap_for_random_bets():
         assert 0.0 <= stake <= round(bankroll * ev.MAX_BANKROLL_FRACTION, 2) + 0.01
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: recommended_stake does not validate kelly_multiplier; a negative multiplier "
-    "returns a NEGATIVE stake. recommended_stake(1000, 0.6, 2.0, kelly_multiplier=-1) "
-    "== -200.0."))
 def test_a_stake_is_never_negative_even_with_a_bad_multiplier():
     assert ev.recommended_stake(1000, 0.6, 2.0, kelly_multiplier=-1) >= 0.0

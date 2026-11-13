@@ -8,7 +8,7 @@ import pandas as pd
 from ..data import nba_live, nba_stats
 from ..tracking import nba_paper, nba_parlay
 from ..tracking import nba_player_lookup as lookup
-from ..ui import team_colors
+from ..data import team_colors
 from . import service
 
 GAMES_SENT = 82              # a season's worth, newest first; enough for "this season" early on

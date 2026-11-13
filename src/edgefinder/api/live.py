@@ -12,7 +12,7 @@ from ..data import nba_live
 from ..data.nba_live import GameDetail, LiveGame
 from ..tracking import nba_game_view as view
 from ..tracking import nba_parlay, nba_slip_tracker
-from ..ui import team_colors
+from ..data import team_colors
 from . import service
 
 FEED_SECONDS = 8             # the page refreshes every 10s; each refresh then gets a new read

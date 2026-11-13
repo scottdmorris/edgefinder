@@ -200,11 +200,6 @@ def test_save_and_load_round_trip(tmp_path):
     assert loaded.loc[0, "line"] == 24.5 and loaded.loc[0, "player"] == "A"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG (latent): append_rows dedupes on a key built from event_id as written, but "
-    "load_ledger lets pandas infer dtypes, so an all-digit event_id comes back as an int. "
-    "('20261104', ...) != (20261104, ...), so the same row is appended AGAIN on every run. "
-    "Odds API ids are normally 32 hex chars, so this only bites on a digit-only id."))
 def test_append_is_idempotent_even_for_a_digit_only_event_id(tmp_path):
     path = tmp_path / "log.csv"
     numeric = row(event_id="20261104")

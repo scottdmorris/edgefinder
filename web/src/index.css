@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* The black, X-like palette the Streamlit app uses, as Tailwind colors (bg-raised, text-muted…) */
+/* The app's black, X-like palette, as Tailwind colors (bg-raised, text-muted…) */
 @theme {
   --color-ink: #000000;
   --color-raised: #16181c;

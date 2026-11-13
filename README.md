@@ -95,14 +95,12 @@ flowchart LR
     L --> API[FastAPI service]
     NB --> API
     API --> WEB[React web app]
-    L --> APP[Streamlit app]
     C --> V[verify_record.py] --> D[record/DIGESTS.md<br>published fingerprint]
 ```
 
 ## Quick start
 
 The main app is the React interface served by FastAPI at **http://localhost:8000**.
-Streamlit at port 8501 remains available for internal analysis; its browser slips are separate.
 
 ```powershell
 python -m venv .venv
@@ -120,9 +118,8 @@ the server. Run it again after front-end changes. To start an existing build:
 Then open http://localhost:8000 (the API is documented at
 http://localhost:8000/api/docs). For front-end work, `npm run dev` in `web/`
 serves the app with hot reload and passes `/api` through to port 8000.
-To use the internal Streamlit interface, run `.venv\Scripts\streamlit run app.py`.
 
-Both apps only read files the scheduled jobs
+The app only reads files the scheduled jobs
 write, so it works without an API key and never spends Odds API requests. To
 record live FanDuel lines, get a free key at https://the-odds-api.com (500
 requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
@@ -134,12 +131,10 @@ requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
 .venv\Scripts\python scripts\nba_props_settle.py               # grade picks, print the report
 .venv\Scripts\python scripts\verify_record.py                  # check the log and the ledger
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # schedule both jobs
-.venv\Scripts\python -m pytest                                 # about 1,500 tests
+.venv\Scripts\python -m pytest                                 # about 1,350 tests
 ```
 
 ## The views
-
-The web app has the first five; the Streamlit app has all six.
 
 - **Parlay.** Every prop for a game day as stacked Points, Rebounds, Assists and
   3-pointer sections, filterable by game, in a list or grid. Suggested slips per
@@ -153,7 +148,6 @@ The web app has the first five; the Streamlit app has all six.
   market's devigged probability.
 - **Record.** Whether the log is intact, whether the price moved our way after
   each pick, each model's record, accuracy against the market, and every pick.
-- **About.** The method in plain language.
 
 ## How it works
 
@@ -269,7 +263,7 @@ Layout: `src/edgefinder/betting` (odds, expected value, the negative binomial
 and correlated-parlay math), `models` (baselines, minutes, context and shot
 models, correlations), `data` (NBA, Kalshi and Odds API clients, job health),
 `eval` (walk-forward scoring), `tracking` (ledgers, grading, the pick chain),
-`ui` (Streamlit views and the theme), `api` (the FastAPI service the web app
+`api` (the FastAPI service the web app
 reads). The front end is in `web/` (Vite, React, TypeScript, Tailwind): `lib`
 for the typed API client, the slip and polling, then `components` and
 `screens`. See [CHANGELOG.md](CHANGELOG.md) for what

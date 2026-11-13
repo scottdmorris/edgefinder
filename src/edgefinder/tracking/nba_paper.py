@@ -23,6 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..betting import negbin
+from ..data import safe_write
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
 from ..models import nba_stat_model
@@ -158,8 +159,7 @@ def _upgrade_file(path: Path) -> None:
 
 def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:
     path = path or LEDGER_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    ledger.to_csv(path, index=False)
+    safe_write.write_csv(ledger, path)
 
 
 def append_rows(rows: list[dict], path: Path | None = None) -> int:
@@ -212,7 +212,8 @@ def _chain_safely(what: str, action, *args):
 
 
 def _row_key(row: dict) -> tuple:
-    return (row["event_id"], row["player"], float(row["line"]), row["model_version"],
+    # as text: pandas reads an all-digit id back as a number, which would never match
+    return (str(row["event_id"]), row["player"], float(row["line"]), row["model_version"],
             row.get("stat") or DEFAULT_STAT, row.get("book") or DEFAULT_BOOK)
 
 

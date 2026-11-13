@@ -44,7 +44,7 @@ def devig_two_way(prob_a: float, prob_b: float) -> tuple[float, float]:
     (they will sum to > 1). Returns fair probabilities summing to 1.
     """
     total = prob_a + prob_b
-    if total <= 0:
+    if total <= 0 or prob_a < 0 or prob_b < 0:
         raise ValueError("Implied probabilities must be positive")
     return prob_a / total, prob_b / total
 

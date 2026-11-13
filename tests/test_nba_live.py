@@ -357,7 +357,8 @@ def test_three_scheduled_games_can_start_independently(monkeypatch):
     monkeypatch.setattr(boxscore, "BoxScore", lambda gid, **kw: Response({"game": payload(gid, 2)}))
     assert [g.status for g in live.fetch_games()] == [2, 2, 2]
     def flaky(gid, **kw):
-        if gid == "three": raise RuntimeError("not available")
+        if gid == "three":
+            raise RuntimeError("not available")
         return Response({"game": payload(gid, 2)})
     monkeypatch.setattr(boxscore, "BoxScore", flaky)
     assert [g.status for g in live.fetch_games()] == [2, 2, 1]

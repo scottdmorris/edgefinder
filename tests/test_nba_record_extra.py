@@ -187,7 +187,7 @@ def test_calibration_bins_by_hand():
         settled(0.10, False, fair=0.4), settled(0.15, False, fair=0.5),
         settled(0.70, True, fair=0.6), settled(0.75, False, fair=0.5),
         settled(1.0, True, fair=0.9)), "ewma-v1").set_index("Model chance")
-    first = bins.iloc[0]                    # the 0-20% bin (its label is covered by an xfail below)
+    first = bins.iloc[0]                    # the 0-20% bin
     assert first["Lines"] == 2
     assert first["Model said"] == pytest.approx(12.5)
     assert first["Market said"] == pytest.approx(45.0)

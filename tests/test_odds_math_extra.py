@@ -178,10 +178,6 @@ def test_a_fair_market_has_no_hold():
     assert om.market_hold(0.6, 0.4) == pytest.approx(0.0)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: devig_two_way has no input validation beyond total > 0, unlike devig_multiway "
-    "which rejects non-positive inputs. devig_two_way(-0.2, 0.9) returns "
-    "(-0.2857, 1.2857): 'probabilities' outside [0, 1]."))
-def test_two_way_devig_never_returns_a_probability_outside_zero_one():
-    fair = om.devig_two_way(-0.2, 0.9)
-    assert all(0.0 <= p <= 1.0 for p in fair)
+def test_two_way_devig_refuses_a_negative_input_rather_than_return_a_chance_outside_zero_one():
+    with pytest.raises(ValueError):
+        om.devig_two_way(-0.2, 0.9)

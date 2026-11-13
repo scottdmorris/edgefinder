@@ -15,7 +15,7 @@ def simulated_games(teammate_shift: float, opponent_shift: float, games: int = 3
         game_lift = rng.normal() * opponent_shift
         for team in ("AAA", "BBB"):
             team_lift = rng.normal() * teammate_shift
-            for player in range(3):
+            for _ in range(3):
                 noise = rng.normal()
                 z = game_lift + team_lift + noise
                 rows.append({"game_id": game_id, "team": team, "pred_ewma": 20.0,

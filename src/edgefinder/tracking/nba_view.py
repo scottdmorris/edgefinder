@@ -1,6 +1,6 @@
 """Shapes the NBA paper ledger and snapshot archive into display tables.
 
-Pure data shaping with no Streamlit in it, so the dashboard tab stays thin
+Pure data shaping with no web framework in it, so the dashboard tab stays thin
 and this is testable.
 """
 

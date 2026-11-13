@@ -1,6 +1,5 @@
 """The Record screen's data: every FanDuel pick as locked, how it turned out, and whether the
-record has been changed since. Read-only, and built from the same functions as the Streamlit
-Record tab, so the two can never disagree.
+record has been changed since. Read-only, and built from the functions in `tracking/`.
 """
 
 import datetime as dt
@@ -8,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..tracking import gap_log, nba_alt, nba_paper, nba_parlay, nba_record, pick_chain
+from ..tracking import gap_log, nba_alt, nba_paper, nba_record, pick_chain
 from . import service
 
 DIGESTS = Path(__file__).resolve().parents[3] / "record" / "DIGESTS.md"

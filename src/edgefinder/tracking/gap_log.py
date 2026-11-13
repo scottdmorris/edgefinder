@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..betting.odds_math import american_to_decimal
+from ..data import safe_write
 from . import nba_paper
 
 LOG_PATH = Path(__file__).resolve().parents[3] / "data" / "price_gap_log.csv"
@@ -40,8 +41,7 @@ def load(path: Path | None = None) -> pd.DataFrame:
 
 def save(log: pd.DataFrame, path: Path | None = None) -> None:
     path = path or LOG_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    log.to_csv(path, index=False)
+    safe_write.write_csv(log, path)
 
 
 def rows_to_log(gaps: pd.DataFrame, ledger: pd.DataFrame, game_date: str,
