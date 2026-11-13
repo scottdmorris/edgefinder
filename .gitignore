@@ -5,6 +5,7 @@ data/cache/
 data/kalshi_history/
 data/nba/
 data/nba_prop_lines.csv
+data/nba_book_lines.csv
 data/nba_paper_log.csv
 data/nba_alt_log.csv
 data/kalshi_snapshots.csv

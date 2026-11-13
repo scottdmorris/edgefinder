@@ -1,5 +1,10 @@
 """FanDuel NBA player-prop lines from The Odds API, archived for CLV.
 
+The same request also returns the other books in OTHER_BOOKS at no extra cost (the API
+charges per market and region, and up to 10 books count as one region). Their lines are
+kept in their own file as a second opinion on FanDuel's price; picks, the ledger and the
+record stay FanDuel's.
+
 Checked against the live API: a props call costs 1 request per game per
 market (the same call returns every listed player), and the events list
 is free. That is why snapshots are budgeted by game, not by player.
@@ -18,7 +23,9 @@ from . import cache, odds_api
 
 PROPS_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_prop_lines.csv"
 SPORT_KEY = "basketball_nba"
+BOOKS_PATH = PROPS_PATH.with_name("nba_book_lines.csv")
 BOOKMAKER = "fanduel"
+OTHER_BOOKS = ("draftkings",)
 MARKET = "player_points"
 ALT_MARKET = "player_points_alternate"
 QUOTA_RESERVE = 100  # never spend the last requests; the board needs them
@@ -27,6 +34,7 @@ COLUMNS = [
     "fetched_at", "phase", "event_id", "commence_time", "home", "away",
     "player", "line", "over_odds", "under_odds",
 ]
+BOOK_COLUMNS = COLUMNS[:6] + ["book"] + COLUMNS[6:]
 
 
 class PropsApiError(Exception):
@@ -76,14 +84,21 @@ def upcoming_events() -> list[dict]:
     ]
 
 
-def fetch_event_lines(event: dict) -> list[dict]:
-    """One game's player-point lines. Costs 1 request."""
+def fetch_event_books(event: dict,
+                      books: tuple[str, ...] = (BOOKMAKER, *OTHER_BOOKS)) -> dict[str, list[dict]]:
+    """One game's player-point lines from each of `books`, in one call. Costs 1 request
+    however many books are asked for (up to 10). A book listing nothing gets []."""
     payload = _get(
         f"/sports/{SPORT_KEY}/events/{event['event_id']}/odds",
-        {"regions": "us", "markets": MARKET, "bookmakers": BOOKMAKER,
+        {"regions": "us", "markets": MARKET, "bookmakers": ",".join(books),
          "oddsFormat": "american"},
     ).json()
-    return parse_player_lines(payload)
+    return {book: parse_player_lines(payload, book=book) for book in books}
+
+
+def fetch_event_lines(event: dict) -> list[dict]:
+    """One game's FanDuel player-point lines. Costs 1 request."""
+    return fetch_event_books(event, books=(BOOKMAKER,))[BOOKMAKER]
 
 
 def fetch_alt_lines(event: dict) -> list[dict]:
@@ -111,12 +126,12 @@ def parse_alt_lines(payload: dict) -> list[dict]:
     ]
 
 
-def parse_player_lines(payload: dict, market: str = MARKET) -> list[dict]:
-    """Pair each player's Over/Under outcomes into one row per line."""
-    book = next((b for b in payload.get("bookmakers", []) if b.get("key") == BOOKMAKER), None)
-    if book is None:
+def parse_player_lines(payload: dict, market: str = MARKET, book: str = BOOKMAKER) -> list[dict]:
+    """Pair each player's Over/Under outcomes from one book into one row per line."""
+    listing = next((b for b in payload.get("bookmakers", []) if b.get("key") == book), None)
+    if listing is None:
         return []
-    market_data = next((m for m in book.get("markets", []) if m.get("key") == market), None)
+    market_data = next((m for m in listing.get("markets", []) if m.get("key") == market), None)
     if market_data is None:
         return []
     rows: dict[tuple, dict] = {}
@@ -132,13 +147,12 @@ def parse_player_lines(payload: dict, market: str = MARKET) -> list[dict]:
     return list(rows.values())
 
 
-def append_snapshot(event: dict, phase: str, lines: list[dict],
-                    fetched_at: str, path: Path | None = None) -> None:
-    path = path or PROPS_PATH
+def _append(path: Path, columns: list[str], event: dict, phase: str, lines: list[dict],
+            fetched_at: str, extra: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
     with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=columns)
         if is_new:
             writer.writeheader()
         for line in lines:
@@ -148,13 +162,31 @@ def append_snapshot(event: dict, phase: str, lines: list[dict],
                 "home": event["home"], "away": event["away"],
                 "player": line["player"], "line": line["line"],
                 "over_odds": line["over_odds"], "under_odds": line["under_odds"],
-            })
+            } | extra)
+
+
+def append_snapshot(event: dict, phase: str, lines: list[dict],
+                    fetched_at: str, path: Path | None = None) -> None:
+    _append(path or PROPS_PATH, COLUMNS, event, phase, lines, fetched_at, {})
+
+
+def append_book_snapshot(event: dict, phase: str, book: str, lines: list[dict],
+                         fetched_at: str, path: Path | None = None) -> None:
+    """Archive another book's lines for a game. FanDuel's archive is separate and unchanged."""
+    _append(path or BOOKS_PATH, BOOK_COLUMNS, event, phase, lines, fetched_at, {"book": book})
 
 
 def load_snapshots(path: Path | None = None) -> pd.DataFrame:
     path = path or PROPS_PATH
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS)
+    return pd.read_csv(path)
+
+
+def load_book_snapshots(path: Path | None = None) -> pd.DataFrame:
+    path = path or BOOKS_PATH
+    if not path.exists():
+        return pd.DataFrame(columns=BOOK_COLUMNS)
     return pd.read_csv(path)
 
 

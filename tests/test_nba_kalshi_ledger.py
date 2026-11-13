@@ -354,9 +354,9 @@ def run_main(script, monkeypatch, tasks, *, remaining):
 
     def fetch(event):
         order.append(("fanduel_fetch", event["event_id"]))
-        return []
+        return {"fanduel": [], "draftkings": []}
 
-    monkeypatch.setattr(script.nba_props, "fetch_event_lines", fetch)
+    monkeypatch.setattr(script.nba_props, "fetch_event_books", fetch)
     monkeypatch.setattr(script.nba_props, "append_snapshot", lambda *a, **k: None)
     monkeypatch.setattr(script, "record_lines", lambda *a, **k: {})
     monkeypatch.setattr(script, "record_alt_lines", lambda *a, **k: None)
@@ -374,7 +374,7 @@ def run_main(script, monkeypatch, tasks, *, remaining):
 
 
 def run_main_with_fetch(script, monkeypatch, tasks):
-    """Like run_main, but keeps whatever fetch_event_lines the test already installed."""
+    """Like run_main, but keeps whatever fetch_event_books the test already installed."""
     monkeypatch.setattr(script.sys, "argv", ["nba_props_snapshot.py"])
     monkeypatch.setattr(script.nba_props, "upcoming_events", lambda: EVENTS)
     monkeypatch.setattr(script.nba_props, "load_snapshots", lambda: None)
@@ -443,10 +443,48 @@ def test_an_api_failure_before_anything_was_recorded_is_a_failed_run(
         raise script.nba_props.PropsApiError("the odds service is down")
 
     tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early")]
-    monkeypatch.setattr(script.nba_props, "fetch_event_lines", broken)
+    monkeypatch.setattr(script.nba_props, "fetch_event_books", broken)
     run_main_with_fetch(script, monkeypatch, tasks)
     result = beat(heartbeat_file)
     assert result["outcome"] == "failed" and "odds service is down" in result["detail"]
+
+
+# ---- the second book that rides along on the FanDuel request ----------------------------------------
+
+DK_LINE = {"player": "A", "line": 21.5, "over_odds": -120, "under_odds": -105}
+FD_LINE = {"player": "A", "line": 20.5, "over_odds": -110, "under_odds": -110}
+
+
+def test_the_other_books_lines_are_archived_with_the_book_named(script, monkeypatch, caplog):
+    saved = []
+    monkeypatch.setattr(script.nba_props, "append_book_snapshot",
+                        lambda event, phase, book, lines, fetched_at: saved.append(
+                            (event["event_id"], phase, book, lines)))
+    with caplog.at_level(logging.INFO):
+        script.archive_other_books(EVENTS[0], "late", {"fanduel": [FD_LINE], "draftkings": [DK_LINE]},
+                                   RECORDED_AT)
+    assert saved == [("e1", "late", "draftkings", [DK_LINE])]
+    assert any("1 players on both, 1 worth a look" in r.getMessage() for r in caplog.records)
+
+
+def test_a_book_with_no_lines_writes_nothing(script, monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("nothing should be archived")
+
+    monkeypatch.setattr(script.nba_props, "append_book_snapshot", fail)
+    script.archive_other_books(EVENTS[0], "early", {"fanduel": [FD_LINE], "draftkings": []},
+                               RECORDED_AT)
+
+
+def test_a_failure_archiving_the_other_book_never_stops_the_run(script, monkeypatch, caplog):
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(script.nba_props, "append_book_snapshot", boom)
+    with caplog.at_level(logging.INFO):
+        script.archive_other_books(EVENTS[0], "early", {"fanduel": [], "draftkings": [DK_LINE]},
+                                   RECORDED_AT)                      # must not raise
+    assert any("FanDuel snapshot is unaffected" in r.getMessage() for r in caplog.records)
 
 
 def test_not_being_able_to_list_games_is_a_failed_run(script, monkeypatch, heartbeat_file):

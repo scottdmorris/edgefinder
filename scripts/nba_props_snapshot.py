@@ -8,6 +8,8 @@ paper ledger, so the models are judged head to head on the same lines.
 The same games' liquid Kalshi prices (points, rebounds, assists, threes) are
 recorded at the same moment, with book="kalshi". Kalshi spends no Odds API
 requests and its failure never stops the FanDuel work.
+The FanDuel request also returns DraftKings' lines at no extra cost; they are archived
+to their own file and compared with FanDuel's in the log. Picks stay FanDuel's.
 
 Usage:  python scripts/nba_props_snapshot.py [--dry-run] [--backfill-models] [--log-file PATH]
   --dry-run          show what would be fetched or recorded; spends and writes nothing
@@ -32,7 +34,7 @@ from edgefinder.data import (  # noqa: E402
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import (  # noqa: E402
-    gap_log, nba_alt, nba_kalshi_ledger, nba_paper, nba_recording, price_gaps)
+    book_gaps, gap_log, nba_alt, nba_kalshi_ledger, nba_paper, nba_recording, price_gaps)
 
 log = logging.getLogger("nba_props_snapshot")
 
@@ -180,6 +182,25 @@ def record_kalshi(events: list[dict], models: Models) -> None:
         log.exception("Kalshi snapshot failed; the FanDuel snapshot is unaffected")
 
 
+def archive_other_books(event: dict, phase: str, books: dict[str, list[dict]],
+                        fetched_at: str) -> None:
+    """Save the other books' lines from the same request and log how they compare with
+    FanDuel's. Nothing it raises may fail the run."""
+    try:
+        fanduel = books.get(nba_props.BOOKMAKER, [])
+        for book in nba_props.OTHER_BOOKS:
+            lines = books.get(book, [])
+            if not lines:
+                log.info("%s: no lines for %s @ %s", book, event["away"], event["home"])
+                continue
+            nba_props.append_book_snapshot(event, phase, book, lines, fetched_at)
+            table = book_gaps.compare(fanduel, lines)
+            log.info("%s: %d lines archived, %d players on both, %d worth a look",
+                     book, len(lines), len(table), len(book_gaps.worth_a_look(table)))
+    except Exception:
+        log.exception("Archiving the other books failed; the FanDuel snapshot is unaffected")
+
+
 RETRY_ATTEMPTS = 3
 RETRY_WAIT_SECONDS = 20.0
 
@@ -304,13 +325,15 @@ def main() -> None:
             stopped = "request reserve reached"
             break
         try:
-            lines = with_retries(lambda: nba_props.fetch_event_lines(task.event))
+            books = with_retries(lambda: nba_props.fetch_event_books(task.event))
         except nba_props.PropsApiError as exc:
             log.info("Stopping: %s", exc)
             stopped, api_failed = str(exc)[:120], True
             break
-        nba_props.append_snapshot(
-            task.event, task.phase, lines, dt.datetime.now(dt.timezone.utc).isoformat())
+        lines = books.get(nba_props.BOOKMAKER, [])
+        fetched_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        nba_props.append_snapshot(task.event, task.phase, lines, fetched_at)
+        archive_other_books(task.event, task.phase, books, fetched_at)
         recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
         log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)

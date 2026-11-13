@@ -4,6 +4,42 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### DraftKings prices recorded next to FanDuel's
+- The snapshot job now asks for DraftKings' player-points lines in the same request as
+  FanDuel's. The Odds API charges per market and region, not per book, so this spends no
+  extra requests. DraftKings' lines go to their own file (`data/nba_book_lines.csv`), for
+  both the early and the closing snapshot.
+- Each snapshot logs how the two books compare: how many players both list, and how many
+  are "worth a look" (FanDuel pays 3%+ more than DraftKings' fair chance on the same
+  number, or the two numbers are a point or more apart).
+- Unchanged: picks, the paper ledger, the record and every screen are still FanDuel's.
+  Nothing in the app shows DraftKings yet. A failure saving DraftKings' lines never stops
+  the FanDuel snapshot.
+- Validation: 1,499 Python tests passed (3 expected failures), 17 of them new. One real
+  request for tomorrow's Knicks at Pacers game confirmed the cost is still 1 request with
+  both books asked for, and returned 8 FanDuel lines but **no DraftKings lines**. Whether
+  DraftKings had simply not posted that game yet, or does not supply player points on
+  this plan, is not known; the next scheduled snapshot's log line will show it.
+
+### Tested and not adopted: telling the models about the game
+- Other modelers project the game first (who wins, by how much, how many points) and the
+  players second. `scripts/nba_game_context_eval.py` tests that here: each team's expected
+  points, the expected margin and the expected total, worked out from earlier box scores
+  (there is no archive of sportsbook spreads and totals for past seasons), added to
+  context-v2's inputs. Chosen on 2024-25, scored once on 2025-26.
+- **It did not help.** Points error moved from 5.0898 to 5.0891 for the variant chosen on
+  2024-25 (a gain of 0.0007, interval -0.0010 to +0.0026) and no variant's gain was
+  distinguishable from zero; the log score was unchanged or slightly worse. No live model
+  changed and nothing in the app is different.
+- Why, as far as measured: the models already see the opponent's defense and the pace, and
+  the expected margin built from box scores is a weak forecast (correlation 0.45 with the
+  real margin). As a ceiling, a model handed the game's actual final score in advance
+  improves by only 0.135 points of error, so a sportsbook's spread and total could deliver
+  a fraction of that at most.
+- Validation: 8 new tests for the game numbers (including that a game never sees its own
+  score); 1,482 Python tests passed (3 expected failures). The ceiling figure came from a one-off check that
+  is not in the repository.
+
 ### A Parlay screen that leads with one suggested slip
 - **Suggested slip** is now the first thing on the page: one slip with its legs, the chance
   they all hit, and what $10 returns before fees. Safer / Balanced / Bigger payouts changes
