@@ -216,6 +216,20 @@ def _row_key(row: dict) -> tuple:
             row.get("stat") or DEFAULT_STAT, row.get("book") or DEFAULT_BOOK)
 
 
+def latest_logged(games: pd.DataFrame) -> str:
+    """The last day the game logs have a box score for, as YYYY-MM-DD; "" when they have none."""
+    if games.empty:
+        return ""
+    return pd.to_datetime(games["game_date"]).max().strftime("%Y-%m-%d")
+
+
+def can_void(game_date: str, today: dt.date, logged_through: str) -> bool:
+    """A missing box score means "did not play" only once the day has passed AND the game logs
+    reach it. If the download failed and an older file was used, the row waits: a void is
+    permanent, and a stale file would void players who played."""
+    return game_date < today.isoformat() and game_date <= logged_through
+
+
 def settle(
     ledger: pd.DataFrame,
     games: pd.DataFrame,
@@ -228,6 +242,7 @@ def settle(
     `kalshi_snapshots` are the saved late Kalshi prices that close Kalshi rows."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
     values = _stat_values(out, games)
+    logged_through = latest_logged(games)
 
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
@@ -237,7 +252,7 @@ def settle(
         key = (int(row["player_id"]), str(row["game_date"]))
         if key in stat_values:
             _settle_row(out, index, row, stat_values[key])
-        elif str(row["game_date"]) < today.isoformat():
+        elif can_void(str(row["game_date"]), today, logged_through):
             out.loc[index, "status"] = "void"  # the player never got on the floor
             out.loc[index, "pnl_units"] = 0.0
 

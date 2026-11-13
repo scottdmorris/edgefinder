@@ -4,6 +4,21 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A failed stats download can no longer void picks
+- Settling used to void every pending line whose player had no box score once the day had
+  passed. When the morning NBA download fails, an older saved file is used instead, so
+  players who DID play would have been voided for good. Now a line is only voided when the
+  game logs reach that day; otherwise it stays pending and the settle report says how many
+  lines are waiting and where the logs end. Applies to the main ledger, the X+ ledger and
+  the price-gap log.
+- This had not happened: all 286 existing voids were checked against the box scores and
+  none belongs to a player who played.
+- The published fingerprint in `record/DIGESTS.md` is brought up to date (17,836 entries;
+  the last one published was 813 on 2026-11-05), and the README record table now shows
+  all four models over eight graded days.
+- Validation: 1,505 Python tests passed (3 expected failures), 6 of them new.
+  `scripts/verify_record.py` reported the log intact and all 9,440 ledger rows matching.
+
 ### DraftKings prices recorded next to FanDuel's
 - The snapshot job now asks for DraftKings' player-points lines in the same request as
   FanDuel's. The Odds API charges per market and region, not per book, so this spends no

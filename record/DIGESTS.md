@@ -12,3 +12,4 @@ Add a line with `python scripts/verify_record.py --write-digest`, then commit an
 | Date | Entries | Fingerprint |
 |---|---|---|
 | 2026-11-05 | 813 | `c6fb4bab87e50559bc1fe52bc2977642498b7f7a4a8aef141bf6d39891aa5347` |
+| 2026-11-12 | 17836 | `756213f825601d36ab13e1a1d467d2beca3ed6754e98eeed4d9d3b134a206627` |

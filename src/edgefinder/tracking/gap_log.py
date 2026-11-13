@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..betting.odds_math import american_to_decimal
+from . import nba_paper
 
 LOG_PATH = Path(__file__).resolve().parents[3] / "data" / "price_gap_log.csv"
 COLUMNS = [
@@ -99,15 +100,16 @@ def won(side: str, line: float, actual: float) -> bool:
 
 def settle(log: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.DataFrame:
     """Grade pending gaps from the game logs (player_id, game_date, pts) at a flat 1 unit. A player
-    with no game that day is a void once the day has passed."""
+    with no game that day is a void once the day has passed and the logs reach it."""
     out = log.copy().astype({"status": object, "result": object})
     points = {(int(r.player_id), r.game_date.strftime("%Y-%m-%d")): float(r.pts)
               for r in games.itertuples()}
+    logged_through = nba_paper.latest_logged(games)
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
         actual = points.get((int(row["player_id"]), str(row["game_date"])))
         if actual is None:
-            if str(row["game_date"]) < today.isoformat():
+            if nba_paper.can_void(str(row["game_date"]), today, logged_through):
                 out.loc[index, ["status", "pnl_units"]] = ["void", 0.0]
             continue
         hit = won(row["side"], float(row["line"]), actual)

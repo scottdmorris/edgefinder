@@ -246,7 +246,7 @@ def test_non_picks_are_settled_without_a_result():
 
 
 def test_a_past_game_with_no_box_score_is_void():
-    out = nba_alt.settle(frame(row()), games(30).iloc[0:0], TODAY)
+    out = nba_alt.settle(frame(row()), games(30).assign(player_id=99), TODAY)
     assert out.loc[0, "status"] == "void" and out.loc[0, "pnl_units"] == 0.0
 
 

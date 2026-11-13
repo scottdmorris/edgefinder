@@ -24,13 +24,14 @@ at a flat 1 unit):
 
 | Model | Graded picks | Record | Units | Beat the closing price |
 |---|---:|---:|---:|---:|
-| Simple (`ewma-v1`) | 20 | 11-9 | +0.75 | 50% of 14 |
-| Smarter (`minutes-v1`) | 19 | 8-11 | -3.65 | 50% of 16 |
+| Smartest (`context-v1`) | 107 | 59-48 | +4.54 | 48% of 79 |
+| Sharpest (`context-v2`) | 80 | 41-39 | -2.67 | 48% of 60 |
+| Simple (`ewma-v1`) | 139 | 73-66 | -1.17 | 44% of 104 |
+| Smarter (`minutes-v1`) | 108 | 51-57 | -11.65 | 45% of 84 |
 
-One game day graded, as of 2026-11-05. That is far too little to say anything:
-it is a coin flip so far, which is the honest starting point. `Smartest`
-(`context-v1`) priced its first night on 2026-11-05 and has nothing graded yet;
-`Sharpest` (`context-v2`) prices its first lines with the next slate. The live
+Eight game days graded (2026-11-04 to 2026-11-11), as of 2026-11-12. That is still
+too little to tell the models apart from a coin flip, and none of them has beaten
+the closing price more often than not. The live
 version is the Record tab; regenerate this table with
 `python scripts/readme_results.py`.
 
@@ -133,7 +134,7 @@ requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
 .venv\Scripts\python scripts\nba_props_settle.py               # grade picks, print the report
 .venv\Scripts\python scripts\verify_record.py                  # check the log and the ledger
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # schedule both jobs
-.venv\Scripts\python -m pytest                                 # about 1,400 tests
+.venv\Scripts\python -m pytest                                 # about 1,500 tests
 ```
 
 ## The views

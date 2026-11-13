@@ -261,7 +261,8 @@ def test_settling_does_not_mutate_the_input_ledger():
 
 
 def test_a_player_who_did_not_play_on_a_past_date_is_voided():
-    out = nba_paper.settle(frame(row(pick_side="over", pick_odds=100)), games(pts=30).iloc[0:0],
+    somebody_else = games(pts=30).assign(player_id=99)     # the logs reach the day; he isn't in them
+    out = nba_paper.settle(frame(row(pick_side="over", pick_odds=100)), somebody_else,
                            NO_SNAPSHOTS, TODAY)
     assert out.loc[0, "status"] == "void" and out.loc[0, "pnl_units"] == 0.0
 

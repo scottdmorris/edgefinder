@@ -33,6 +33,11 @@ def build_report(today: dt.date) -> str:
 
     lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"
              f"  ({logged} results added to the pick chain)"]
+    waiting = int(((settled["status"] == "pending")
+                   & (settled["game_date"].astype(str) < today.isoformat())).sum())
+    if waiting:
+        lines.append(f"WAITING: {waiting} lines from past days are still pending; the game logs "
+                     f"only reach {nba_paper.latest_logged(games) or 'nothing'}.")
     versions = sorted(settled["model_version"].dropna().unique())
     for version in versions:
         lines += ["", *version_block(settled, version)]
