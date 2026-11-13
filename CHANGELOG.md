@@ -4,6 +4,24 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Tested and not adopted: matching training to the injury report, and more history
+- The audit found that `context-v1` and `context-v2` are trained with every recent-roster
+  player missing from a box score counted as out (about 52 lost minutes per player-game),
+  while live they are fed the injury report (about 23). A new definition that matches the
+  report was built (`known_only` in `models/nba_context.py`: already missed the previous
+  game, still with the team, has played for it this season) and scored by
+  `scripts/nba_context_v3_eval.py`, chosen on 2024-25 and scored once on 2025-26.
+- **The mismatch costs nothing measurable, and the fix made things worse.** `context-v2`
+  fed the report-like numbers scored 5.0887 against 5.0898 with its training numbers. A
+  model trained on the matching definition scored 5.1138, worse by 0.025 (interval 0.017
+  to 0.034). No `context-v3` was added and no live model changed.
+- **More seasons of training data barely help.** Training on five seasons instead of two
+  improved the error by about 0.006 points (interval 0.000 to 0.012 on 2025-26). The live
+  models train on three; not changed.
+- Caveat: there is no archive of past injury reports, so "what live looks like" is stood in
+  for by numbers worked out from box scores.
+- Validation: the two scripts above were run; 8 new tests cover the new definition; 1,513 Python tests passed (3 expected failures).
+
 ### A failed stats download can no longer void picks
 - Settling used to void every pending line whose player had no box score once the day had
   passed. When the morning NBA download fails, an older saved file is used instead, so
