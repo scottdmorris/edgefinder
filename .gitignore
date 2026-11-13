@@ -23,3 +23,5 @@ data/config.json
 .env.*
 !.env.example
 .claude/
+.coverage
+htmlcov/
