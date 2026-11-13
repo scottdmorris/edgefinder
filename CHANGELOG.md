@@ -4,6 +4,48 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A Parlay screen that leads with one suggested slip
+- **Suggested slip** is now the first thing on the page: one slip with its legs, the chance
+  they all hit, and what $10 returns before fees. Safer / Balanced / Bigger payouts changes
+  the style, "Another" steps through the other suggestions, and "Use this slip" puts it on
+  your slip. It replaces the grid of idea cards.
+- The day, price source and model collapse into one row of small pills; "Change" opens the
+  full choices. The **game filter stays visible** as its own row of pills and narrows the
+  suggestion, the quick adds and the props.
+- **Quick adds** merges Model picks, Price gaps and Steady into one sideways row. Each card
+  says which kind it is and why it is there, and a filter narrows to one kind.
+- FanDuel and Kalshi offer different numbers. A model pick (made on FanDuel's line) can be
+  added on Kalshi only when Kalshi lists the same bet; otherwise the card says "FanDuel
+  line. Kalshi doesn't offer this number." instead of showing no button.
+- Props are one line per player: the player and line, the other numbers to step through,
+  the price's chance with the model's beside it (green when the model rates the bet higher,
+  red when lower, by 2 points or more), then the Over/Under prices.
+- Fixed: after the server had been running for a while, NBA's live scores could fail on
+  every request until a restart. A failed request is now retried on a fresh connection. The
+  cause is inferred (a new process always worked while the long-running one failed); the
+  fix has not yet been seen to recover a failing server.
+- Validation: 1,474 Python tests passed (3 expected failures); 30 front-end tests, lint and
+  the production build passed. Checked in the browser on tonight's board at desktop and
+  phone width, including filtering to one game. The Kalshi "doesn't offer this number"
+  message is covered by a test only.
+
+### A Live screen that keeps the score and your slip in view
+- The chosen game's scoreboard now stays pinned at the top while the rest of the game
+  scrolls under it. When one team is heavily outscoring the other it says so under the clock
+  ("ORL on a 9-2 run": at least 8 points while giving up a third of that or less).
+- **Your players in this game** sits directly under the score: each bet on your slip that
+  belongs to the game, with its count against the target, a progress bar, its status, and
+  the fouled-out / ejected / off-the-floor warning on the card. The count pops and the card
+  flashes when a player adds to it. The whole slip, across every game, moved below the game.
+- **Latest plays** on a live game's Stats tab, the newest four, with a link to all of them.
+  Plays by players on your slip are highlighted there and on the Plays tab.
+- In the score strip the team in front is bold and the team behind is dimmed.
+- Validation: 1,476 Python tests passed (3 expected failures); 26 front-end tests, lint and
+  the production build passed. Checked in the browser on a live game (Raptors at 76ers,
+  first quarter) with a three-leg test slip: the pinned score, slip players and highlighted
+  plays all showed. No scoring run or mid-game warning occurred while I watched;
+  those are covered by tests only.
+
 ### A recommended model and a Last night review
 - The Parlay screen now opens on the model that has been most accurate so far, instead of
   whichever sorts first. Accuracy is measured on the graded points lines every model priced

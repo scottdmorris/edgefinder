@@ -41,6 +41,18 @@ def _fetch_payload(endpoint, *args, root: str) -> dict:
             if attempt:
                 raise
             headers = {**headers, "Cache-Control": "no-cache", "Pragma": "no-cache"}
+            _fresh_session()
+
+
+def _fresh_session() -> None:
+    """Give nba_api a new connection and an empty cookie jar for its next request.
+
+    nba_api shares one session for the life of the process. A server that has been up for a
+    while has been seen to get unreadable answers on every request while a newly started
+    process, asking for the same thing, gets good ones; retrying on the same session cannot
+    recover from that. The old session is left for any request still using it."""
+    from nba_api.live.nba.library.http import NBALiveHTTP
+    NBALiveHTTP.set_session(requests.Session())
 
 
 def _failure_reason(exc: Exception) -> str:

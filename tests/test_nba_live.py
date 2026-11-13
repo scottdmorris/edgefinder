@@ -77,6 +77,29 @@ def test_persistent_bad_json_has_a_bounded_retry_and_clear_error(monkeypatch):
     assert len(calls) == 2
     assert "private" not in str(error.value)
 
+def test_a_failed_request_is_retried_on_a_fresh_session(monkeypatch):
+    from nba_api.live.nba.endpoints import scoreboard
+    from nba_api.live.nba.library.http import NBALiveHTTP
+
+    stale = NBALiveHTTP.get_session()
+    sessions = []
+
+    class Response:
+        def __init__(self, **kwargs):
+            sessions.append(NBALiveHTTP.get_session())
+
+        def get_dict(self):
+            # the long-lived session only ever gets an unreadable answer
+            return None if sessions[-1] is stale else {"scoreboard": {"games": []}}
+
+    monkeypatch.setattr(scoreboard, "ScoreBoard", Response)
+    try:
+        assert nba_live.fetch_games() == []
+        assert sessions[0] is stale and sessions[1] is not stale
+    finally:
+        NBALiveHTTP.set_session(None)
+
+
 SCOREBOARD = {"scoreboard": {"games": [
     {"gameId": "0022600173", "gameStatus": 2, "gameStatusText": "2nd Qtr             ",
      "period": 2, "gameClock": "PT01M25.00S",

@@ -110,6 +110,8 @@ def game_card(game: LiveGame, detail: GameDetail | None = None) -> dict:
         "received_at": _scoreboard_feed()["received_at"],
         "detail_received_at": _detail_feed(game)["received_at"] if detail is not None else None,
         "detail_available": detail is not None,
+        "run": view.scoring_run(detail.plays, game.away, game.home)
+        if detail is not None and game.status == nba_live.LIVE else "",
         "away": _side(game, game.away, away_color, detail),
         "home": _side(game, game.home, home_color, detail),
     }

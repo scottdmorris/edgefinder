@@ -7,27 +7,42 @@ import { Court } from './Court'
 import { Photo, Pills } from './ui'
 
 type Detail = NonNullable<GameDetail['detail']>
+const LATEST_PLAYS = 4
 const TABS = [{ id: 'stats', label: 'Stats' }, { id: 'plays', label: 'Plays' }, { id: 'box', label: 'Box score' }]
 
-export function GameCenter({ game }: { game: GameDetail & { detail: Detail } }) {
+/** `mine` are the players on your slip in this game: their plays stand out in the feed. */
+export function GameCenter({ game, mine = [] }: { game: GameDetail & { detail: Detail }; mine?: string[] }) {
   const [tab, setTab] = useState('stats')
+  // box-score plays name players by surname ("Banchero makes driving layup")
+  const surnames = mine.map((name) => name.split(' ').slice(-1)[0]).filter((name) => name.length > 2)
   const colors = { [game.away.team]: game.away.color, [game.home.team]: game.home.color }
   return (
     <div className="mt-5">
       <Pills value={tab} onChange={setTab} options={TABS} />
       <div className="mt-4">
-        {tab === 'stats' && <Stats game={game} colors={colors} />}
-        {tab === 'plays' && <Plays plays={game.detail.plays} colors={colors} gameId={game.id} />}
+        {tab === 'stats' && <Stats game={game} colors={colors} surnames={surnames} onAllPlays={() => setTab('plays')} />}
+        {tab === 'plays' && <Plays plays={game.detail.plays} colors={colors} gameId={game.id} surnames={surnames} />}
         {tab === 'box' && <Box game={game} />}
       </div>
     </div>
   )
 }
 
-function Stats({ game, colors }: { game: GameDetail & { detail: Detail }; colors: Record<string, string> }) {
+function Stats({ game, colors, surnames, onAllPlays }: {
+  game: GameDetail & { detail: Detail }; colors: Record<string, string>; surnames: string[]; onAllPlays: () => void
+}) {
   const { detail } = game
   return (
     <div className="space-y-6">
+      {game.state === 'live' && detail.plays.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-baseline justify-between">
+            <Heading>Latest plays</Heading>
+            <button type="button" onClick={onAllPlays} className="text-xs font-semibold text-muted underline hover:text-text">All plays</button>
+          </div>
+          <Plays plays={detail.plays.slice(0, LATEST_PLAYS)} colors={colors} gameId={game.id} surnames={surnames} />
+        </div>
+      )}
       <Quarters detail={detail} colors={colors} />
       <Shots game={game} colors={colors} />
       {detail.compare.length > 0 && (
@@ -134,21 +149,26 @@ function Shots({ game, colors }: { game: GameDetail & { detail: Detail }; colors
   )
 }
 
-function Plays({ plays, colors, gameId }: { plays: Play[]; colors: Record<string, string>; gameId: string }) {
+function Plays({ plays, colors, gameId, surnames = [] }: {
+  plays: Play[]; colors: Record<string, string>; gameId: string; surnames?: string[]
+}) {
   const newest = plays.length ? plays[0].order : -1
   const previous = usePrevious(`${gameId}:${newest}`)
   const seen = previous && previous.startsWith(`${gameId}:`) ? Number(previous.split(':')[1]) : null
   if (!plays.length) return <div className="text-sm text-muted">No plays yet.</div>
   return (
     <ol className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
-      {plays.map((p) => (
-        <li key={p.order} className={`flex gap-3 px-4 py-2.5 ${seen !== null && p.order > seen ? 'ticker flash' : ''}`}
-          style={{ boxShadow: p.team ? `inset 3px 0 0 ${colors[p.team] ?? 'transparent'}` : undefined }}>
-          <span className="w-16 shrink-0 text-xs tabular-nums text-muted">{p.period} {p.clock}</span>
-          <span className="min-w-0 flex-1 text-sm">{p.text}</span>
-          {p.score && <span className="shrink-0 text-xs font-bold tabular-nums text-muted">{p.score}</span>}
-        </li>
-      ))}
+      {plays.map((p) => {
+        const yours = surnames.some((name) => p.text.includes(name))
+        return (
+          <li key={p.order} className={`flex gap-3 px-4 py-2.5 ${yours ? 'bg-accent/10' : ''} ${seen !== null && p.order > seen ? 'ticker flash' : ''}`}
+            style={{ boxShadow: p.team ? `inset 3px 0 0 ${colors[p.team] ?? 'transparent'}` : undefined }}>
+            <span className="w-16 shrink-0 text-xs tabular-nums text-muted">{p.period} {p.clock}</span>
+            <span className={`min-w-0 flex-1 text-sm ${yours ? 'font-semibold text-accent' : ''}`}>{p.text}</span>
+            {p.score && <span className="shrink-0 text-xs font-bold tabular-nums text-muted">{p.score}</span>}
+          </li>
+        )
+      })}
     </ol>
   )
 }

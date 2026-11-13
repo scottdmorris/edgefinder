@@ -33,8 +33,10 @@ export function Live() {
       </div>
       {games.error && <p role="alert" className="mt-3 text-sm text-warn">Showing the last successful board. {games.error}</p>}
       <Overview games={list} chosen={id} onChoose={setChosen} legs={tracked.error ? [] : tracked.data?.legs ?? []} />
+      {id && <Game key={id} id={id} card={list.find((g) => g.id === id)!}
+        legs={(tracked.error ? [] : tracked.data?.legs ?? []).filter((leg) => leg.game_id === id)} />}
+      {/* the whole slip, across every game, sits under the game being watched */}
       <SlipTracker slip={slip} tracked={tracked} />
-      {id && <Game key={id} id={id} card={list.find((g) => g.id === id)!} />}
     </div>
   )
 }
@@ -57,13 +59,17 @@ export function Overview({ games, chosen, onChoose, legs }: {
               </span>
               {mine > 0 && <span className="rounded-full bg-accent/15 px-1.5 text-accent">{mine} on slip</span>}
             </div>
-            {[g.away, g.home].map((side) => (
-              <div key={side.team} className="mt-0.5 flex items-center gap-1.5 text-sm">
-                <img src={side.logo} alt="" className="size-4" />
-                <span className="flex-1 font-bold">{side.team}</span>
-                {g.state !== 'upcoming' && <span className="font-black tabular-nums">{side.score}</span>}
-              </div>
-            ))}
+            {[g.away, g.home].map((side) => {
+              // the team in front reads at full strength; the one behind steps back
+              const behind = g.state !== 'upcoming' && side.score < Math.max(g.away.score, g.home.score)
+              return (
+                <div key={side.team} className={`mt-0.5 flex items-center gap-1.5 text-sm ${behind ? 'text-muted' : ''}`}>
+                  <img src={side.logo} alt="" className={`size-4 ${behind ? 'opacity-60' : ''}`} />
+                  <span className={`flex-1 ${behind ? 'font-semibold' : 'font-bold'}`}>{side.team}</span>
+                  {g.state !== 'upcoming' && <span className={`tabular-nums ${behind ? 'font-semibold' : 'font-black'}`}>{side.score}</span>}
+                </div>
+              )
+            })}
             {g.state === 'live' && g.detail_available === false && <div className="mt-0.5 text-[11px] text-warn">Score only for now</div>}
           </button>
         )
@@ -72,14 +78,16 @@ export function Overview({ games, chosen, onChoose, legs }: {
   )
 }
 
-function Game({ id, card }: { id: string; card: GameCard }) {
+function Game({ id, card, legs = [] }: { id: string; card: GameCard; legs?: TrackedLeg[] }) {
   // details only matter once a game is on; a finished one is fetched once and kept
   const started = card.state !== 'upcoming'
   const detail = usePoll(() => api.game(id), card.state === 'live' ? REFRESH_MS : 3_600_000, `${id}:${started}`)
   const shown = detail.data ?? { ...card, detail: null }
   return (
     <div className="mt-5">
-      <Hero game={{ ...shown, ...card }} />
+      {/* the score stays in view while the rest of the game scrolls under it */}
+      <div className="sticky top-2 z-30"><Hero game={{ ...shown, ...card }} /></div>
+      <MyPlayers legs={legs} />
       {card.state === 'live' && <div className="mt-2"><Freshness receivedAt={detail.data?.detail_received_at} error={detail.error} label="Game details received" /></div>}
       {started && (detail.error || (detail.data && !detail.data.detail)) && <p role="alert" className="mt-2 text-sm text-warn">{detail.error ?? 'NBA game details are temporarily unavailable'}. {shown.detail ? 'Showing previous game details.' : 'Retrying automatically.'}</p>}
       {!started && <p className="mt-3 text-sm text-muted">Tips off at {card.status}. Shots, plays and the box score appear once the game starts.</p>}
@@ -90,7 +98,7 @@ function Game({ id, card }: { id: string; card: GameCard }) {
           Foul trouble: {shown.detail.foul_trouble.map((f) => `${f.name.split(' ').slice(-1)[0]} ${f.fouls} (${f.team})`).join(', ')}
         </p>
       )}
-      {shown.detail && <GameCenter game={{ ...shown, detail: shown.detail }} />}
+      {shown.detail && <GameCenter game={{ ...shown, detail: shown.detail }} mine={legs.map((leg) => leg.player)} />}
     </div>
   )
 }
@@ -99,13 +107,16 @@ function Hero({ game }: { game: GameCard }) {
   const live = game.state === 'live'
   const started = game.state !== 'upcoming'
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-line px-4 py-5 sm:px-6"
+    <div className="relative overflow-hidden rounded-3xl border border-line px-4 py-3 shadow-2xl sm:px-6"
       style={{ background: `linear-gradient(110deg, color-mix(in srgb, ${game.away.color} 22%, #000) 0%, #0b0c0e 45%, #0b0c0e 55%, color-mix(in srgb, ${game.home.color} 22%, #000) 100%)` }}>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
         <TeamSide side={game.away} started={started} gameId={game.id} />
-        <div className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${live ? 'bg-bad/15 text-bad' : 'bg-raised text-muted'}`}>
-          {live && <span className="live-dot size-1.5 rounded-full bg-bad" />}
-          {game.state === 'final' ? 'Final' : shortStatus(game.status)}
+        <div className="flex flex-col items-center gap-1">
+          <div className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${live ? 'bg-bad/15 text-bad' : 'bg-raised text-muted'}`}>
+            {live && <span className="live-dot size-1.5 rounded-full bg-bad" />}
+            {game.state === 'final' ? 'Final' : shortStatus(game.status)}
+          </div>
+          {live && game.run && <div key={game.run} className="ticker whitespace-nowrap text-[11px] font-semibold text-muted">{game.run}</div>}
         </div>
         <TeamSide side={game.home} started={started} gameId={game.id} right />
       </div>
@@ -124,11 +135,53 @@ function TeamSide({ side, started, gameId, right }: { side: Side; started: boole
   const scored = before !== undefined && before.startsWith(`${gameId}:`) && Number(before.split(':')[1]) < side.score
   return (
     <div className={`flex min-w-0 items-center gap-2 sm:gap-3 ${right ? 'flex-row-reverse text-right' : ''}`}>
-      <img src={side.logo} alt="" className="size-10 shrink-0 sm:size-16" />
+      <img src={side.logo} alt="" className="size-9 shrink-0 sm:size-12" />
       <div className="min-w-0">
         <div className="text-sm font-bold" style={{ color: side.color }}>{side.team}</div>
-        {started && <div key={side.score} className={`text-3xl font-black tabular-nums sm:text-5xl ${scored ? 'score-pop' : ''}`}>{side.score}</div>}
+        {started && <div key={side.score} className={`text-3xl font-black tabular-nums sm:text-4xl ${scored ? 'score-pop' : ''}`}>{side.score}</div>}
       </div>
+    </div>
+  )
+}
+
+// The bets on your slip that belong to this game, right under its score: how far along each is,
+// and a warning on the card when the player looks done for the night.
+export function MyPlayers({ legs }: { legs: TrackedLeg[] }) {
+  if (!legs.length) return null
+  return (
+    <section className="mt-3" aria-label="Your players in this game">
+      <h2 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted">Your players in this game</h2>
+      <div className="grid gap-2 sm:grid-cols-2">{legs.map((leg) => <MyPlayer key={leg.id} leg={leg} />)}</div>
+    </section>
+  )
+}
+
+function MyPlayer({ leg }: { leg: TrackedLeg }) {
+  const before = usePrevious(leg.have)
+  const moved = before !== undefined && before !== null && leg.have !== null && leg.have > before
+  const tone = leg.alert ? 'warn' : leg.status === 'Hit' ? 'good' : leg.status === 'Missed' ? 'bad' : 'text'
+  const bar = { warn: 'bg-warn', good: 'bg-good', bad: 'bg-bad', text: 'bg-text' }[tone]
+  return (
+    <div key={leg.have} className={`rounded-2xl border bg-raised p-3 ${leg.alert ? 'border-warn/60' : 'border-line'} ${moved ? 'flash' : ''}`}>
+      <div className="flex items-center gap-3">
+        <Photo src={leg.photo} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-bold">{leg.player}</div>
+          <div className="truncate text-xs text-muted">{leg.bet}</div>
+        </div>
+        {leg.have !== null && (
+          <div className="text-right">
+            <div className={`text-xl font-black tabular-nums ${moved ? 'score-pop' : ''}`}>{leg.have}<span className="text-sm font-semibold text-muted">/{leg.target}</span></div>
+          </div>
+        )}
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[leg.status] ?? ''}`}>{leg.status}</span>
+      </div>
+      {leg.have !== null && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+          <div className={`h-full rounded-full transition-all duration-700 ${bar}`} style={{ width: `${Math.round(leg.progress * 100)}%` }} />
+        </div>
+      )}
+      {leg.alert && <div className="mt-2 text-xs font-semibold text-warn">{leg.alert}.</div>}
     </div>
   )
 }

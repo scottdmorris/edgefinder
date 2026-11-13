@@ -10,7 +10,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
-from ..data.nba_live import PlayerLine, Shot
+from ..data.nba_live import Play, PlayerLine, Shot
 
 # real court, in feet
 COURT_LENGTH, COURT_WIDTH = 94.0, 50.0
@@ -266,3 +266,37 @@ def box_table(players: dict[int, PlayerLine], team: str, starters: bool) -> pd.D
         "TO": [p.turnovers for p in chosen], "PF": [p.fouls for p in chosen],
         "+/-": [f"{p.plus_minus:+.0f}" for p in chosen],
     })
+
+
+# ---- the shape of the game -------------------------------------------------------------------------
+
+RUN_MIN_POINTS = 8             # a team needs this many in the stretch for it to be called a run
+RUN_MAX_SHARE = 1 / 3          # while giving up no more than this share of them
+RUN_LOOKBACK = 16              # score changes looked back over
+
+
+def _score_changes(plays: list[Play]) -> list[Play]:
+    changes, last = [], (0, 0)
+    for item in plays:
+        score = (item.away_score, item.home_score)
+        if score != last:
+            changes.append(item)
+            last = score
+    return changes
+
+
+def scoring_run(plays: list[Play], away: str, home: str) -> str:
+    """'ORL on a 9-2 run' when one team has heavily outscored the other up to now, else ''."""
+    changes = _score_changes(plays)
+    if len(changes) < 2:
+        return ""
+    latest, best = changes[-1], None
+    for earlier in reversed(changes[-RUN_LOOKBACK - 1:-1]):
+        scored = {away: latest.away_score - earlier.away_score,
+                  home: latest.home_score - earlier.home_score}
+        team = max(scored, key=scored.get)
+        made, allowed = scored[team], min(scored.values())
+        if made >= RUN_MIN_POINTS and allowed <= made * RUN_MAX_SHARE:
+            if best is None or made - allowed > best[1] - best[2]:
+                best = (team, made, allowed)
+    return f"{best[0]} on a {best[1]}-{best[2]} run" if best else ""

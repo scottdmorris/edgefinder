@@ -4,6 +4,7 @@ import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/l
 import { Empty, Photo, Pills } from './ui'
 
 const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
+const MODEL_AGREES = 2     // percentage points within which the model and the price are called level
 const SHOWN = 6     // players listed before "Show all"; the biggest names come first
 const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -38,9 +39,9 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
     </div> : rows.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another game or player." /></div> : <>
       <p className="mt-3 text-xs text-muted">
         {kalshi ? 'Tap a number to change the line, then Yes or No to add it.' : 'Tap a number to change the line, then Over or Under to add it.'} The
-        big % is the chance the price implies; "model" is what the chosen model thinks.
+        big % is the chance the price implies; "model" is the chosen model's view, green when it rates the bet higher and red when lower.
       </p>
-      <div className="mt-2 grid grid-cols-1 gap-2.5 xl:grid-cols-2">{(open ? rows : rows.slice(0, SHOWN)).map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} />)}</div>
+      <div className="mt-2 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">{(open ? rows : rows.slice(0, SHOWN)).map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} />)}</div>
       {!open && rows.length > SHOWN && <button type="button" onClick={() => setAll(true)}
         className="mt-3 min-h-11 w-full rounded-full border border-line text-sm font-semibold hover:border-line-strong">Show all {rows.length} players</button>}
     </>}
@@ -73,38 +74,38 @@ export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[
     const name = kalshi ? word : leg.side.endsWith('+') ? 'At least' : word
     const price = kalshi ? `${Math.round(100 / (leg.odds > 0 ? leg.odds / 100 + 1 : 100 / -leg.odds + 1))}¢` : american(leg.odds)
     return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}`} onClick={() => toggle(leg.id)}
-      className={`min-h-11 flex-1 rounded-full px-3 text-sm font-bold transition-colors ${on ? 'bg-button text-button-text' : 'border border-line hover:border-line-strong'}`}>
+      className={`min-h-10 min-w-24 flex-1 rounded-full px-3 text-sm font-bold transition-colors sm:flex-none ${on ? 'bg-button text-button-text' : 'border border-line hover:border-line-strong'}`}>
       {on ? '✓ ' : ''}{word} <span className="tabular-nums">{price}</span>
     </button>
   }
 
-  return <div className="min-w-0 rounded-2xl border border-line bg-raised p-3">
-    <div className="flex items-center gap-3">
-      <Photo src={row.photo} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-bold">{row.player} <span className="font-semibold text-muted">· {stepText(step)} {row.stat}</span></div>
-        <div className="truncate text-xs text-muted">
-          {row.game_short}{row.average?.season != null && ` · avg ${row.average.season}`}{compared.projection != null && ` · proj ${compared.projection.toFixed(1)}`}
+  // the model's view against the price: green when it rates this side higher, red when lower
+  const lean = (compared.model_pct ?? 0) - (compared.market_pct ?? 0)
+  const leanTone = compared.model_pct == null || Math.abs(lean) < MODEL_AGREES ? 'text-muted' : lean > 0 ? 'text-good' : 'text-bad'
+
+  // one line per player: who and what, the other numbers to step through, the chance, the prices
+  return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+    <div className="hidden sm:block"><Photo src={row.photo} size={36} /></div>
+    <div className="min-w-0 flex-1 basis-44">
+      <div className="truncate text-sm font-bold">{row.player} <span className="font-semibold text-accent">{stepText(step)} {row.stat}</span></div>
+      {row.steps.length > 1 ? (
+        <div ref={strip} className="no-scrollbar -mx-1 flex gap-0.5 overflow-x-auto px-1">
+          {row.steps.map((s) => {
+            const on = s.threshold === step.threshold
+            const picked = slip.includes(s.yes.id) || (s.no !== null && slip.includes(s.no.id))
+            return <button key={s.threshold} type="button" data-on={on || undefined} aria-current={on || undefined}
+              onClick={() => setChoice({ threshold: s.threshold, selection })}
+              className={`min-h-8 shrink-0 rounded-full px-2 text-xs font-semibold tabular-nums ${on ? 'bg-raised-2 text-text ring-1 ring-line-strong' : picked ? 'text-accent' : 'text-muted hover:text-text'}`}>
+              {stepText(s)}
+            </button>
+          })}
         </div>
-      </div>
-      <div className="text-right" title={`Market ${compared.market_pct?.toFixed(1) ?? '–'}% · model ${compared.model_pct?.toFixed(1) ?? '–'}% · blended ${compared.chance_pct?.toFixed(1) ?? '–'}%`}>
-        <div className="text-xl font-black tabular-nums">{compared.market_pct?.toFixed(0) ?? '–'}%</div>
-        <div className="text-[11px] text-muted">model {compared.model_pct?.toFixed(0) ?? '–'}%</div>
-      </div>
+      ) : <div className="truncate text-xs text-muted">{row.game_short}</div>}
     </div>
-    {row.steps.length > 1 && (
-      <div ref={strip} className="no-scrollbar -mx-1 mt-2.5 flex snap-x gap-1 overflow-x-auto px-1">
-        {row.steps.map((s) => {
-          const on = s.threshold === step.threshold
-          const picked = slip.includes(s.yes.id) || (s.no !== null && slip.includes(s.no.id))
-          return <button key={s.threshold} type="button" data-on={on || undefined} aria-current={on || undefined}
-            onClick={() => setChoice({ threshold: s.threshold, selection })}
-            className={`min-h-9 shrink-0 snap-center rounded-full px-3 text-xs font-semibold ${on ? 'bg-raised-2 text-text ring-1 ring-line-strong' : picked ? 'text-accent' : 'text-muted hover:text-text'}`}>
-            {stepText(s)}
-          </button>
-        })}
-      </div>
-    )}
-    <div className="mt-2.5 flex gap-2">{button(step.yes)}{step.no && button(step.no, true)}</div>
+    <div className="w-20 shrink-0 text-center" title={`${row.game_short}${row.average?.season != null ? ` · averages ${row.average.season}` : ''}${compared.projection != null ? ` · projected ${compared.projection.toFixed(1)}` : ''} · blended ${compared.chance_pct?.toFixed(1) ?? '–'}%`}>
+      <div className="text-xl font-black tabular-nums leading-tight">{compared.market_pct?.toFixed(0) ?? '–'}%</div>
+      <div className={`text-[11px] font-semibold tabular-nums ${leanTone}`}>model {compared.model_pct?.toFixed(0) ?? '–'}%</div>
+    </div>
+    <div className="flex basis-full gap-1.5 sm:basis-auto">{button(step.yes)}{step.no && button(step.no, true)}</div>
   </div>
 }

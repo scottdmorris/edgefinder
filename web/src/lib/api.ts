@@ -125,6 +125,8 @@ export type GameCard = {
   received_at?: string
   detail_received_at?: string | null
   detail_available?: boolean
+  /** "ORL on a 9-2 run" while one team is heavily outscoring the other; empty otherwise */
+  run?: string
   away: Side
   home: Side
 }
