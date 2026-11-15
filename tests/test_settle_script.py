@@ -59,3 +59,10 @@ def test_without_publish_nothing_is_published(script, monkeypatch):
     monkeypatch.setattr(script, "build_report", lambda today: "Ledger: 41 lines")
     monkeypatch.setattr(script, "publish_line", lambda today: pytest.fail("published"))
     script.main()
+
+
+def test_the_fair_close_line_reads_plainly_and_says_when_there_is_nothing(script):
+    assert script.fair_close_text({"clv_novig_n": 0}) == "vs fair close: n/a"
+    assert script.fair_close_text({"clv_novig_n": 40, "avg_clv_novig_pct": -1.234,
+                                   "beat_fair_close_pct": 42.4}) == \
+        "vs fair close -1.23% on 40, beat it 42%"

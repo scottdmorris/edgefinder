@@ -4,6 +4,28 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Picks and gap bets are graded against the fair closing price
+- Every settled pick now gets `clv_novig_pct`: its payout times the market's fair closing
+  chance of that side, minus 1. The fair close removes the book's cut from each book's last
+  price before tip-off and averages the books that closed on the same number (FanDuel and
+  DraftKings for FanDuel picks; Kalshi's own close for Kalshi picks). Positive means the
+  price taken beat where the market finished after the margin, which predicts profit far
+  sooner than wins and losses. The older `clv_pct`, against FanDuel's own price with the
+  margin left in, is kept.
+- Both gap logs get the same figure for over and under bets (X+ bets have no two-sided
+  close). Older gap log files are upgraded to the new column before rows are added.
+- The settle report shows the average, how many bets it covers, and how often the fair
+  close was beaten, for each model and each gap log.
+- First reading, computed on everything graded to 2026-11-14 (it is saved to the ledger by
+  the next settle): FanDuel picks average -4.9% to -5.6% against the fair close for every
+  model, and beat it 3-6% of the time, which is about the size of FanDuel's own margin.
+  Kalshi picks average -0.7% to -1.0% and beat it about 30% of the time. The FanDuel-vs-
+  Kalshi gaps average -1.2% (24 measured) and the DraftKings gaps -6.8% (17 measured).
+  So far no model's picks or gap bets beat the fair close.
+- Also: the X+ ledger's text columns are now read as text, which silences a pandas
+  mixed-type warning.
+- Validation: 1,376 Python tests passed, 13 of them new; ruff clean.
+
 ### FanDuel-vs-DraftKings gaps are graded like the Kalshi ones
 - At each early snapshot, every FanDuel-vs-DraftKings disagreement "worth a look" is now
   logged as a FanDuel bet in `data/book_gap_log.csv`: on the same number, the side FanDuel

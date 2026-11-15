@@ -26,3 +26,5 @@ data/config.json
 .claude/
 .coverage
 htmlcov/
+research_notes/
+reports/

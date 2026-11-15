@@ -136,7 +136,7 @@ def load_ledger(path: Path | None = None) -> pd.DataFrame:
     path = path or LEDGER_PATH
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS)
-    return pd.read_csv(path)
+    return pd.read_csv(path, dtype={"status": object, "result": object})
 
 
 def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:

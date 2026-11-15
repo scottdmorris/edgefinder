@@ -101,4 +101,5 @@ def test_the_summary_counts_and_splits_exact_from_estimated(tmp_path):
 
 def test_an_empty_log_summarises_to_zeros():
     s = gap_log.summary(gap_log.load(__import__("pathlib").Path("does/not/exist.csv")))
-    assert s["all"] == {"logged": 0, "graded": 0, "record": "0-0", "units": 0.0, "roi_pct": 0.0}
+    assert s["all"] == {"logged": 0, "graded": 0, "record": "0-0", "units": 0.0, "roi_pct": 0.0,
+                        "clv_novig_n": 0, "avg_clv_novig_pct": None, "beat_fair_close_pct": None}

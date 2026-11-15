@@ -117,5 +117,6 @@ def rows_to_log(event: dict, fanduel_lines: list[dict], other_lines: list[dict],
             "reference_p": round(float(fair), 6) if pd.notna(fair) else None,
             "how": "number" if gap["line_diff"] != 0 else "price",
             "edge_pct": round(float(edge), 4) if pd.notna(edge) else None,
-            "status": "pending", "actual": None, "result": None, "pnl_units": None})
+            "status": "pending", "actual": None, "result": None, "pnl_units": None,
+            "clv_novig_pct": None})
     return rows

@@ -29,8 +29,9 @@ def build_report(today: dt.date) -> str:
     if ledger.empty:
         return "The ledger is empty: run scripts/nba_props_snapshot.py first."
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
-    settled = nba_paper.settle(ledger, games, nba_props.load_snapshots(), today,
-                               nba_kalshi_ledger.load_snapshots())
+    fanduel_close, other_close = nba_props.load_snapshots(), nba_props.load_book_snapshots()
+    settled = nba_paper.settle(ledger, games, fanduel_close, today,
+                               nba_kalshi_ledger.load_snapshots(), other_close)
     logged = nba_paper.log_settlements(ledger, settled)
     nba_paper.save_ledger(settled)
 
@@ -53,8 +54,8 @@ def build_report(today: dt.date) -> str:
             lines += ["Head to head on the lines every model priced (Brier, lower is better):",
                       comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
     lines += alt_block(games, today)
-    lines += gap_block(games, today)
-    lines += book_gap_block(games, today)
+    lines += gap_block(games, today, (fanduel_close, other_close))
+    lines += book_gap_block(games, today, (fanduel_close, other_close))
     return "\n".join(lines)
 
 
@@ -74,35 +75,43 @@ def alt_block(games, today: dt.date) -> list[str]:
     return lines
 
 
-def gap_block(games, today: dt.date) -> list[str]:
+def fair_close_text(facts: dict) -> str:
+    """How the bets did against the fair (no-vig) closing price."""
+    if not facts["clv_novig_n"]:
+        return "vs fair close: n/a"
+    return (f"vs fair close {facts['avg_clv_novig_pct']:+.2f}% on {facts['clv_novig_n']}, "
+            f"beat it {facts['beat_fair_close_pct']:.0f}%")
+
+
+def gap_block(games, today: dt.date, closes=()) -> list[str]:
     """Grade the FanDuel-vs-Kalshi price gaps and report how betting them would have done."""
     log = gap_log.load()
     if log.empty:
         return []
-    settled = gap_log.settle(log, games, today)
+    settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
     gap_log.save(settled)
     s = gap_log.summary(settled)
     lines = ["", f"Price gaps: {s['all']['logged']} logged, {s['all']['graded']} graded"]
     for part in ("all", "exact", "estimated"):
         f = s[part]
         lines.append(f"  {part:9s} record {f['record']}, {f['units']:+.2f} units "
-                     f"({f['roi_pct']:+.1f}% return)")
+                     f"({f['roi_pct']:+.1f}% return), {fair_close_text(f)}")
     return lines
 
 
-def book_gap_block(games, today: dt.date) -> list[str]:
+def book_gap_block(games, today: dt.date, closes=()) -> list[str]:
     """Grade the FanDuel-vs-DraftKings gaps the same way."""
     log = gap_log.load(book_gaps.LOG_PATH)
     if log.empty:
         return []
-    settled = gap_log.settle(log, games, today)
+    settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
     gap_log.save(settled, book_gaps.LOG_PATH)
     s = gap_log.summary(settled, splits=book_gaps.HOW)
     lines = ["", f"DraftKings gaps: {s['all']['logged']} logged, {s['all']['graded']} graded"]
     for part, label in (("all", "all"), ("price", "better price"), ("number", "other number")):
         f = s[part]
         lines.append(f"  {label:12s} record {f['record']}, {f['units']:+.2f} units "
-                     f"({f['roi_pct']:+.1f}% return)")
+                     f"({f['roi_pct']:+.1f}% return), {fair_close_text(f)}")
     return lines
 
 
@@ -116,6 +125,7 @@ def version_block(settled, version: str) -> list[str]:
         "  avg CLV: " + (f"{clv:+.2f}%" if clv is not None else "n/a")
         + "   avg line move in our favour: "
         + (f"{move:+.2f} pts" if move is not None else "n/a"),
+        f"  {fair_close_text(summary)}",
     ]
     calibration = nba_paper.calibration_summary(settled, model_version=version)
     if calibration["n"] == 0:

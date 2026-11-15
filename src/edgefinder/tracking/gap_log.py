@@ -16,14 +16,15 @@ import pandas as pd
 
 from ..betting.odds_math import american_to_decimal
 from ..data import safe_write
-from . import nba_paper
+from . import closing, nba_paper
 
 LOG_PATH = Path(__file__).resolve().parents[3] / "data" / "price_gap_log.csv"
 COLUMNS = [
     "logged_at", "game_date", "event_id", "commence_time", "game", "player", "player_id",
     "bet", "side", "line", "book", "odds", "price_p", "reference", "reference_p", "how",
-    "edge_pct", "status", "actual", "result", "pnl_units",
+    "edge_pct", "status", "actual", "result", "pnl_units", "clv_novig_pct",
 ]
+MAIN_SIDES = ("Over", "Under")      # an X+ bet has no two-sided close to remove the cut from
 KEY = ["event_id", "player_id", "side", "line", "book"]
 
 
@@ -36,7 +37,8 @@ def load(path: Path | None = None) -> pd.DataFrame:
     path = path or LOG_PATH
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS)
-    return pd.read_csv(path).astype({"status": object, "result": object})
+    log = pd.read_csv(path).reindex(columns=COLUMNS)      # older files lack newer columns
+    return log.astype({"status": object, "result": object})
 
 
 def save(log: pd.DataFrame, path: Path | None = None) -> None:
@@ -64,7 +66,8 @@ def rows_to_log(gaps: pd.DataFrame, ledger: pd.DataFrame, game_date: str,
             "price_p": round(float(gap["Price says %"]) / 100.0, 6),
             "reference": gap["Reference"], "reference_p": round(float(gap["Reference %"]) / 100.0, 6),
             "how": gap["How"], "edge_pct": round(float(gap["Edge %"]), 4),
-            "status": "pending", "actual": None, "result": None, "pnl_units": None})
+            "status": "pending", "actual": None, "result": None, "pnl_units": None,
+            "clv_novig_pct": None})
     return rows
 
 
@@ -81,6 +84,11 @@ def append(rows: list[dict], path: Path | None = None) -> int:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
+    if not is_new:
+        with path.open(encoding="utf-8") as handle:
+            header = handle.readline().strip().split(",")
+        if header != COLUMNS:                  # rewrite first so header and rows agree
+            save(load(path), path)
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
         if is_new:
@@ -118,6 +126,21 @@ def settle(log: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.DataFra
     return out
 
 
+def attach_closing(log: pd.DataFrame, *snapshots: pd.DataFrame | None) -> pd.DataFrame:
+    """A copy with each main-line bet's closing-line value against the fair close of the
+    sportsbook snapshots given (FanDuel's, then the others'). X+ bets get none."""
+    fair = closing.fair_closes(*snapshots)
+    out = log.copy()
+    for index, row in out.iterrows():
+        if row["side"] not in MAIN_SIDES:
+            continue
+        key = (str(row["event_id"]), str(row["player"]), closing.DEFAULT_STAT, float(row["line"]))
+        if key in fair:
+            out.loc[index, "clv_novig_pct"] = closing.novig_clv_pct(
+                row["side"] == "Over", row["odds"], fair[key])
+    return out
+
+
 def summary(log: pd.DataFrame, splits: tuple[str, ...] = ("exact", "estimated")) -> dict[str, dict]:
     """Logged, graded, record, units and return, overall and split by how the bets were
     matched: {"all": {...}, "exact": {...}, "estimated": {...}}."""
@@ -125,9 +148,13 @@ def summary(log: pd.DataFrame, splits: tuple[str, ...] = ("exact", "estimated"))
         graded = part[part["status"] == "settled"]
         units = float(pd.to_numeric(graded["pnl_units"], errors="coerce").sum())
         wins = int((graded["result"] == "win").sum())
+        fair = pd.to_numeric(part["clv_novig_pct"], errors="coerce").dropna()
         return {"logged": len(part), "graded": len(graded),
                 "record": f"{wins}-{len(graded) - wins}", "units": units,
-                "roi_pct": units / len(graded) * 100.0 if len(graded) else 0.0}
+                "roi_pct": units / len(graded) * 100.0 if len(graded) else 0.0,
+                "clv_novig_n": len(fair),
+                "avg_clv_novig_pct": float(fair.mean()) if len(fair) else None,
+                "beat_fair_close_pct": float((fair > 0).mean() * 100.0) if len(fair) else None}
     out = {"all": facts(log)}
     for how in splits:
         out[how] = facts(log[log["how"] == how])

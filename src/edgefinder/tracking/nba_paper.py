@@ -27,7 +27,7 @@ from ..data import safe_write
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
 from ..models import nba_stat_model
-from . import pick_chain
+from . import closing, pick_chain
 from ..models.nba_points import MODEL_DISPERSION, MODEL_VERSION
 
 LEDGER_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_paper_log.csv"
@@ -43,6 +43,7 @@ COLUMNS = [
     "closing_line", "closing_over_odds", "closing_under_odds",
     "clv_pct", "line_move",
     "stat", "book",
+    "clv_novig_pct",
 ]
 _TEXT_COLUMNS = ["status", "result", "pick_side", "went_over", "stat", "book"]
 DEFAULT_STAT = "points"
@@ -237,10 +238,13 @@ def settle(
     snapshots: pd.DataFrame,
     today: dt.date,
     kalshi_snapshots: pd.DataFrame | None = None,
+    book_snapshots: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Return a copy of the ledger with finished games settled and closing
     information attached. `games` needs player_id, game_date and pts.
-    `kalshi_snapshots` are the saved late Kalshi prices that close Kalshi rows."""
+    `kalshi_snapshots` are the saved late Kalshi prices that close Kalshi rows;
+    `book_snapshots` the other sportsbooks' late lines, averaged with FanDuel's into the
+    fair close that `clv_novig_pct` is measured against."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
     values = _stat_values(out, games)
     logged_through = latest_logged(games)
@@ -259,7 +263,25 @@ def settle(
 
     _attach_closing(out, snapshots)
     _attach_kalshi_closing(out, kalshi_snapshots)
+    _attach_fair_close(out, closing.fair_closes(snapshots, book_snapshots),
+                       closing.fair_closes(kalshi_snapshots))
     return out
+
+
+def _attach_fair_close(out: pd.DataFrame, sportsbooks: dict, kalshi: dict) -> None:
+    """Each settled pick's closing-line value against the fair close: FanDuel picks against
+    the sportsbooks that closed on the same number, Kalshi picks against Kalshi's own close."""
+    if "clv_novig_pct" not in out.columns:
+        out["clv_novig_pct"] = None
+    picks = out.index[(out["status"] != "pending") & out["pick_side"].notna()]
+    for index in picks:
+        row = out.loc[index]
+        book = row["book"]
+        source = kalshi if book == "kalshi" else sportsbooks if book == DEFAULT_BOOK else {}
+        key = (str(row["event_id"]), str(row["player"]), str(row["stat"]), float(row["line"]))
+        if key in source:
+            out.loc[index, "clv_novig_pct"] = closing.novig_clv_pct(
+                row["pick_side"] == "over", row["pick_odds"], source[key])
 
 
 def _stat_values(ledger: pd.DataFrame, games: pd.DataFrame) -> dict[str, dict]:
@@ -365,6 +387,8 @@ def summary(ledger: pd.DataFrame, model_version: str | None = None, stat: str | 
     settled = picks[picks["status"] == "settled"]
     units = float(pd.to_numeric(settled["pnl_units"], errors="coerce").sum())
     clv = pd.to_numeric(picks["clv_pct"], errors="coerce").dropna()
+    fair = (pd.to_numeric(picks["clv_novig_pct"], errors="coerce").dropna()
+            if "clv_novig_pct" in picks.columns else pd.Series(dtype=float))
     return {
         "picks": len(picks),
         "settled": len(settled),
@@ -373,6 +397,9 @@ def summary(ledger: pd.DataFrame, model_version: str | None = None, stat: str | 
         "roi_pct": units / len(settled) * 100.0 if len(settled) else 0.0,
         "avg_clv_pct": float(clv.mean()) if len(clv) else None,
         "avg_line_move": _mean_or_none(picks["line_move"]),
+        "clv_novig_n": len(fair),
+        "avg_clv_novig_pct": float(fair.mean()) if len(fair) else None,
+        "beat_fair_close_pct": float((fair > 0).mean() * 100.0) if len(fair) else None,
     }
 
 
