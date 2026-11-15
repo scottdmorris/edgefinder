@@ -318,6 +318,7 @@ def script():
 def heartbeat_file(script, tmp_path, monkeypatch):
     """Keep the tests' heartbeats out of the real data folder."""
     monkeypatch.setattr(script.job_health, "HEARTBEAT_PATH", tmp_path / "heartbeat.json")
+    monkeypatch.setattr(script.book_gaps, "LOG_PATH", tmp_path / "book_gaps.csv")
     monkeypatch.setattr(script, "RETRY_WAIT_SECONDS", 0.0)          # no real waiting in tests
     return tmp_path / "heartbeat.json"
 
@@ -485,6 +486,30 @@ def test_a_failure_archiving_the_other_book_never_stops_the_run(script, monkeypa
         script.archive_other_books(EVENTS[0], "early", {"fanduel": [], "draftkings": [DK_LINE]},
                                    RECORDED_AT)                      # must not raise
     assert any("FanDuel snapshot is unaffected" in r.getMessage() for r in caplog.records)
+
+
+FUTURE = {"event_id": "f1", "commence_time": "2099-01-01T00:00:00Z",
+          "away": "Miami Heat", "home": "Golden State Warriors"}
+
+
+def test_at_the_early_snapshot_the_gaps_are_logged_as_bets_using_the_ledgers_player_ids(
+        script, monkeypatch, tmp_path):
+    ledger = tmp_path / "ledger.csv"
+    row = {c: None for c in script.nba_paper.COLUMNS} | {"event_id": "f1", "player": "A", "player_id": 7}
+    pd.DataFrame([row], columns=script.nba_paper.COLUMNS).to_csv(ledger, index=False)
+    monkeypatch.setattr(script.nba_props, "append_book_snapshot", lambda *args: None)
+    script.archive_other_books(FUTURE, "early", {"fanduel": [FD_LINE], "draftkings": [DK_LINE]},
+                               RECORDED_AT, ledger_path=ledger)
+    logged = script.gap_log.load(tmp_path / "book_gaps.csv")
+    assert list(logged["player_id"]) == [7] and list(logged["side"]) == ["Over"]   # FanDuel a point lower
+    assert list(logged["reference"]) == ["DraftKings"]
+
+
+def test_the_closing_snapshot_logs_no_gaps(script, monkeypatch, tmp_path):
+    monkeypatch.setattr(script.nba_props, "append_book_snapshot", lambda *args: None)
+    monkeypatch.setattr(script, "log_book_gaps", lambda *args: pytest.fail("logged at close"))
+    script.archive_other_books(FUTURE, "late", {"fanduel": [FD_LINE], "draftkings": [DK_LINE]},
+                               RECORDED_AT)
 
 
 def test_not_being_able_to_list_games_is_a_failed_run(script, monkeypatch, heartbeat_file):

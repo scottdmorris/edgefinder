@@ -183,9 +183,10 @@ def record_kalshi(events: list[dict], models: Models) -> None:
 
 
 def archive_other_books(event: dict, phase: str, books: dict[str, list[dict]],
-                        fetched_at: str) -> None:
+                        fetched_at: str, gap_path=None, ledger_path=None) -> None:
     """Save the other books' lines from the same request and log how they compare with
-    FanDuel's. Nothing it raises may fail the run."""
+    FanDuel's. At the early snapshot the gaps worth a look are also logged as bets, to be
+    graded like the Kalshi gaps. Nothing it raises may fail the run."""
     try:
         fanduel = books.get(nba_props.BOOKMAKER, [])
         for book in nba_props.OTHER_BOOKS:
@@ -197,8 +198,24 @@ def archive_other_books(event: dict, phase: str, books: dict[str, list[dict]],
             table = book_gaps.compare(fanduel, lines)
             log.info("%s: %d lines archived, %d players on both, %d worth a look",
                      book, len(lines), len(table), len(book_gaps.worth_a_look(table)))
+            if phase == "early":
+                log_book_gaps(event, fanduel, lines, gap_path, ledger_path)
     except Exception:
         log.exception("Archiving the other books failed; the FanDuel snapshot is unaffected")
+
+
+def log_book_gaps(event: dict, fanduel: list[dict], other: list[dict], gap_path=None,
+                  ledger_path=None) -> int:
+    """Log this game's FanDuel-vs-DraftKings gaps as bets. Players are identified through the
+    rows the models just wrote to the ledger, so this runs after them."""
+    ledger = nba_paper.load_ledger(ledger_path)
+    mine = ledger[ledger["event_id"].astype(str) == str(event["event_id"])]
+    ids = dict(zip(mine["player"], mine["player_id"].astype(int), strict=True))
+    rows = book_gaps.rows_to_log(event, fanduel, other, ids, dt.datetime.now(dt.timezone.utc),
+                                 nba_snapshot_plan.tip_date(event))
+    added = gap_log.append(rows, gap_path or book_gaps.LOG_PATH)
+    log.info("DraftKings gaps logged: %d", added)
+    return added
 
 
 RETRY_ATTEMPTS = 3
@@ -333,8 +350,8 @@ def main() -> None:
         lines = books.get(nba_props.BOOKMAKER, [])
         fetched_at = dt.datetime.now(dt.timezone.utc).isoformat()
         nba_props.append_snapshot(task.event, task.phase, lines, fetched_at)
-        archive_other_books(task.event, task.phase, books, fetched_at)
         recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
+        archive_other_books(task.event, task.phase, books, fetched_at)   # after: it needs the ids
         log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
         archived += 1

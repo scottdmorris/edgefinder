@@ -118,7 +118,7 @@ def settle(log: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.DataFra
     return out
 
 
-def summary(log: pd.DataFrame) -> dict[str, dict]:
+def summary(log: pd.DataFrame, splits: tuple[str, ...] = ("exact", "estimated")) -> dict[str, dict]:
     """Logged, graded, record, units and return, overall and split by how the bets were
     matched: {"all": {...}, "exact": {...}, "estimated": {...}}."""
     def facts(part: pd.DataFrame) -> dict:
@@ -129,6 +129,6 @@ def summary(log: pd.DataFrame) -> dict[str, dict]:
                 "record": f"{wins}-{len(graded) - wins}", "units": units,
                 "roi_pct": units / len(graded) * 100.0 if len(graded) else 0.0}
     out = {"all": facts(log)}
-    for how in ("exact", "estimated"):
+    for how in splits:
         out[how] = facts(log[log["how"] == how])
     return out

@@ -4,6 +4,18 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### FanDuel-vs-DraftKings gaps are graded like the Kalshi ones
+- At each early snapshot, every FanDuel-vs-DraftKings disagreement "worth a look" is now
+  logged as a FanDuel bet in `data/book_gap_log.csv`: on the same number, the side FanDuel
+  pays 3%+ more for than DraftKings' fair chance; on numbers a point or more apart, the side
+  FanDuel's number makes easier (its over when its number is lower, its under when higher).
+  The first call on a bet stands, and nothing is logged once a game has started.
+- The 9:00 settle grades them at a flat 1 unit and reports the record, split into "better
+  price" and "other number". Nothing about picks or the record changes.
+- Backfilled from the early snapshots already archived: 29 bets, 18 graded so far (9-9,
+  -1.21 units). 28 of the 29 are "other number" bets. Far too few to mean anything yet.
+- Validation: 1,363 Python tests passed with 97% coverage, 9 of them new; ruff clean.
+
 ### The public record updates itself every morning
 - The README's record table and the published fingerprint in `record/DIGESTS.md` were only
   refreshed by hand, so they were always a few days behind. The 9:00 settle job now
