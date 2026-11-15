@@ -44,9 +44,15 @@ DISPERSIONS = {
     nba_context_v2.MODEL_VERSION: nba_context_v2.MODEL_DISPERSION,
 }
 _MIN_PROB, _MAX_PROB = 0.001, 0.999
+# These models still price every X+ line, so the record keeps judging them, but they make no
+# X+ picks: their single fixed spread overrates long shots, and over their first 1,250 graded
+# X+ picks (to 2026-11-13) they returned about -25%, against about -6% for the context models.
+NO_X_PLUS_PICKS = frozenset({nba_points.MODEL_VERSION, nba_minutes_points.MODEL_VERSION})
 
 
-def is_pick(ev: float, model_p: float, market_p: float) -> bool:
+def is_pick(ev: float, model_p: float, market_p: float, model_version: str | None = None) -> bool:
+    if model_version in NO_X_PLUS_PICKS:
+        return False
     return (ev >= MIN_EV_TO_RECORD and model_p >= MIN_MODEL_P
             and abs(model_p - market_p) <= MAX_DISAGREEMENT)
 
@@ -111,7 +117,7 @@ def build_alt_rows(
         market_p = implied_prob(odds)
         blend = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p
         ev = ev_per_unit(blend, american_to_decimal(odds))
-        picked = is_pick(ev, model_p, market_p)
+        picked = is_pick(ev, model_p, market_p, model_version)
         rows.append({column: None for column in COLUMNS} | {
             "recorded_at": recorded_at, "game_date": game_date,
             "event_id": event["event_id"], "commence_time": event["commence_time"],

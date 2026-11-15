@@ -4,6 +4,14 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### The two oldest models no longer make X+ points picks
+- `ewma-v1` and `minutes-v1` still price every X+ points line, so the record keeps judging
+  them, but none of their prices counts as a pick any more. Over their first 1,253 graded
+  X+ picks (to 2026-11-13) they returned -23.7% and -26.0%, against -6.7% and -5.4% for the
+  two context models. Their single fixed spread overrates long shots, which is most of
+  what an X+ ladder holds. Picks already recorded are unchanged.
+- Validation: 1,344 Python tests passed, 5 of them new.
+
 ### Audit clean-up: Streamlit removed, safer saves, security and coverage checks
 - **The Streamlit app is gone.** The React app is the product; `app.py`, the Streamlit
   screens and their tests are removed, along with the player-questions code only they

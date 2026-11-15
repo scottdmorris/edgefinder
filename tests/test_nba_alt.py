@@ -17,7 +17,7 @@ LINES = [
 PREDICTIONS = {"Jaylen Brown": {"player_id": 1, "mean": 26.0}}
 
 
-def rows(version="ewma-v1", predictions=PREDICTIONS):
+def rows(version="context-v1", predictions=PREDICTIONS):
     return nba_alt.build_alt_rows(EVENT, LINES, predictions, "2026-11-04T17:00:00+00:00",
                                   "2026-11-04", model_version=version, dispersion=7.8)
 
@@ -94,7 +94,7 @@ def test_appending_the_same_prices_twice_adds_nothing(tmp_path):
     path = tmp_path / "alt.csv"
     assert nba_alt.append_rows(rows(), path) == 2
     assert nba_alt.append_rows(rows(), path) == 0
-    assert nba_alt.append_rows(rows("minutes-v1"), path) == 2   # another model is new
+    assert nba_alt.append_rows(rows("context-v2"), path) == 2   # another model is new
 
 
 def test_one_failing_model_does_not_stop_the_others(tmp_path):
@@ -142,7 +142,7 @@ def test_the_summary_counts_only_graded_picks():
 
 
 def test_suggestions_list_picks_best_first_and_merge_agreeing_models():
-    ledger = pd.DataFrame(rows("ewma-v1") + rows("minutes-v1"))
+    ledger = pd.DataFrame(rows("context-v1") + rows("context-v2"))
     table = nba_alt.suggestions(ledger, "2026-11-04")
     assert list(table["Bet"]) == ["Jaylen Brown · 25+ points"]
     assert table.iloc[0]["Agree"] == 2
@@ -152,7 +152,7 @@ def test_suggestions_show_one_rung_per_player():
     lines = [{"player": "Jaylen Brown", "line": 24.5, "over_odds": 130},
              {"player": "Jaylen Brown", "line": 25.5, "over_odds": 150}]
     data = nba_alt.build_alt_rows(EVENT, lines, PREDICTIONS, "2026-11-04T17:00:00+00:00",
-                                  "2026-11-04", model_version="ewma-v1", dispersion=7.8)
+                                  "2026-11-04", model_version="context-v1", dispersion=7.8)
     assert sum(r["is_pick"] for r in data) == 2
     assert len(nba_alt.suggestions(pd.DataFrame(data), "2026-11-04")) == 1
 
@@ -162,7 +162,7 @@ def test_suggestions_with_no_picks_are_empty():
 
 
 def test_games_recorded_counts_distinct_games_on_a_date():
-    ledger = pd.DataFrame(rows("ewma-v1") + rows("minutes-v1"))
+    ledger = pd.DataFrame(rows("context-v1") + rows("context-v2"))
     assert nba_alt.games_recorded(ledger, "2026-11-04") == 1
     assert nba_alt.games_recorded(ledger, "2026-11-05") == 0
 

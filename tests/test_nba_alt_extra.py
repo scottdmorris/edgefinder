@@ -12,7 +12,7 @@ EVENT = {"event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
 TODAY = dt.date(2026, 11, 6)
 
 
-def build(lines, model_p=None, monkeypatch=None, mean=26.0, version="ewma-v1"):
+def build(lines, model_p=None, monkeypatch=None, mean=26.0, version="context-v1"):
     if model_p is not None:
         monkeypatch.setattr(nba_alt, "p_at_least", lambda *_args: model_p)
     return nba_alt.build_alt_rows(
