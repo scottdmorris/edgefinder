@@ -33,3 +33,29 @@ def test_a_crashed_grading_run_reports_failed_and_still_exits_nonzero(script, mo
         script.main()
     beat = job_health.load(script.job_health.HEARTBEAT_PATH)["settle"]
     assert beat["outcome"] == "failed" and "game logs missing" in beat["detail"]
+
+
+def test_with_publish_the_record_line_is_added_to_the_report(script, monkeypatch, tmp_path):
+    monkeypatch.setattr(script, "build_report", lambda today: "Ledger: 41 lines")
+    monkeypatch.setattr(script, "publish_line", lambda today: "Record published (pushed)")
+    log = tmp_path / "jobs.log"
+    monkeypatch.setattr(script.sys, "argv", ["nba_props_settle.py", "--publish", "--log-file", str(log)])
+    script.main()
+    assert "Record published (pushed)" in log.read_text(encoding="utf-8")
+    assert job_health.load(script.job_health.HEARTBEAT_PATH)["settle"]["outcome"] == "ok"
+
+
+def test_a_publishing_failure_is_reported_but_never_fails_the_settle(script, monkeypatch, tmp_path):
+    import publish_record
+
+    def rejected(today, **kwargs):
+        raise RuntimeError("push rejected")
+
+    monkeypatch.setattr(publish_record, "run", rejected)
+    assert script.publish_line(None) == "Record not published: RuntimeError: push rejected"
+
+
+def test_without_publish_nothing_is_published(script, monkeypatch):
+    monkeypatch.setattr(script, "build_report", lambda today: "Ledger: 41 lines")
+    monkeypatch.setattr(script, "publish_line", lambda today: pytest.fail("published"))
+    script.main()

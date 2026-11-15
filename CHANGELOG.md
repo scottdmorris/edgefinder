@@ -4,6 +4,22 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### The public record updates itself every morning
+- The README's record table and the published fingerprint in `record/DIGESTS.md` were only
+  refreshed by hand, so they were always a few days behind. The 9:00 settle job now
+  refreshes both and commits and pushes those two files, and nothing else
+  (`scripts/publish_record.py`, run by `nba_props_settle.py --publish`). Anything else
+  changed or staged in the folder is left alone.
+- Nothing is published when the ledger no longer matches its log. A failed push is written
+  to the settle report but never fails the settle. Git is told never to wait for a password
+  prompt, so an unattended run cannot hang.
+- The README table now sits between `<!-- record:start -->` and `<!-- record:end -->`
+  markers; only that part is rewritten.
+- The scheduled tasks were re-registered (`scripts/install_nba_tasks.ps1`) so the settle
+  task passes `--publish`.
+- Validation: 1,354 Python tests passed with 97% coverage, 10 of them new; ruff clean. The
+  publishing step has not yet run for real.
+
 ### The two oldest models no longer make X+ points picks
 - `ewma-v1` and `minutes-v1` still price every X+ points line, so the record keeps judging
   them, but none of their prices counts as a pick any more. Over their first 1,253 graded

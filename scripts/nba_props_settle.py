@@ -6,8 +6,10 @@ attaches closing-line movement, then reports:
 - Brier scores of the model vs the market's own devigged probability on
   EVERY settled line (the model only has something to offer if it wins)
 
-Usage:  python scripts/nba_props_settle.py [--log-file PATH]
+Usage:  python scripts/nba_props_settle.py [--log-file PATH] [--publish]
   --log-file  also append the report to PATH (scheduled runs have no console)
+  --publish   then refresh the README record and the published fingerprint, and commit
+              and push those two files (scripts/publish_record.py)
 """
 
 import argparse
@@ -107,9 +109,21 @@ def version_block(settled, version: str) -> list[str]:
     return lines
 
 
+def publish_line(today: dt.date) -> str:
+    """Publish the record; a failure is reported in the log but never fails the settle."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import publish_record
+        return publish_record.run(today)
+    except Exception as exc:       # noqa: BLE001 - see docstring
+        detail = getattr(exc, "stderr", "") or exc
+        return f"Record not published: {type(exc).__name__}: {str(detail).strip()[:200]}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--log-file", type=Path)
+    parser.add_argument("--publish", action="store_true")
     args = parser.parse_args()
     today = dt.datetime.now(nba_snapshot_plan.EASTERN).date()
     try:
@@ -119,6 +133,8 @@ def main() -> None:
         failed = True
     else:
         failed = False
+    if args.publish and not failed:
+        report += "\n\n" + publish_line(today)
     print(report)  # a no-op under pythonw, where there is no console
     if args.log_file is not None:
         args.log_file.parent.mkdir(parents=True, exist_ok=True)

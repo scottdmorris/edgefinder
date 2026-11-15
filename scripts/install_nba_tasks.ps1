@@ -5,7 +5,8 @@
 # - EdgeFinderNbaSnapshot: every 30 minutes, 12:00-22:30. Most runs do
 #   nothing and spend nothing; the policy in nba_snapshot_plan decides
 #   when a game is due, and a reserve stops it before the quota runs dry.
-# - EdgeFinderNbaSettle: 9:00 each morning, grades the night before.
+# - EdgeFinderNbaSettle: 9:00 each morning, grades the night before, then
+#   refreshes and pushes the README record and the published fingerprint.
 #
 # Triggers use this PC's local time, and the NBA schedule assumes Eastern.
 # Jobs run windowless (pythonw) and log to data\nba_jobs.log. They only run
@@ -39,9 +40,9 @@ Register-ScheduledTask -TaskName 'EdgeFinderNbaSnapshot' -Force `
     -Trigger $snapshotTrigger -Settings $settings | Out-Null
 
 Register-ScheduledTask -TaskName 'EdgeFinderNbaSettle' -Force `
-    -Description 'Settle last night''s NBA paper picks and report calibration vs the market.' `
+    -Description 'Settle last night''s NBA paper picks, report calibration vs the market, and publish the record.' `
     -Action (New-ScheduledTaskAction -Execute $python -WorkingDirectory $repo `
-        -Argument "scripts\nba_props_settle.py $logArg") `
+        -Argument "scripts\nba_props_settle.py $logArg --publish") `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00AM) -Settings $settings | Out-Null
 
 Get-ScheduledTask -TaskName 'EdgeFinderNba*' |

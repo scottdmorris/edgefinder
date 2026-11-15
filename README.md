@@ -22,18 +22,21 @@ The model is not claimed to beat the market. It has been tracked live since
 2026-11-04, and this is what the record shows (FanDuel points picks, graded
 at a flat 1 unit):
 
+<!-- record:start -->
 | Model | Graded picks | Record | Units | Beat the closing price |
 |---|---:|---:|---:|---:|
-| Smartest (`context-v1`) | 107 | 59-48 | +4.54 | 48% of 79 |
-| Sharpest (`context-v2`) | 80 | 41-39 | -2.67 | 48% of 60 |
-| Simple (`ewma-v1`) | 139 | 73-66 | -1.17 | 44% of 104 |
-| Smarter (`minutes-v1`) | 108 | 51-57 | -11.65 | 45% of 84 |
+| Smartest (`context-v1`) | 141 | 75-66 | +0.56 | 48% of 105 |
+| Sharpest (`context-v2`) | 105 | 53-52 | -5.20 | 51% of 75 |
+| Simple (`ewma-v1`) | 179 | 88-91 | -12.78 | 48% of 132 |
+| Smarter (`minutes-v1`) | 139 | 67-72 | -12.31 | 49% of 104 |
 
-Eight game days graded (2026-11-04 to 2026-11-11), as of 2026-11-12. That is still
+10 game days graded (2026-11-04 to 2026-11-13), as of 2026-11-14.
+<!-- record:end -->
+
+That is still
 too little to tell the models apart from a coin flip, and none of them has beaten
-the closing price more often than not. The live
-version is the Record tab; regenerate this table with
-`python scripts/readme_results.py`.
+the closing price more often than not. The settle job
+refreshes this table each morning; the live version is the Record tab.
 
 ## What is in it
 
