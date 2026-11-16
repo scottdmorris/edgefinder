@@ -15,6 +15,7 @@ line didn't move; when it did, it is reported as points of line movement
 in the pick's favour.
 """
 
+
 import csv
 import datetime as dt
 from collections.abc import Callable
@@ -24,6 +25,7 @@ import pandas as pd
 
 from ..betting import negbin
 from ..data import safe_write
+from . import settlement
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
 from ..models import nba_stat_model
@@ -225,13 +227,6 @@ def latest_logged(games: pd.DataFrame) -> str:
     return pd.to_datetime(games["game_date"]).max().strftime("%Y-%m-%d")
 
 
-def can_void(game_date: str, today: dt.date, logged_through: str) -> bool:
-    """A missing box score means "did not play" only once the day has passed AND the game logs
-    reach it. If the download failed and an older file was used, the row waits: a void is
-    permanent, and a stale file would void players who played."""
-    return game_date < today.isoformat() and game_date <= logged_through
-
-
 def settle(
     ledger: pd.DataFrame,
     games: pd.DataFrame,
@@ -247,7 +242,7 @@ def settle(
     fair close that `clv_novig_pct` is measured against."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
     values = _stat_values(out, games)
-    logged_through = latest_logged(games)
+    complete = settlement.completed_games(games)
 
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
@@ -257,22 +252,21 @@ def settle(
         key = (int(row["player_id"]), str(row["game_date"]))
         if key in stat_values:
             _settle_row(out, index, row, stat_values[key])
-        elif can_void(str(row["game_date"]), today, logged_through):
+        elif settlement.can_void(row, today, complete):
             out.loc[index, "status"] = "void"  # the player never got on the floor
             out.loc[index, "pnl_units"] = 0.0
 
     _attach_closing(out, snapshots)
     _attach_kalshi_closing(out, kalshi_snapshots)
-    _attach_fair_close(out, closing.fair_closes(snapshots, book_snapshots),
-                       closing.fair_closes(kalshi_snapshots))
+    _attach_fair_close(out, closing.fair_closes(snapshots, book_snapshots, events=out),
+                       closing.fair_closes(kalshi_snapshots, events=out))
     return out
 
 
 def _attach_fair_close(out: pd.DataFrame, sportsbooks: dict, kalshi: dict) -> None:
     """Each settled pick's closing-line value against the fair close: FanDuel picks against
     the sportsbooks that closed on the same number, Kalshi picks against Kalshi's own close."""
-    if "clv_novig_pct" not in out.columns:
-        out["clv_novig_pct"] = None
+    out["clv_novig_pct"] = None  # recompute; never retain a rejected post-tip close
     picks = out.index[(out["status"] != "pending") & out["pick_side"].notna()]
     for index in picks:
         row = out.loc[index]
@@ -312,18 +306,19 @@ def _settle_row(out: pd.DataFrame, index, row: pd.Series, actual: float) -> None
 
 
 def _attach_closing(out: pd.DataFrame, snapshots: pd.DataFrame) -> None:
+    snapshots = closing.before_tip(snapshots, out)
     late = snapshots[snapshots["phase"] == "late"].sort_values("fetched_at")
     if late.empty:
         return
-    closing = late.groupby(["event_id", "player"]).tail(1).set_index(["event_id", "player"])
+    closes = late.groupby(["event_id", "player"]).tail(1).set_index(["event_id", "player"])
     # the late snapshots are FanDuel points lines, so they only close those rows
     closable = (out["status"] != "pending") & (out["stat"] == DEFAULT_STAT) \
         & (out["book"] == DEFAULT_BOOK)
     for index in out.index[closable]:
         row = out.loc[index]
         key = (row["event_id"], row["player"])
-        if key in closing.index:
-            snap = closing.loc[key]
+        if key in closes.index:
+            snap = closes.loc[key]
             _apply_closing(out, index, row, snap["line"], snap["over_odds"], snap["under_odds"])
 
 
@@ -332,14 +327,15 @@ def _attach_kalshi_closing(out: pd.DataFrame, snapshots: pd.DataFrame | None) ->
     row is only closed by the same line, and there is no line movement to report."""
     if snapshots is None or snapshots.empty:
         return
+    snapshots = closing.before_tip(snapshots, out)
     keys = ["event_id", "player", "stat", "line"]
-    closing = snapshots.sort_values("fetched_at").groupby(keys).tail(1).set_index(keys)
+    closes = snapshots.sort_values("fetched_at").groupby(keys).tail(1).set_index(keys)
     closable = (out["status"] != "pending") & (out["book"] == "kalshi")
     for index in out.index[closable]:
         row = out.loc[index]
         key = (row["event_id"], row["player"], row["stat"], float(row["line"]))
-        if key in closing.index:
-            snap = closing.loc[key]
+        if key in closes.index:
+            snap = closes.loc[key]
             _apply_closing(out, index, row, row["line"], snap["over_odds"], snap["under_odds"],
                            with_move=False)
 

@@ -29,6 +29,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from edgefinder.api.suggestion_service import capture_nightly  # noqa: E402
+
 from edgefinder.data import (  # noqa: E402
     job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats)
 from edgefinder.models import (  # noqa: E402
@@ -364,6 +366,11 @@ def main() -> None:
         record_kalshi(early_events + kalshi_early, models)
     if early_events:
         log_price_gaps(early_events)
+    if early_events:
+        try:
+            capture_nightly()
+        except Exception:
+            log.exception("Could not record nightly higher-hit trial")
     late_events = [task.event for task in tasks + kalshi_only if task.phase == "late"]
     if late_events:
         archive_kalshi_closing(late_events)

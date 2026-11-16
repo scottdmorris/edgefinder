@@ -355,16 +355,16 @@ def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:
 
 # How much risk a suggested slip may carry, as the least chance it must have of
 # hitting. A slip multiplies its legs' chances, so a few ordinary legs shrink fast.
-STYLES = {"Safer": 0.35, "Balanced": 0.20, "Bigger payouts": 0.08}
-DEFAULT_STYLE = "Balanced"
+STYLES = {"Higher hit rate": 0.60, "Safer": 0.35, "Balanced": 0.20, "Bigger payouts": 0.08}
+DEFAULT_STYLE = "Higher hit rate"
 # A slip must also be worth the stake: the least it may win per $1 (so $10 on Safer wins
 # at least $10), and it needs one real leg, not just locks, so locks only ever help.
-MIN_PROFIT = {"Safer": 1.0, "Balanced": 2.0, "Bigger payouts": 6.0}
+MIN_PROFIT = {"Higher hit rate": .30, "Safer": 1.0, "Balanced": 2.0, "Bigger payouts": 6.0}
 REAL_LEG_DECIMAL = 1.5          # about -200: the cheapest price that counts as a real leg
 
 
 def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
-                    min_chance: float = STYLES[DEFAULT_STYLE], min_profit: float = 0.0,
+                    min_chance: float = STYLES["Balanced"], min_profit: float = 0.0,
                     real_leg_decimal: float | None = None,
                     one_per_game: bool = True,
                     bench: frozenset[int] = frozenset()) -> pd.DataFrame:

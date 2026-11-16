@@ -92,11 +92,11 @@ def test_only_the_named_files_are_committed_then_pushed(publish, tmp_path):
     assert git.calls[-1][0] == "push"
 
 
-def test_nothing_new_means_no_commit_and_no_push(publish, tmp_path):
+def test_nothing_new_retries_push_without_another_commit(publish, tmp_path):
     git = Git(staged=False)
     assert publish.commit_and_push(tmp_path, [Path("README.md")], "docs: record", run=git) \
         == "nothing new"
-    assert [c[0] for c in git.calls] == ["add", "diff"]
+    assert [c[0] for c in git.calls] == ["add", "diff", "push"]
 
 
 def test_a_rejected_push_is_reported_not_hidden(publish, tmp_path):
@@ -115,3 +115,12 @@ def test_a_record_that_does_not_match_its_log_is_never_published(publish, tmp_pa
     git = Git()
     assert "not published" in publish.run(TODAY, repo=tmp_path, run=git)
     assert git.calls == []
+
+
+def test_failed_push_can_be_retried_after_commit_without_new_file_changes(publish, tmp_path):
+    files = [Path("README.md"), Path("record/DIGESTS.md")]
+    with pytest.raises(subprocess.CalledProcessError):
+        publish.commit_and_push(tmp_path, files, "docs: record", run=Git(fail="push"))
+    retry = Git(staged=False)
+    publish.commit_and_push(tmp_path, files, "docs: record", run=retry)
+    assert [call[0] for call in retry.calls] == ["add", "diff", "push"]

@@ -8,6 +8,7 @@ flag: over many bets, does betting the generous market actually make money?
 The same pre-game rule as the picks applies: a gap is never logged once its game has started.
 """
 
+
 import csv
 import datetime as dt
 from pathlib import Path
@@ -16,7 +17,8 @@ import pandas as pd
 
 from ..betting.odds_math import american_to_decimal
 from ..data import safe_write
-from . import closing, nba_paper
+from . import settlement
+from . import closing
 
 LOG_PATH = Path(__file__).resolve().parents[3] / "data" / "price_gap_log.csv"
 COLUMNS = [
@@ -112,12 +114,12 @@ def settle(log: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.DataFra
     out = log.copy().astype({"status": object, "result": object})
     points = {(int(r.player_id), r.game_date.strftime("%Y-%m-%d")): float(r.pts)
               for r in games.itertuples()}
-    logged_through = nba_paper.latest_logged(games)
+    complete = settlement.completed_games(games)
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
         actual = points.get((int(row["player_id"]), str(row["game_date"])))
         if actual is None:
-            if nba_paper.can_void(str(row["game_date"]), today, logged_through):
+            if settlement.can_void(row, today, complete):
                 out.loc[index, ["status", "pnl_units"]] = ["void", 0.0]
             continue
         hit = won(row["side"], float(row["line"]), actual)
@@ -129,8 +131,9 @@ def settle(log: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.DataFra
 def attach_closing(log: pd.DataFrame, *snapshots: pd.DataFrame | None) -> pd.DataFrame:
     """A copy with each main-line bet's closing-line value against the fair close of the
     sportsbook snapshots given (FanDuel's, then the others'). X+ bets get none."""
-    fair = closing.fair_closes(*snapshots)
+    fair = closing.fair_closes(*snapshots, events=log)
     out = log.copy()
+    out["clv_novig_pct"] = None
     for index, row in out.iterrows():
         if row["side"] not in MAIN_SIDES:
             continue

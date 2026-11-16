@@ -4,6 +4,65 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Combined-work review hardening
+- Changing the trial recipe now blocks only new trial entries: old suggested slips and
+  their frozen protocol remain readable and gradable after ordinary code updates.
+- Suggested-slip search caches now include the current blended probability as well as
+  quote identity and odds. A change to the other side of a two-way price cannot silently
+  reuse a suggestion scored with the previous market probability.
+- A one-sided price refresh is excluded from higher-hit suggestions rather than being
+  treated as fresh two-sided evidence with the old market estimate.
+- Preserved and reviewed the concurrent Teams additions: matchup comparisons, opponent
+  stat ranks, recent minutes and injury badges, line hit rates, exclusion of unfinished
+  games and already-completed slate games, and three-game minimum with/without splits.
+- Validation in an isolated checkout of the staged snapshot: 1,420 Python tests passed
+  at 96.84% coverage, 41 web tests passed, web lint and production build passed, and ruff
+  and Bandit were clean. The final Teams adjustment also passed a targeted 76-test rerun.
+
+### Offered-slip record, price comparison, and a prospective higher-hit trial
+- Added a Higher hit rate style, selected by default in the app: at most two legs,
+  at least 60% estimated joint chance and 1.30 simulated decimal return. It can return
+  no suggestion. A model target is not an observed win rate or a profitability claim.
+- Each unique pregame suggestion returned by the API is frozen with its exact legs,
+  prices, probability and simulated payout in a separate SQLite paper archive. Repeat
+  requests deduplicate; the morning job grades hits, misses and voided legs. The Record
+  screen separates all offered suggestions from the frozen trial. This does not measure
+  actual visitor impressions, clicks or placed bets, and payouts are products of leg
+  prices rather than executable sportsbook parlay quotes.
+- Props show FanDuel and DraftKings numbers, odds, return multiples and timestamps.
+  Different numbers are explicitly not comparable; stale comparisons are labelled.
+  Same-number FanDuel prices can refresh from newer recorded snapshots without changing
+  the quote identity; a moved number is excluded from higher-hit suggestions.
+- Props also show prior-game hit rates and historical result ranges, with pass reasons
+  for insufficient history, stale prices, unstable minutes, role changes and layoffs.
+  These are history checks, not confirmation of tonight's injury status.
+- Frozen trial higher-hit-v1: first qualifying Context v2/FanDuel two-leg slip per day,
+  different games; review after 200 graded slips across at least 30 graded game days.
+  Protocol and selection-code hashes are stored before results; changed rules require a
+  new trial ID. See docs/HIGHER_HIT_TRIAL.md for scoring and limitations. No backfilling.
+- Validation: the full Python suite passed (1,411 tests, 96.99% coverage), with focused
+  archive/evidence/API regression tests rerun after final refinements. All 37 web tests,
+  lint and production build passed; ruff and Bandit were clean. A live-board smoke check
+  returned 418 legs with history checks and recorded DraftKings comparisons. The original
+  pick log remained intact with all 13,509 ledger rows matching. No historical suggestions
+  were retrospectively added to the new record.
+
+### Team pages rebuilt for props
+- Fixed: a game still in progress counted as a loss on the team page (Atlanta showed 7-7
+  and a "nan0" streak during its game). Only finished games are counted now, everywhere on
+  the page. A slate game the team has already finished is no longer shown as "next".
+- New: the next game side by side with the opponent (record, points for and against,
+  offense, defense and pace ranks) and what the opponent gives up per stat.
+- New: "What opponents put up against them": points, rebounds, assists and 3-pointers
+  allowed per game, ranked, and labelled soft, average or tough.
+- New: each points line on the slate shows the projection minus the line and how many of
+  the player's last 10 games went over it.
+- New: a form chart of the last 10 margins; injury badges and last-5-games minutes (with
+  a marked rise or fall of 2+ minutes) on the roster.
+- The with/without split now needs 3 games on each side, not 2.
+- Validation: 17 team tests in Python and 8 on the web pass; web type-check, lint and
+  build pass; checked in a browser on live data.
+
 ### Teams on the Players screen
 - The search box now finds teams as well as players (by name or code, e.g. "celtics" or
   "BOS"), and a player's team name links to the team. A team page shows the record (home,
@@ -18,6 +77,23 @@ Newest first. Dates are when the work was committed.
 - New routes `/api/teams` and `/api/teams/{code}` (`src/edgefinder/api/teams.py`).
 - Validation: 10 new Python tests and 4 new web tests pass; web type-check, lint and build
   pass; the team page and search were checked in a browser against live data.
+
+### Settlement and closing-price review fixes
+- Missing players are voided only after the specific matchup has full, matching team
+  minutes in both sides of the game logs. Other games on the same date, partial downloads,
+  and unknown matchups leave the row pending. Applies to main picks, X+ picks and gap bets.
+- Closing prices must have a valid fetch time strictly before tip-off. Historical Kalshi
+  snapshots use the ledger's event time. Fair-close values are recalculated so a rejected
+  price cannot leave a previously saved value behind.
+- The public-record publisher retries pushing an existing commit even when its files have
+  no new changes, allowing recovery from a failed push without creating another commit.
+- The Record screen now shows value against the fair closing chance after removing the
+  book's margin, with its sample size and how often it was beaten. Older price-movement
+  measurements are preserved in the ledger.
+- Validation: the full Python suite passed (1,392 tests, 96.29% coverage); after the
+  final rounding-tolerance adjustment, all 40 settlement/closing/publishing regression
+  tests passed again. All 31 web tests passed, lint and production build passed,
+  ruff and Bandit were clean, and the pick log remained intact (13,509 rows match).
 
 ### Picks and gap bets are graded against the fair closing price
 - Every settled pick now gets `clv_novig_pct`: its payout times the market's fair closing

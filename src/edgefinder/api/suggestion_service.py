@@ -1,0 +1,109 @@
+"""Evidence attached to quotes, exact offered-slip recording, and a frozen nightly trial."""
+import datetime as dt
+import logging
+import sqlite3
+
+import pandas as pd
+
+from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
+from ..data import nba_props
+from ..tracking import nba_paper, quote_evidence, suggested_record
+
+log = logging.getLogger(__name__)
+STYLE = "Higher hit rate"
+
+
+def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.DataFrame,
+           games: pd.DataFrame, now: dt.datetime) -> pd.DataFrame:
+    out = table.copy()
+    own = nba_props.load_snapshots() if chosen["book"] == "fanduel" else pd.DataFrame()
+    other = nba_props.load_book_snapshots() if chosen["book"] == "fanduel" else pd.DataFrame()
+    qualities, comparisons, tips = [], [], []
+    for index, row in out.iterrows():
+        alternate = str(row["Side"]).endswith("+")
+        source = alt if alternate else ledger
+        matches = source[(source.event_id.astype(str) == str(row["event_id"]))
+                         & (source.player_id == int(row["player_id"]))
+                         & (source.model_version == chosen["model"])]
+        if not alternate:
+            matches = matches[(matches.stat == row["stat_key"]) & (matches.book == chosen["book"])
+                              & (matches.line == row["line"])]
+        else:
+            matches = matches[matches.threshold == float(row["line"]) + .5]
+        recorded = matches.iloc[0] if not matches.empty else None
+        tip = recorded.commence_time if recorded is not None else None
+        stamp = recorded.recorded_at if recorded is not None else None
+        # Main sportsbook prices may have been refreshed since the model's early snapshot.
+        changed_number = False
+        incomplete_price = False
+        if tip and not alternate and not own.empty and row["stat_key"] == "points":
+            current = own[(own.event_id.astype(str) == str(row["event_id"])) & (own.player == row["Player"])]
+            times = pd.to_datetime(current.fetched_at, utc=True, errors="coerce")
+            current = current[(times <= pd.Timestamp(now)) & (times < pd.Timestamp(tip))]
+            if not current.empty:
+                latest = current.sort_values("fetched_at").iloc[-1]
+                changed_number = float(latest.line) != float(row["line"])
+                field = "under_odds" if row["Side"] == "Under" else "over_odds"
+                if not changed_number and pd.notna(latest[field]):
+                    if pd.notna(latest.over_odds) and pd.notna(latest.under_odds):
+                        fair_over = devig_two_way(implied_prob(latest.over_odds), implied_prob(latest.under_odds))[0]
+                        market = 1 - fair_over if row["Side"] == "Under" else fair_over
+                        probability = (nba_paper.MODEL_WEIGHT * float(row["Model %"]) / 100
+                                       + (1 - nba_paper.MODEL_WEIGHT) * market)
+                        out.at[index, "Market %"] = market * 100
+                        out.at[index, "prob"] = probability
+                        out.at[index, "Blended %"] = probability * 100
+                    else:
+                        probability = float(row["prob"])
+                        incomplete_price = True
+                    out.at[index, "Odds"] = float(latest[field])
+                    out.at[index, "Leg EV %"] = (probability * american_to_decimal(latest[field]) - 1) * 100
+                    stamp = latest.fetched_at
+        quality = quote_evidence.assess(row.to_dict() | {"date": chosen["date"]}, games, stamp, now)
+        if incomplete_price:
+            quality["warnings"].append("Two-sided market price unavailable")
+            quality["eligible"] = False
+        if changed_number:
+            quality["warnings"].append("This number changed in the latest sportsbook snapshot")
+            quality["eligible"] = False
+        if not tip or pd.Timestamp(tip) <= pd.Timestamp(now):
+            quality["warnings"].append("Game has started or its start time is unavailable")
+            quality["eligible"] = False
+        qualities.append(quality)
+        comparisons.append(quote_evidence.comparisons(out.loc[index], other, now, tip) if tip else [])
+        tips.append(tip)
+    out["quality"], out["comparisons"], out["tip"] = qualities, comparisons, tips
+    return out
+
+
+def archive_idea(chosen: dict, style: str, game: str | None, table: pd.DataFrame,
+                 ids: list[int], probability: float, payout: float, now: dt.datetime) -> str | None:
+    selected = table.loc[ids]
+    if "tip" not in selected or selected.tip.isna().any():
+        return None
+    legs = [{"quote_id": int(i), "player": r["Player"], "player_id": int(r["player_id"]),
+             "game": r["Game"], "event_id": str(r["event_id"]), "tip": r["tip"],
+             "stat": r["stat_key"], "side": r["Side"], "line": float(r["line"]),
+             "odds": int(r["Odds"]),
+             "evidence": {k: v for k, v in r.get("quality", {}).items() if k != "price_age_minutes"}} for i, r in selected.iterrows()]
+    payload = {"day": chosen["date"], "book": chosen["book"], "model": chosen["model"],
+               "style": style, "game": game, "legs": legs, "probability": probability,
+               "payout": payout, "market_probability": 1 / payout,
+               "payout_basis": "product of quoted single-leg prices; sportsbook SGP payout may differ"}
+    trial = (style == STYLE and not game and chosen["book"] == "fanduel"
+             and chosen["model"] == "context-v2" and len(legs) == 2)
+    try:
+        return suggested_record.archive(payload, now, experiment=trial)
+    except (OSError, ValueError, sqlite3.Error):
+        log.exception("Could not record offered slip")
+        return None
+
+
+def capture_nightly() -> None:
+    """Run after snapshots; do not backfill or select a winner after seeing results."""
+    from . import service
+    service.clear_cache()
+    try:
+        service.ideas(service.today().isoformat(), "fanduel", "context-v2", STYLE)
+    except (service.NotFound, ValueError):
+        log.info("No qualifying higher-hit trial slip available at this snapshot")

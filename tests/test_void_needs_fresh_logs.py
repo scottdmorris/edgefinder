@@ -6,6 +6,7 @@ import datetime as dt
 import pandas as pd
 
 from edgefinder.tracking import gap_log, nba_alt, nba_paper
+from game_log_helpers import complete_game
 from test_gap_log import box, logged
 from test_nba_alt_extra import frame as alt_frame, row as alt_row
 from test_nba_paper_extra import NO_SNAPSHOTS, frame, row
@@ -34,20 +35,38 @@ def test_empty_logs_void_nothing():
     assert out.loc[0, "status"] == "pending"
 
 
-def test_logs_that_reach_the_day_void_a_player_who_is_not_in_them():
+def test_other_games_or_later_dates_never_establish_a_void():
     for latest in ("2026-11-04", "2026-11-05"):
         out = nba_paper.settle(frame(row()), logs(latest), NO_SNAPSHOTS, TODAY)
-        assert out.loc[0, "status"] == "void" and out.loc[0, "pnl_units"] == 0.0
+        assert out.loc[0, "status"] == "pending"
 
 
 def test_the_x_plus_ledger_waits_for_fresh_logs_too():
     assert nba_alt.settle(alt_frame(alt_row()), logs("2026-11-03"), TODAY).loc[0, "status"] == "pending"
-    assert nba_alt.settle(alt_frame(alt_row()), logs("2026-11-04"), TODAY).loc[0, "status"] == "void"
+    assert nba_alt.settle(alt_frame(alt_row()), complete_game(home="BOS", away="MIL"), TODAY).loc[0, "status"] == "void"
 
 
 def test_price_gaps_wait_for_fresh_logs_too(tmp_path):
     log = logged(tmp_path)                                # a gap for a game on 2026-11-05
     stale = pd.DataFrame([box(99, 10.0, day="2026-11-04")])
     assert gap_log.settle(log, stale, TODAY).loc[0, "status"] == "pending"
-    fresh = pd.DataFrame([box(99, 10.0, day="2026-11-05")])
+    fresh = complete_game("2026-11-05", "GSW", "MIA")
     assert gap_log.settle(log, fresh, TODAY).loc[0, "status"] == "void"
+
+
+def test_complete_own_game_voids_missing_player_but_partial_or_other_game_waits():
+    ledger = frame(row(home="Detroit Pistons", away="Philadelphia 76ers"))
+    full = complete_game()
+    variants = [full.iloc[:5], full.iloc[:-1], full.assign(minutes=24),
+                complete_game(home="BOS", away="MIL"), full.drop(columns="minutes")]
+    for partial in variants:
+        assert nba_paper.settle(ledger, partial, NO_SNAPSHOTS, TODAY).loc[0, "status"] == "pending"
+    result = nba_paper.settle(ledger, full, NO_SNAPSHOTS, TODAY)
+    assert result.loc[0, "status"] == "void"
+
+
+def test_complete_overtime_and_rounded_minutes_establish_completion():
+    from edgefinder.tracking import settlement
+    for minutes in (47.99, 48.4, 53, 58):
+        assert settlement.completed_games(complete_game().assign(minutes=minutes))
+    assert not settlement.completed_games(complete_game().assign(minutes=50))

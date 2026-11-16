@@ -41,7 +41,7 @@ it('says when the suggestion is already the slip, and switches style', () => {
 
 it('explains an empty result instead of showing a blank card', () => {
   render(<SuggestedSlip {...base} ideas={[]} />)
-  expect(screen.getByText(/Nothing fits this style here/)).toBeTruthy()
+  expect(screen.getByText(/No qualifying slip right now/)).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Use this slip' })).toBeNull()
 })
 
@@ -64,4 +64,12 @@ it('says why a pick cannot be added when this price source lacks its number', ()
   expect(screen.getByText('Pick Guy')).toBeTruthy()
   expect(screen.getByText("FanDuel line. Kalshi doesn't offer this number.")).toBeTruthy()
   expect(screen.queryByRole('button')).toBeNull()
+})
+
+
+it('shows break-even separately from the estimated chance and labels the paper record', () => {
+  render(<SuggestedSlip {...base} ideas={[{ ...ideas[0], tracked_id: '12345678abcdef', break_even_pct: 29.9 }]} />)
+  expect(screen.getByText(/Break-even hit rate: 29.9%/)).toBeTruthy()
+  expect(screen.getByText(/Recorded for paper grading: 12345678/)).toBeTruthy()
+  expect(screen.getByText('estimated to hit')).toBeTruthy()
 })

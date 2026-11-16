@@ -79,3 +79,16 @@ it('changes an alternate line without selecting it until its price is clicked', 
   fireEvent.click(screen.getByRole('button', { name: 'At least Nikola Jokić 10+ Points' }))
   expect(toggle).toHaveBeenCalledWith(9)
 })
+
+
+it('shows both recorded prices without calling different numbers a better price', () => {
+  const compared = { ...over, comparisons: [{ book: 'DraftKings', line: 25.5, odds: 120,
+    fetched_at: '2026-11-15T20:00:00Z', stale: false, same_line: false, better_payout: false }],
+    quality: { eligible: false, warnings: ['Minutes have been unstable'], history_games: 20,
+      recent_hit_pct: 65, historical_low: 10, historical_high: 30, price_at: '2026-11-15T20:00:00Z',
+      price_age_minutes: 5, injuries: 'Injury status is not verified' } }
+  render(<PropsBrowser legs={[compared, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/DraftKings Over 25.5/)).toBeTruthy()
+  expect(screen.getByText(/different numbers; payouts are not directly comparable/)).toBeTruthy()
+  expect(screen.getByText(/Minutes have been unstable/)).toBeTruthy()
+})

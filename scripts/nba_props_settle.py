@@ -14,6 +14,7 @@ Usage:  python scripts/nba_props_settle.py [--log-file PATH] [--publish]
 
 import argparse
 import datetime as dt
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -41,7 +42,8 @@ def build_report(today: dt.date) -> str:
                    & (settled["game_date"].astype(str) < today.isoformat())).sum())
     if waiting:
         lines.append(f"WAITING: {waiting} lines from past days are still pending; the game logs "
-                     f"only reach {nba_paper.latest_logged(games) or 'nothing'}.")
+                     f"only reach {nba_paper.latest_logged(games) or 'nothing'}, or their own game logs "
+                     "are incomplete.")
     versions = sorted(settled["model_version"].dropna().unique())
     for version in versions:
         lines += ["", *version_block(settled, version)]
@@ -53,6 +55,12 @@ def build_report(today: dt.date) -> str:
         else:
             lines += ["Head to head on the lines every model priced (Brier, lower is better):",
                       comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
+    from edgefinder.tracking import suggested_record
+    try:
+        graded_slips = suggested_record.grade(games, today)
+        lines.append(f"Suggested slips: {graded_slips} newly graded; {suggested_record.summary()}")
+    except (OSError, sqlite3.Error, ValueError) as error:
+        lines.append(f"Suggested slips waiting: {type(error).__name__}; other ledgers continue.")
     lines += alt_block(games, today)
     lines += gap_block(games, today, (fanduel_close, other_close))
     lines += book_gap_block(games, today, (fanduel_close, other_close))

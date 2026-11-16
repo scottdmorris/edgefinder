@@ -306,11 +306,12 @@ def test_all_four_stats_are_recorded_for_one_game(tmp_path):
 # ---- the snapshot script ---------------------------------------------------
 
 @pytest.fixture
-def script():
+def script(monkeypatch):
     path = Path(__file__).resolve().parents[1] / "scripts" / "nba_props_snapshot.py"
     spec = importlib.util.spec_from_file_location("nba_props_snapshot_under_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "capture_nightly", lambda: None)
     return module
 
 

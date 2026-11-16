@@ -1,5 +1,7 @@
 """Hand-verified checks on the X+ points (alternate line) ledger."""
 
+from game_log_helpers import complete_game
+
 import datetime as dt
 
 import pandas as pd
@@ -246,7 +248,7 @@ def test_non_picks_are_settled_without_a_result():
 
 
 def test_a_past_game_with_no_box_score_is_void():
-    out = nba_alt.settle(frame(row()), games(30).assign(player_id=99), TODAY)
+    out = nba_alt.settle(frame(row()), complete_game(home="BOS", away="MIL"), TODAY)
     assert out.loc[0, "status"] == "void" and out.loc[0, "pnl_units"] == 0.0
 
 

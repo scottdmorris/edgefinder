@@ -37,9 +37,21 @@ const team: TeamProfile = {
   teams_in_league: 30,
   ratings: { games: 12, ppg: 114.2, opp_ppg: 104.1, ortg: 102.3, drtg: 93.2, net: 9.0, pace: 111.1,
     ppg_rank: 8, opp_ppg_rank: 3, ortg_rank: 10, drtg_rank: 2, net_rank: 2, pace_rank: 25 },
-  results: [{ date: '2026-11-11', opponent: 'TOR', home: false, result: 'W', score: '98-93' }],
-  roster: [{ id: 1, name: 'Jayson Tatum', photo: '', games: 12, minutes: 34, pts: 26.3, reb: 8, ast: 5, fg3m: 3 }],
-  tonight: [{ id: 1, name: 'Jayson Tatum', line: 26.5, over: -115, under: -111, projection: 23.1, game: 'DAL @ BOS', date: '2026-11-15' }],
+  allowed: { pts: { value: 104.1, rank: 28 }, reb: { value: 44, rank: 15 }, ast: { value: 27, rank: 4 }, fg3m: { value: 13.5, rank: 2 } },
+  next_game: { opponent: 'DAL', home: true, tip: '2026-11-16T00:30:00Z', date: '2026-11-15' },
+  matchup: { sides: [
+    { code: 'BOS', name: 'Boston Celtics', logo: '', color: '#007a33', record: '10-2', ppg: 114.2, opp_ppg: 104.1,
+      ortg_rank: 10, drtg_rank: 2, pace_rank: 25, net_rank: 2,
+      allowed: { pts: { value: 104.1, rank: 28 }, reb: { value: 44, rank: 15 }, ast: { value: 27, rank: 4 }, fg3m: { value: 13.5, rank: 2 } } },
+    { code: 'DAL', name: 'Dallas Mavericks', logo: '', color: '#00538c', record: '5-8', ppg: 110.0, opp_ppg: 118.5,
+      ortg_rank: 20, drtg_rank: 27, pace_rank: 5, net_rank: 26,
+      allowed: { pts: { value: 118.5, rank: 3 }, reb: { value: 46, rank: 6 }, ast: { value: 28, rank: 2 }, fg3m: { value: 14, rank: 1 } } },
+  ] },
+  results: [{ date: '2026-11-11', opponent: 'TOR', home: false, result: 'W', score: '98-93' },
+    { date: '2026-11-09', opponent: 'NYK', home: true, result: 'L', score: '100-104' }],
+  roster: [{ id: 1, name: 'Jayson Tatum', photo: '', games: 12, minutes: 34, last5_min: 37, status: null, pts: 26.3, reb: 8, ast: 5, fg3m: 3 },
+    { id: 3, name: 'Paul George', photo: '', games: 8, minutes: 30, last5_min: 30, status: 'OUT', pts: 22, reb: 5, ast: 4, fg3m: 2 }],
+  tonight: [{ id: 1, name: 'Jayson Tatum', line: 26.5, over: -115, under: -111, projection: 23.1, edge: -3.4, cleared: 4, games: 10 }],
   injury_report: true,
   injuries: [{ name: 'Paul George', status: 'OUT', detail: 'knee' }, { name: 'Bench Guy', status: 'DAY-TO-DAY', detail: '' }],
   absences: [{ id: 3, name: 'Paul George', status: 'OUT', detail: 'knee', with_games: 8, without_games: 4,
@@ -49,12 +61,38 @@ const team: TeamProfile = {
 it('shows the record, ranks, who is out with the teammates split, and links to players', () => {
   const onPlayer = vi.fn()
   render(<TeamView team={team} onPlayer={onPlayer} />)
-  expect(screen.getByText(/10-2 · home 5-0 · away 5-2 · last 10 9-1 · W5/)).toBeTruthy()
-  expect(screen.getByText('2nd')).toBeTruthy()                    // defense rank
+  expect(screen.getAllByText('10-2').length).toBeGreaterThan(0)
+  expect(screen.getByText('W5').className).toContain('text-good')
   expect(screen.getByText('+5.5')).toBeTruthy()                   // Tatum without George
   expect(screen.getByText(/Bench Guy \(day-to-day\)/)).toBeTruthy()
   fireEvent.click(screen.getAllByRole('button', { name: /Jayson Tatum/ })[0])
   expect(onPlayer).toHaveBeenCalledWith(1)
+})
+
+it('puts the next opponent side by side and says what it gives up', () => {
+  render(<TeamView team={team} onPlayer={vi.fn()} />)
+  expect(screen.getByText('Next: vs Dallas Mavericks')).toBeTruthy()
+  expect(screen.getByText(/DAL gives up 118.5 points \(3rd most\)/)).toBeTruthy()
+})
+
+it("shows each line's gap to the projection and how often it was cleared", () => {
+  render(<TeamView team={team} onPlayer={vi.fn()} />)
+  expect(screen.getByText('-3.4').className).toContain('text-bad')
+  expect(screen.getByText('4/10')).toBeTruthy()
+})
+
+it('labels soft and tough categories and flags injured players and minutes trends', () => {
+  render(<TeamView team={team} onPlayer={vi.fn()} />)
+  expect(screen.getByText('2nd most · soft')).toBeTruthy()       // 3-pointers allowed
+  expect(screen.getByText('28th most · tough')).toBeTruthy()     // points allowed
+  expect(screen.getAllByText('OUT').some((el) => el.tagName === 'SPAN' && el.className.includes('rounded'))).toBe(true)
+  expect(screen.getByText('37 ▲')).toBeTruthy()
+})
+
+it('draws the form from the results, oldest first', () => {
+  render(<TeamView team={team} onPlayer={vi.fn()} />)
+  expect(screen.getByTitle('2026-11-09 vs NYK: L 100-104')).toBeTruthy()
+  expect(screen.getByText('-4')).toBeTruthy()
 })
 
 it('says so when the injury report could not be read', () => {

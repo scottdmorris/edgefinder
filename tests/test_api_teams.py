@@ -74,7 +74,8 @@ def test_the_roster_is_who_last_played_for_the_team_with_per_game_averages():
     assert list(roster)[0] == 2                          # most minutes first
 
 
-def test_teammates_numbers_with_and_without_a_player_who_sits():
+def test_teammates_numbers_with_and_without_a_player_who_sits(monkeypatch):
+    monkeypatch.setattr(teams, "MIN_SPLIT_GAMES", 2)              # the toy season is short
     split = teams.with_without(GAMES, "BOS", 1)
     by_id = {row["id"]: row for row in split["teammates"]}
     assert (split["with_games"], split["without_games"]) == (2, 2)
@@ -132,3 +133,61 @@ def test_a_missing_injury_report_still_serves_the_page(client, monkeypatch):
     monkeypatch.setattr(nba_injuries, "fetch_injuries", down)
     page = client.get("/api/teams/BOS").json()
     assert page["injury_report"] is False and page["absences"] == []
+
+
+# ---- a game in progress, and the prop-facing numbers ---------------------------------------------
+
+LIVE = pd.DataFrame(side("g6", "2026-11-11", "BOS", "MIL", True, True, BOS_FULL)
+                    + side("g6", "2026-11-11", "MIL", "BOS", False, False, MIL)).assign(wl=None)
+WITH_LIVE = pd.concat([GAMES, LIVE], ignore_index=True)
+
+
+def test_a_game_still_being_played_counts_for_nothing():
+    done = teams.finished(WITH_LIVE)
+    assert "g6" not in set(done["game_id"])
+    record = teams.record(teams.team_games(done), "BOS")
+    assert (record["wins"], record["losses"], record["streak"]) == (3, 1, "W2")
+
+
+def test_what_a_team_allows_is_its_opponents_totals_per_game_ranked_most_first():
+    allowed = teams.allowed(teams.finished(GAMES))
+    # NYK's opponents: BOS twice (44 each) and MIL once (40) -> 42.67 points a game
+    assert allowed.loc["NYK", "pts"] == pytest.approx((44 + 44 + 40) / 3)
+    assert allowed.loc["NYK", "reb"] == pytest.approx((10 + 10 + 10) / 3)    # 2 players x 5
+    assert allowed["pts_rank"].min() == 1
+    assert allowed.loc[allowed["pts"].idxmax(), "pts_rank"] == 1
+
+
+def test_the_roster_shows_recent_minutes_and_injury_status():
+    injured = [teams.nba_injuries.Injury("P3", "BOS", "Out", "ankle")]
+    roster = {p["id"]: p for p in teams.roster(GAMES, "BOS", injured)}
+    assert roster[3]["status"] == "OUT" and roster[2]["status"] is None
+    assert roster[3]["last5_min"] == pytest.approx((20 + 20 + 30 + 30) / 4)
+
+
+def test_splits_need_three_games_on_each_side():
+    assert teams.MIN_SPLIT_GAMES == 3
+
+
+def test_a_line_shows_how_often_the_player_cleared_it_lately_and_the_projection_gap():
+    row = teams.line_facts(GAMES, 2, 25.5, 23.0)
+    assert (row["cleared"], row["games"]) == (2, 4)           # 28, 28 over; 20, 20 under
+    assert row["edge"] == pytest.approx(-2.5)
+    assert teams.line_facts(GAMES, 2, 25.5, None)["edge"] is None
+
+
+def test_the_matchup_puts_both_teams_ranks_side_by_side():
+    done = teams.finished(GAMES)
+    table = teams.team_games(done)
+    card = teams.matchup("BOS", "NYK", table, teams.ratings(table), teams.allowed(done))
+    assert [side_["code"] for side_ in card["sides"]] == ["BOS", "NYK"]
+    bos, nyk = card["sides"]
+    assert bos["record"] == "3-1" and nyk["record"] == "0-3"
+    assert {"ortg_rank", "drtg_rank", "pace_rank", "allowed"} <= set(bos)
+    assert set(nyk["allowed"]) == {"pts", "reb", "ast", "fg3m"}
+
+
+def test_a_slate_game_the_team_has_already_finished_is_not_shown_as_next():
+    slate = pd.DataFrame({"game_date": ["2026-11-07"], "player_id": [1]})
+    assert teams.not_yet_played(slate, GAMES, "BOS").empty            # BOS finished its 11-07 game
+    assert not teams.not_yet_played(slate.assign(game_date="2026-11-09"), GAMES, "BOS").empty

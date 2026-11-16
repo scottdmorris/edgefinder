@@ -236,10 +236,11 @@ def test_every_suggested_slip_clears_the_chance_it_was_asked_for():
         assert (slips["Chance %"] >= floor * 100.0 - 1e-9).all()
 
 
-def test_the_styles_run_from_safer_to_bigger_payouts_and_balanced_is_the_default():
+def test_higher_hit_is_the_ui_default_and_generic_search_keeps_its_explicit_balanced_threshold():
     assert nba_parlay.STYLES["Safer"] > nba_parlay.STYLES["Balanced"] > \
         nba_parlay.STYLES["Bigger payouts"] > 0
-    assert nba_parlay.DEFAULT_STYLE == "Balanced"
+    assert nba_parlay.DEFAULT_STYLE == "Higher hit rate"
+    assert nba_parlay.STYLES["Higher hit rate"] == .60
     assert nba_parlay.suggest_parlays(worthwhile_pool()).equals(
         nba_parlay.suggest_parlays(worthwhile_pool(),
                                    min_chance=nba_parlay.STYLES["Balanced"]))

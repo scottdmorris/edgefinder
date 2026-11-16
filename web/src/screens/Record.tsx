@@ -35,6 +35,17 @@ export function Record() {
       {data.chain.started && (!data.chain.intact || !data.chain.clean) && <p role="alert" className="mt-3 font-bold text-bad">The record does not match its log. Do not trust these results.</p>}
       {integrity.after_tip > 0 && <p role="alert" className="mt-3 text-sm text-warn">{integrity.after_tip} picks were recorded after tip-off. Review the audit trail before interpreting these results.</p>}
       {data.models.length === 0 && <p className="mt-4 text-sm text-muted">No FanDuel lines recorded. Other sources are shown separately below.</p>}
+      {data.suggestions && <Section title="Suggested slips and the higher-hit trial" aside="prospective paper record">
+        {[['Suggestions offered', data.suggestions.offered], ['Frozen higher-hit trial', data.suggestions.experiment]].map(([label, item]) => {
+          const facts = item as NonNullable<RecordData['suggestions']>['offered']
+          return <div key={String(label)} className="mt-2 rounded-2xl border border-line p-4">
+            <h3 className="font-bold">{String(label)}</h3>
+            <p>{facts.wins}–{facts.losses} · {facts.graded} graded · {facts.pending} pending · {facts.void} void</p>
+            <p>Hit rate {facts.hit_pct == null ? '—' : `${facts.hit_pct}%`} · return {facts.roi_pct == null ? '—' : `${facts.roi_pct}%`} · {facts.units.toFixed(2)} units</p>
+          </div>
+        })}
+        <p className="mt-2 text-xs text-muted">Offers are unique suggestions returned by the app, not clicks or real wagers. Suggestions can share legs. Trial {data.suggestions.protocol.id}: first qualifying two-leg FanDuel slip each day, Context v2, different games. Review after {data.suggestions.protocol.review_after_slips} graded slips across at least {data.suggestions.protocol.review_after_game_days} game days. No profitability claim before that review. Payouts are simulated, before fees.</p>
+      </Section>}
       <Models models={data.models} />
       <Profit running={data.running} models={data.models} />
       <ByBook data={data} />
@@ -229,15 +240,15 @@ function Chain({ chain }: { chain: RecordData['chain'] }) {
 
 function Clv({ data }: { data: RecordData }) {
   return (
-    <Section title="Did the price move our way?" aside="closing-line value">
+    <Section title="Did we beat the fair closing price?" aside="margin removed">
       {data.clv.length === 0 ? <p className="text-sm text-muted">Appears after the first graded picks with a closing price.</p> : (
         <div className="grid gap-2.5 sm:grid-cols-2">
           {data.clv.map((c) => (
             <div key={c.book} className="rounded-2xl border border-line bg-raised p-4">
               <div className="font-bold">{c.name}</div>
               <div className="mt-2 grid grid-cols-3 gap-2">
-                <Fact label="Average move" value={`${c.avg_pct > 0 ? '+' : ''}${c.avg_pct.toFixed(1)}%`} />
-                <Fact label="Beat the close" value={`${c.beat_pct.toFixed(0)}%`} className={c.beat_pct >= 50 ? 'text-good' : 'text-bad'} />
+                <Fact label="Value vs fair close" value={`${c.avg_pct > 0 ? '+' : ''}${c.avg_pct.toFixed(1)}%`} />
+                <Fact label="Beat the fair close" value={`${c.beat_pct.toFixed(0)}%`} className={c.beat_pct >= 50 ? 'text-good' : 'text-bad'} />
                 <Fact label="Measured" value={String(c.measured)} />
               </div>
             </div>
@@ -245,8 +256,8 @@ function Clv({ data }: { data: RecordData }) {
         </div>
       )}
       <p className="mt-2 text-xs text-muted">
-        Compares the price we took with the price just before tip-off. A market that keeps moving our way shows up long
-        before wins and losses can be trusted.
+        Compares our payout with the market’s closing chance after removing the book’s margin. Positive value means
+        we beat the fair close; it does not guarantee a profit.
       </p>
       {data.gaps && (
         <p className="mt-1 text-xs text-muted">

@@ -20,7 +20,7 @@ export function Parlay() {
   const [board, setBoard] = useState<Board | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [game, setGame] = useState(ALL)
-  const [style, setStyle] = useState('Balanced')
+  const [style, setStyle] = useState('Higher hit rate')
   const [ideas, setIdeas] = useState<Idea[] | null>(null)
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(false)

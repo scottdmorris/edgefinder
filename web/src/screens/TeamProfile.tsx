@@ -1,9 +1,11 @@
-// A team on the Players screen: record, where it ranks, tonight's lines, who is out and what
-// his teammates did without him, the roster and recent results.
+// A team on the Players screen. Built for someone about to bet a prop: tonight's matchup and
+// lines first, then what the team gives up, its form, who's out (and what teammates did without
+// them), and the roster. Sections live in TeamSections.
 import { useEffect, useState } from 'react'
-import { api, type TeamProfile as Team, type TeammateSplit } from '../lib/api'
-import { american } from '../lib/ladder'
-import { Empty, Section, StatStrip } from '../components/ui'
+import { api, type MatchupSide, type PropStat, type TeamProfile as Team } from '../lib/api'
+import { Empty, Section } from '../components/ui'
+import { ordinal, STAT_LABELS } from '../lib/teamFormat'
+import { Absences, Allowed, Form, Roster, Tonight } from './TeamSections'
 
 interface TeamProfileProps {
   code: string
@@ -19,34 +21,71 @@ export function TeamProfile({ code, onPlayer }: TeamProfileProps) {
   return <TeamView team={team} onPlayer={onPlayer} />
 }
 
-/** "3rd of 30" */
-const ordinal = (n: number) => {
-  const tail = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'
-  return `${n}${tail}`
-}
-
 export function TeamView({ team, onPlayer }: { team: Team; onPlayer: (id: number) => void }) {
-  const r = team.record
   return (
     <div className="mt-5">
-      <div className="rise relative overflow-hidden rounded-3xl border border-line px-5 py-5"
-        style={{ background: `linear-gradient(110deg, color-mix(in srgb, ${team.color} 30%, #000), #0b0c0e 70%)` }}>
-        <img src={team.logo} alt="" className="absolute -right-6 -top-6 size-40 opacity-10" />
-        <div className="relative flex items-center gap-4">
-          <img src={team.logo} alt="" className="size-16 shrink-0" />
-          <div>
-            <div className="text-2xl font-black leading-tight sm:text-3xl">{team.name}</div>
-            <div className="mt-1 text-sm text-muted">
-              {team.season} · {r.wins}-{r.losses} · home {r.home} · away {r.away} · last 10 {r.last10}{r.streak && ` · ${r.streak}`}
-            </div>
-          </div>
-        </div>
-      </div>
+      <Header team={team} />
       <Ranks team={team} />
+      <Matchup team={team} />
       <Tonight team={team} onPlayer={onPlayer} />
+      <Allowed team={team} />
+      <Form team={team} />
       <Absences team={team} onPlayer={onPlayer} />
       <Roster team={team} onPlayer={onPlayer} />
-      <Results team={team} />
+    </div>
+  )
+}
+
+function Chip({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
+  const color = tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : 'text-text'
+  return (
+    <span className="rounded-full border border-line bg-ink/40 px-3 py-1 text-xs">
+      <span className="text-muted">{label} </span><b className={color}>{value}</b>
+    </span>
+  )
+}
+
+function Header({ team }: { team: Team }) {
+  const r = team.record
+  return (
+    <div className="rise relative overflow-hidden rounded-3xl border border-line px-5 py-5"
+      style={{ background: `linear-gradient(110deg, color-mix(in srgb, ${team.color} 32%, #000), #0b0c0e 72%)` }}>
+      <img src={team.logo} alt="" className="absolute -right-8 -top-8 size-48 opacity-10" />
+      <div className="relative flex items-center gap-4">
+        <img src={team.logo} alt="" className="size-16 shrink-0 sm:size-20" />
+        <div className="min-w-0">
+          <div className="text-2xl font-black leading-tight sm:text-3xl">{team.name}</div>
+          <div className="mt-0.5 text-sm text-muted">{team.season}</div>
+        </div>
+        <div className="ml-auto text-right">
+          <div className="text-3xl font-black tabular-nums sm:text-4xl">{r.wins}-{r.losses}</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted">record</div>
+        </div>
+      </div>
+      <div className="relative mt-4 flex flex-wrap gap-2">
+        <Chip label="Home" value={r.home} />
+        <Chip label="Away" value={r.away} />
+        <Chip label="Last 10" value={r.last10} />
+        {r.streak && <Chip label="Streak" value={r.streak} tone={r.streak.startsWith('W') ? 'good' : 'bad'} />}
+      </div>
+    </div>
+  )
+}
+
+/** A rank as a 0-1 bar where 1st is full. */
+const strength = (rank: number, of: number) => Math.max(0.06, 1 - (rank - 1) / Math.max(of - 1, 1))
+
+function RankBar({ label, rank, of, detail }: { label: string; rank: number; of: number; detail?: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-raised px-4 py-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</div>
+        <div className="text-lg font-black tabular-nums">{ordinal(rank)}</div>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-line">
+        <div className="h-full rounded-full bg-text" style={{ width: `${strength(rank, of) * 100}%` }} />
+      </div>
+      {detail && <div className="mt-1.5 text-xs text-muted">{detail}</div>}
     </div>
   )
 }
@@ -55,120 +94,61 @@ function Ranks({ team }: { team: Team }) {
   const g = team.ratings
   const of = team.teams_in_league
   return (
-    <div className="mt-3">
-      <StatStrip items={[
-        { value: g.ppg?.toFixed(1), label: `points · ${ordinal(g.ppg_rank)}` },
-        { value: g.opp_ppg?.toFixed(1), label: `allowed · ${ordinal(g.opp_ppg_rank)}` },
-        { value: ordinal(g.ortg_rank), label: `offense of ${of}` },
-        { value: ordinal(g.drtg_rank), label: `defense of ${of}` },
-      ]} />
+    <>
+      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <RankBar label="Scoring" rank={g.ppg_rank} of={of} detail={`${g.ppg?.toFixed(1)} a game`} />
+        <RankBar label="Points allowed" rank={g.opp_ppg_rank} of={of} detail={`${g.opp_ppg?.toFixed(1)} a game`} />
+        <RankBar label="Offense" rank={g.ortg_rank} of={of} detail="per possession" />
+        <RankBar label="Defense" rank={g.drtg_rank} of={of} detail="per possession" />
+      </div>
       <p className="mt-2 text-xs text-muted">
-        Offense and defense rank points per possession, which strips out how fast a team plays.
-        Pace: {ordinal(g.pace_rank)} fastest. Net {g.net > 0 ? '+' : ''}{g.net?.toFixed(1)} per 100 possessions ({ordinal(g.net_rank)}).
-        Possessions are estimated from box scores.
+        Ranks out of {of}; 1st is best. Pace {ordinal(g.pace_rank)} fastest. Net {g.net > 0 ? '+' : ''}{g.net?.toFixed(1)} per
+        100 possessions ({ordinal(g.net_rank)}). Possessions are estimated from box scores.
       </p>
-    </div>
+    </>
   )
 }
 
-function Tonight({ team, onPlayer }: { team: Team; onPlayer: (id: number) => void }) {
-  if (!team.tonight.length) return null
+const tipTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'
+
+const ROWS: { label: string; pick: (s: MatchupSide) => string; better: (s: MatchupSide) => number }[] = [
+  { label: 'Record', pick: (s) => s.record, better: (s) => -s.net_rank },
+  { label: 'Points a game', pick: (s) => s.ppg.toFixed(1), better: (s) => s.ppg },
+  { label: 'Allowed a game', pick: (s) => s.opp_ppg.toFixed(1), better: (s) => -s.opp_ppg },
+  { label: 'Offense', pick: (s) => ordinal(s.ortg_rank), better: (s) => -s.ortg_rank },
+  { label: 'Defense', pick: (s) => ordinal(s.drtg_rank), better: (s) => -s.drtg_rank },
+  { label: 'Pace', pick: (s) => ordinal(s.pace_rank), better: () => 0 },
+]
+
+function Matchup({ team }: { team: Team }) {
+  const sides = team.matchup?.sides
+  const next = team.next_game
+  if (!sides || sides.length < 2 || !next) return null
+  const [mine, theirs] = sides
+  const stats = Object.keys(STAT_LABELS) as PropStat[]
   return (
-    <Section title="On the latest slate" aside={team.tonight[0].game}>
+    <Section title={`Next: ${next.home ? 'vs' : '@'} ${theirs.name}`} aside={tipTime(next.tip)}>
       <div className="overflow-hidden rounded-2xl border border-line bg-raised">
-        {team.tonight.map((p) => (
-          <button key={p.id} type="button" onClick={() => onPlayer(p.id)}
-            className="flex min-h-11 w-full items-center gap-3 border-t border-line px-4 py-2 text-left text-sm first:border-t-0 hover:bg-raised-2">
-            <span className="flex-1 font-semibold">{p.name}</span>
-            <span className="tabular-nums">points <b>{p.line}</b> <span className="text-muted">o {american(p.over)} · u {american(p.under)}</span></span>
-            {p.projection != null && <span className="w-24 text-right tabular-nums text-muted">projects {p.projection}</span>}
-          </button>
-        ))}
-      </div>
-    </Section>
-  )
-}
-
-function Split({ row, onPlayer }: { row: TeammateSplit; onPlayer: (id: number) => void }) {
-  const change = row.pts_without - row.pts_with
-  return (
-    <button type="button" onClick={() => onPlayer(row.id)}
-      className="flex min-h-11 w-full items-center gap-3 border-t border-line px-4 py-2 text-left text-sm first:border-t-0 hover:bg-raised-2">
-      <img src={row.photo} alt="" className="h-8 w-10 object-contain object-bottom" />
-      <span className="flex-1 font-semibold">{row.name}</span>
-      <span className="tabular-nums text-muted">{row.pts_with} → <b className="text-text">{row.pts_without}</b> pts</span>
-      <span className={`w-14 text-right font-bold tabular-nums ${change >= 0 ? 'text-good' : 'text-bad'}`}>{change >= 0 ? '+' : ''}{change.toFixed(1)}</span>
-      <span className="hidden w-28 text-right text-xs text-muted sm:block">{row.min_with} → {row.min_without} min</span>
-    </button>
-  )
-}
-
-function Absences({ team, onPlayer }: { team: Team; onPlayer: (id: number) => void }) {
-  const others = team.injuries.filter((i) => !team.absences.some((a) => a.name === i.name))
-  return (
-    <Section title="Who's out" aside={team.injury_report ? 'ESPN injury report' : 'Injury report unavailable'}>
-      {!team.injury_report && <p className="text-sm text-muted">The injury report couldn't be read right now.</p>}
-      {team.injury_report && !team.injuries.length && <p className="text-sm text-muted">Nobody listed.</p>}
-      {team.absences.map((a) => (
-        <div key={a.id} className="mb-3">
-          <div className="text-sm"><b>{a.name}</b> <span className="font-bold text-bad">{a.status}</span>{a.detail && <span className="text-muted"> · {a.detail}</span>}</div>
-          {a.teammates.length ? (
-            <div className="mt-2 overflow-hidden rounded-2xl border border-line bg-raised">
-              <div className="px-4 py-2 text-xs text-muted">Teammates' points with him ({a.with_games} games) → without him ({a.without_games} games)</div>
-              {a.teammates.map((t) => <Split key={t.id} row={t} onPlayer={onPlayer} />)}
-            </div>
-          ) : <p className="mt-1 text-xs text-muted">Not enough games without him this season to compare.</p>}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-line px-4 py-3">
+          <div className="flex items-center gap-2"><img src={mine.logo} alt="" className="size-8" /><b>{mine.code}</b></div>
+          <div className="text-xs text-muted">{next.home ? 'home' : 'away'}</div>
+          <div className="flex items-center justify-end gap-2"><b>{theirs.code}</b><img src={theirs.logo} alt="" className="size-8" /></div>
         </div>
-      ))}
-      {others.length > 0 && (
-        <p className="text-sm text-muted">{others.map((i) => `${i.name} (${i.status.toLowerCase()})`).join(' · ')}</p>
-      )}
-    </Section>
-  )
-}
-
-function Roster({ team, onPlayer }: { team: Team; onPlayer: (id: number) => void }) {
-  return (
-    <Section title="Roster" aside="per game this season">
-      <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
-        <table className="w-full text-sm tabular-nums">
-          <thead><tr className="text-xs text-muted">
-            {['Player', 'G', 'Min', 'Pts', 'Reb', 'Ast', '3PM'].map((h, i) => (
-              <th key={h} className={`px-3 py-2 font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {team.roster.map((p) => (
-              <tr key={p.id} className="border-t border-line">
-                <td className="px-3 py-2"><button type="button" onClick={() => onPlayer(p.id)} className="font-semibold hover:underline">{p.name}</button></td>
-                <td className="px-3 py-2 text-right">{p.games}</td>
-                <td className="px-3 py-2 text-right">{p.minutes}</td>
-                <td className="px-3 py-2 text-right font-black">{p.pts}</td>
-                <td className="px-3 py-2 text-right">{p.reb}</td>
-                <td className="px-3 py-2 text-right">{p.ast}</td>
-                <td className="px-3 py-2 text-right">{p.fg3m}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {ROWS.map((row) => {
+          const a = row.better(mine), b = row.better(theirs)
+          return (
+            <div key={row.label} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-line px-4 py-2 text-sm tabular-nums first:border-t-0">
+              <span className={a > b ? 'font-black' : 'text-muted'}>{row.pick(mine)}</span>
+              <span className="text-center text-xs text-muted">{row.label}</span>
+              <span className={`text-right ${b > a ? 'font-black' : 'text-muted'}`}>{row.pick(theirs)}</span>
+            </div>
+          )
+        })}
       </div>
-    </Section>
-  )
-}
-
-function Results({ team }: { team: Team }) {
-  return (
-    <Section title="Recent results">
-      <div className="overflow-hidden rounded-2xl border border-line bg-raised">
-        {team.results.map((g) => (
-          <div key={g.date} className="flex min-h-10 items-center gap-3 border-t border-line px-4 text-sm first:border-t-0">
-            <span className="w-16 text-muted">{new Date(`${g.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-            <span className="flex-1">{g.home ? 'vs' : '@'} {g.opponent}</span>
-            <span className={`font-bold ${g.result === 'W' ? 'text-good' : 'text-bad'}`}>{g.result}</span>
-            <span className="w-20 text-right tabular-nums">{g.score}</span>
-          </div>
-        ))}
-      </div>
+      <p className="mt-2 text-xs text-muted">
+        {theirs.code} gives up {stats.map((s) => `${theirs.allowed[s].value} ${STAT_LABELS[s].toLowerCase()} (${ordinal(theirs.allowed[s].rank)} most)`).join(' · ')} a game.
+      </p>
     </Section>
   )
 }

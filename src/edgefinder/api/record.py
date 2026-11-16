@@ -9,6 +9,7 @@ import pandas as pd
 
 from ..tracking import gap_log, nba_alt, nba_paper, nba_record, pick_chain
 from . import service
+from ..tracking import suggested_record
 
 DIGESTS = Path(__file__).resolve().parents[3] / "record" / "DIGESTS.md"
 LOG_ROWS = 400                # most recent picks sent to the page; the full ledger is in the repo
@@ -74,12 +75,14 @@ def _gaps() -> dict | None:
 
 
 def _clv(ledger: pd.DataFrame) -> list[dict]:
-    summary = nba_record.clv_summary(ledger)
-    return [{"book": book, "name": name, "measured": facts["measured"],
-             "avg_pct": service._num(facts["avg_clv_pct"], 1),
-             "beat_pct": service._num(facts["beat_close_pct"], 0)}
-            for book, name in BOOKS
-            if (facts := summary.get(book)) and facts["measured"]]
+    result = []
+    for book, name in BOOKS:
+        facts = nba_paper.summary(ledger, book=book)
+        if facts["clv_novig_n"]:
+            result.append({"book": book, "name": name, "measured": facts["clv_novig_n"],
+                           "avg_pct": service._num(facts["avg_clv_novig_pct"], 1),
+                           "beat_pct": service._num(facts["beat_fair_close_pct"], 0)})
+    return result
 
 
 def by_book(ledger: pd.DataFrame) -> list[dict]:
@@ -137,6 +140,7 @@ def record() -> dict:
                           "after_tip": report["after_tip"],
                           "first_lock": _time(report["first_lock"]),
                           "last_lock": _time(report["last_lock"])},
+            "suggestions": suggested_record.summary(),
             "chain": chain(), "clv": _clv(everything), "gaps": _gaps(),
             "by_book": by_book(everything),
             "models": _models(ledger),

@@ -358,7 +358,9 @@ def test_saved_quote_ids_survive_new_players_and_row_reordering(client, monkeypa
     service.clear_cache()
     after = {leg["id"]: leg for leg in client.get("/api/board").json()["legs"]}
     for leg in before:
-        assert after[leg["id"]] == leg
+        # Evidence age changes with wall time; quote identity and price fields must not.
+        assert {k: v for k, v in after[leg["id"]].items() if k != "quality"} == {
+            k: v for k, v in leg.items() if k != "quality"}
         assert 0 <= leg["id"] < 2**53
 
 

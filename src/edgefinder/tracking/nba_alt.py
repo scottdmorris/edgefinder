@@ -14,6 +14,7 @@ probability, vig included, which makes an edge look smaller than it is.
 That is deliberate: it is the conservative direction.
 """
 
+
 import csv
 import datetime as dt
 import logging
@@ -27,9 +28,10 @@ from ..betting import negbin
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
 from ..data import safe_write
+from . import settlement
 from ..models import nba_context_points, nba_context_v2, nba_minutes_points, nba_points
 from .nba_paper import (  # noqa: F401 - MIN_MODEL_P/MAX_DISAGREEMENT re-exported
-    MAX_DISAGREEMENT, MIN_EV_TO_RECORD, MIN_MODEL_P, MODEL_WEIGHT, can_void, latest_logged,
+    MAX_DISAGREEMENT, MIN_EV_TO_RECORD, MIN_MODEL_P, MODEL_WEIGHT,
     tipped_off,
 )
 
@@ -201,7 +203,7 @@ def settle(ledger: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.Data
         (int(row.player_id), row.game_date.strftime("%Y-%m-%d")): float(row.pts)
         for row in games.itertuples()
     }
-    logged_through = latest_logged(games)
+    complete = settlement.completed_games(games)
     for index in out.index[out["status"] == "pending"]:
         row = out.loc[index]
         key = (int(row["player_id"]), str(row["game_date"]))
@@ -214,7 +216,7 @@ def settle(ledger: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.Data
                 out.loc[index, "result"] = "win" if won else "loss"
                 out.loc[index, "pnl_units"] = (
                     american_to_decimal(float(row["over_odds"])) - 1.0 if won else -1.0)
-        elif can_void(str(row["game_date"]), today, logged_through):
+        elif settlement.can_void(row, today, complete):
             out.loc[index, "status"] = "void"
             out.loc[index, "pnl_units"] = 0.0
     return out

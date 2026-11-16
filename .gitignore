@@ -28,3 +28,5 @@ data/config.json
 htmlcov/
 research_notes/
 reports/
+
+data/suggested_slips.sqlite3*

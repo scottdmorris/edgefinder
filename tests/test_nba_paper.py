@@ -1,5 +1,7 @@
 import datetime as dt
 
+from game_log_helpers import complete_game
+
 import pandas as pd
 import pytest
 
@@ -129,7 +131,7 @@ def test_an_over_pick_loses_when_the_player_scores_less():
 
 def test_a_player_who_did_not_play_voids_the_row_once_the_day_has_passed():
     settled = nba_paper.settle(
-        ledger_with(pending_over_pick()), games_frame([(99, GAME_DATE, 10)]),
+        ledger_with(pending_over_pick()), complete_game(),
         empty_snapshots(), TODAY_AFTER)
     row = settled.iloc[0]
     assert row["status"] == "void"

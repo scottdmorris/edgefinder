@@ -107,5 +107,20 @@ export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[
       <div className={`text-[11px] font-semibold tabular-nums ${leanTone}`}>model {compared.model_pct?.toFixed(0) ?? '–'}%</div>
     </div>
     <div className="flex basis-full gap-1.5 sm:basis-auto">{button(step.yes)}{step.no && button(step.no, true)}</div>
+    <div className="basis-full text-xs text-muted">
+      {compared.quality && <>
+        <div>{compared.quality.history_games} prior games · historical hit rate {compared.quality.recent_hit_pct == null ? 'unavailable' : `${compared.quality.recent_hit_pct}%`}
+          {compared.quality.historical_low != null && ` · middle 80% of past results: ${compared.quality.historical_low}–${compared.quality.historical_high}`}</div>
+        <div>{compared.quality.price_at ? `Price checked ${new Date(compared.quality.price_at).toLocaleString()}` : 'Price timestamp unavailable'}</div>
+        {compared.quality.warnings.length > 0 && <div className="text-warn">Pass for higher-hit suggestions: {compared.quality.warnings.join('; ')}</div>}
+        <div>{compared.quality.injuries}. Historical hit rates are not forecast probabilities.</div>
+      </>}
+      {compared.comparisons?.map((other) => <div key={other.book}>
+        FanDuel {compared.side} {compared.line}: {american(compared.odds)} ({(1 + (compared.odds > 0 ? compared.odds / 100 : 100 / -compared.odds)).toFixed(2)}× return) ·
+        {' '}{other.book} {compared.side} {other.line}: {american(other.odds)} ({(1 + (other.odds > 0 ? other.odds / 100 : 100 / -other.odds)).toFixed(2)}× return)
+        {' · '}{other.stale ? 'comparison is stale' : !other.same_line ? 'different numbers; payouts are not directly comparable' : other.better_payout ? 'DraftKings pays more on this same number' : 'FanDuel pays at least as much on this same number'}
+        {' · '}{new Date(other.fetched_at).toLocaleString()}
+      </div>)}
+    </div>
   </div>
 }

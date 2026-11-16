@@ -40,9 +40,15 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
       </div>
 
       {ideas === null && <div className="mt-3 h-32 animate-pulse rounded-2xl bg-raised-2" />}
-      {ideas?.length === 0 && <p className="mt-4 text-sm text-muted">Nothing fits this style here. Try a bigger-payout style or another game.</p>}
+      {ideas?.length === 0 && <p className="mt-4 text-sm text-muted">No qualifying slip right now. Passing is part of this style; do not add legs just to get a suggestion.</p>}
+      <p className="mt-2 text-xs text-muted">Higher hit rate uses at most two legs and seeks a 60%+ model estimate. That is a target to test, not a proven win rate.</p>
       {idea && (
         <div key={idea.legs.join(',')} className="rise">
+          <p className="mt-2 text-xs text-muted">
+            Break-even hit rate: {(idea.break_even_pct ?? 100 / idea.pays).toFixed(1)}% at this payout.
+            {' '}{idea.price_basis ?? 'Simulated payout from recorded leg prices'}; an actual sportsbook parlay quote may differ.
+            {' '}{idea.tracked_id ? `Recorded for paper grading: ${idea.tracked_id.slice(0, 8)}` : 'Not recorded as a pregame offer'}
+          </p>
           <div className="mt-3 divide-y divide-line">
             {idea.legs.map((id) => {
               const leg = legs.get(id)
@@ -61,7 +67,7 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
           </div>
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
             <div className="flex gap-6">
-              <Figure value={`${idea.chance_pct.toFixed(0)}%`} label="to hit" />
+              <Figure value={`${idea.chance_pct.toFixed(0)}%`} label="estimated to hit" />
               <Figure value={money(idea.pays * EXAMPLE_STAKE)} label={`back on $${EXAMPLE_STAKE}, before fees`} />
             </div>
             <div className="flex gap-2">

@@ -64,6 +64,7 @@ def commit_and_push(repo: Path, files: list[Path], message: str, run=subprocess.
 
     git("add", "--", *names)
     if git("diff", "--cached", "--quiet", "--", *names, check=False).returncode == 0:
+        git("push")  # retry a previously committed record whose push failed
         return "nothing new"
     git("commit", "-m", message, "--", *names)
     git("push")

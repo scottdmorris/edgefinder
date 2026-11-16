@@ -2,8 +2,8 @@
 
 Run with:  .venv\\Scripts\\uvicorn edgefinder.api.app:app --app-dir src --port 8000
 
-Every route reads what the scheduled jobs recorded; nothing here spends Odds API requests or
-writes to the ledger. When web/dist exists (after `npm run build` in web/), the same server also
+Routes read what the scheduled jobs recorded; none spends Odds API requests or writes model
+picks to the ledger. Suggested slips returned to visitors have a separate paper archive. When web/dist exists (after `npm run build` in web/), the same server also
 serves the app itself at "/", so one address works on a PC or a phone.
 """
 

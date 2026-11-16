@@ -1,7 +1,19 @@
 // Typed access to the Ball Knowledge API (src/edgefinder/api). Every number here comes from the
 // Python side; the front end only shows it.
 
+export type QuoteQuality = {
+  eligible: boolean; warnings: string[]; history_games: number; recent_hit_pct: number | null
+  historical_low: number | null; historical_high: number | null; price_at: string | null
+  price_age_minutes: number | null; injuries: string
+}
+export type BookComparison = { book: string; line: number; odds: number; fetched_at: string;
+  stale: boolean; same_line: boolean; better_payout: boolean }
+export type SuggestionFacts = { offered: number; graded: number; wins: number; losses: number;
+  pending: number; void: number; units: number; hit_pct: number | null; roi_pct: number | null;
+  brier: number | null; market_brier: number | null; calibration_n: number; game_days: number }
 export type Leg = {
+  quality?: QuoteQuality | null
+  comparisons?: BookComparison[]
   id: number
   player: string
   player_id: number
@@ -74,7 +86,8 @@ export type Board = {
   default_style: string
 }
 
-export type Idea = { legs: number[]; chance_pct: number; pays: number; ev_pct: number }
+export type Idea = { legs: number[]; chance_pct: number; pays: number; ev_pct: number;
+  tracked_id?: string | null; break_even_pct?: number; price_basis?: string }
 
 export type SlipMatches = { matches: { player: string; text: string; candidate_ids: number[]; status: string }[]; note: string }
 export type SlipReviewResult = {
@@ -213,6 +226,8 @@ export type ModelRecord = {
 type GapPart = { logged: number; record: string; units: number }
 
 export type RecordData = {
+  suggestions?: { offered: SuggestionFacts; experiment: SuggestionFacts;
+    protocol: { id: string; review_after_slips: number; review_after_game_days: number } }
   empty: boolean
   integrity: { picks: number; graded: number; after_tip: number; first_lock: string | null; last_lock: string | null }
   chain: {
@@ -256,6 +271,35 @@ export type TeammateSplit = {
   min_without: number
 }
 
+export type PropStat = 'pts' | 'reb' | 'ast' | 'fg3m'
+/** A per-game number and its league rank (for "allowed", 1 = gives up the most). */
+export type RankedValue = { value: number; rank: number }
+
+export type MatchupSide = {
+  code: string
+  name: string
+  logo: string
+  color: string
+  record: string
+  ppg: number
+  opp_ppg: number
+  ortg_rank: number
+  drtg_rank: number
+  pace_rank: number
+  net_rank: number
+  allowed: Record<PropStat, RankedValue>
+}
+
+export type RosterPlayer = {
+  id: number; name: string; photo: string; games: number; minutes: number; last5_min: number
+  status: string | null; pts: number; reb: number; ast: number; fg3m: number
+}
+
+export type TonightLine = {
+  id: number; name: string; line: number; over: number; under: number
+  projection: number | null; edge: number | null; cleared: number; games: number
+}
+
 export type TeamProfile = {
   code: string
   name: string
@@ -269,9 +313,12 @@ export type TeamProfile = {
     ppg: number; opp_ppg: number; ortg: number; drtg: number; net: number; pace: number
     ppg_rank: number; opp_ppg_rank: number; ortg_rank: number; drtg_rank: number; net_rank: number; pace_rank: number
   }
+  allowed: Record<PropStat, RankedValue>
+  next_game: { opponent: string; home: boolean; tip: string; date: string } | null
+  matchup: { sides: MatchupSide[] } | null
   results: { date: string; opponent: string; home: boolean; result: string; score: string }[]
-  roster: { id: number; name: string; photo: string; games: number; minutes: number; pts: number; reb: number; ast: number; fg3m: number }[]
-  tonight: { id: number; name: string; line: number; over: number; under: number; projection: number | null; game: string; date: string }[]
+  roster: RosterPlayer[]
+  tonight: TonightLine[]
   injury_report: boolean
   injuries: { name: string; status: string; detail: string }[]
   absences: { id: number; name: string; status: string; detail: string; with_games: number; without_games: number; teammates: TeammateSplit[] }[]

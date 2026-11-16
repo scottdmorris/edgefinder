@@ -1,7 +1,8 @@
 """What the web app shows, computed by the functions in `tracking/`.
 
 Nothing here prices, projects or grades anything new: it gathers the ledger, the legs, the ideas
-and the price gaps that `tracking/` already produces and shapes them for the API. Results are
+and the price gaps that `tracking/` already produces and shapes them for the API. Offered
+suggestions are frozen in a separate archive for prospective grading. Results are
 cached for a short time so a page of taps doesn't re-read the files each time.
 """
 
@@ -19,6 +20,7 @@ from ..data import job_health, nba_stats
 from ..data.nba_snapshot_plan import EASTERN
 from ..models import nba_stat_model
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
+from . import suggestion_service
 
 CACHE_SECONDS = 60
 IDEAS_SHOWN = 3
@@ -190,6 +192,8 @@ def candidates(date: str | None, book: str | None, model: str | None) -> tuple[p
             raise ValueError("duplicate quote identities; refresh the recorded data")
         return table
     table = cached(("candidates", date, book, model), identified)
+    table = suggestion_service.enrich(table, {"date": date, "book": book, "model": model},
+                                      load_ledger(), load_alt(), load_games(), dt.datetime.now(dt.timezone.utc))
     return table, {"date": date, "book": book, "model": model, "found": found}
 
 
@@ -197,6 +201,7 @@ def _leg(index: int, row: pd.Series, averages: dict) -> dict:
     stat = row["stat_key"]
     pair = averages.get(int(row["player_id"]), {}).get(nba_stat_model.STATS[stat].column)
     return {
+        "quality": row.get("quality"), "comparisons": row.get("comparisons", []),
         "id": int(index), "player": row["Player"], "player_id": int(row["player_id"]),
         "photo": nba_parlay.headshot_url(row["player_id"]), "game": row["Game"],
         "game_short": _short(row["Game"]), "stat": stat, "stat_label": row["Stat"],
@@ -313,17 +318,29 @@ def ideas(date: str | None, book: str | None, model: str | None, style: str,
         raise NotFound(f"unknown style {style}")
     table, chosen = candidates(date, book, model)
     pool = table if not game else table[table["Game"] == game]
+    if style == suggestion_service.STYLE:
+        pool = pool[pool["quality"].map(lambda q: q["eligible"])]
 
     def search() -> pd.DataFrame:
         return nba_parlay.suggest_parlays(
             pool, top=IDEAS_SHOWN, min_chance=nba_parlay.STYLES[style],
-            min_profit=nba_parlay.MIN_PROFIT[style], real_leg_decimal=nba_parlay.REAL_LEG_DECIMAL,
+            min_profit=nba_parlay.MIN_PROFIT[style], real_leg_decimal=1.10 if style == suggestion_service.STYLE else nba_parlay.REAL_LEG_DECIMAL,
+            max_legs=2 if style == suggestion_service.STYLE else 4,
             one_per_game=not game, bench=nba_parlay.bench_players(_averages()))
-    slips = cached(("ideas", chosen["date"], chosen["book"], chosen["model"], style, game, tuple(table.index)), search,
+    slips = cached(("ideas", chosen["date"], chosen["book"], chosen["model"], style, game, tuple((int(i), float(r["Odds"]), float(r["prob"]), r.get("quality", {}).get("eligible"))
+                                     for i, r in pool.iterrows())), search,
                    300)
-    return [{"legs": [int(i) for i in row["bets"]], "chance_pct": _num(row["Chance %"], 1),
-             "pays": _num(row["Pays"] + 1.0, 2), "ev_pct": _num(row["EV %"], 1)}
-            for _, row in slips.iterrows()]
+    result = []
+    now = dt.datetime.now(dt.timezone.utc)
+    for _, row in slips.iterrows():
+        ids = [int(i) for i in row["bets"]]
+        probability, payout = float(row["Chance %"]) / 100, float(row["Pays"]) + 1
+        tracked = suggestion_service.archive_idea(chosen, style, game, table, ids, probability, payout, now)
+        result.append({"legs": ids, "chance_pct": _num(probability * 100, 1), "pays": _num(payout, 2),
+                       "ev_pct": _num(row["EV %"], 1), "tracked_id": tracked,
+                       "break_even_pct": _num(100 / payout, 1),
+                       "price_basis": "Simulated payout from recorded leg prices"})
+    return result
 
 
 def price_slip(date: str | None, book: str | None, model: str | None, leg_ids: list[int],

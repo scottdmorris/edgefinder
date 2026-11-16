@@ -19,13 +19,22 @@ from . import service
 LAST_GAMES = 10
 RESULTS_SENT = 10
 ROTATION_MINUTES = 15.0        # a regular: this many minutes a game or more
-MIN_SPLIT_GAMES = 2            # games needed on each side of a with/without split
+MIN_SPLIT_GAMES = 3            # games needed on each side of a with/without split
+RECENT_FORM = 5                # games behind a player's recent minutes
+LINE_GAMES = 10                # games behind a line's recent hit rate
+PROP_STATS = ("pts", "reb", "ast", "fg3m")
 SPLIT_TEAMMATES = 5
 INJURY_CACHE_SECONDS = 600
 PROJECTION_MODEL = "context-v2"
 
 
 # ---- league tables, from the game logs ---------------------------------------------------------
+
+def finished(games: pd.DataFrame) -> pd.DataFrame:
+    """Only games with a result. A game still being played has no win or loss yet, and its
+    partial score would count as a loss and drag every average down."""
+    return games[games["wl"].isin(["W", "L"])]
+
 
 def team_games(games: pd.DataFrame) -> pd.DataFrame:
     """One row per team per game: score both ways, possessions both ways, home and result."""
@@ -81,6 +90,19 @@ def ratings(table: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def allowed(games: pd.DataFrame) -> pd.DataFrame:
+    """Per team: what its opponents' players put up against it, per game, for the prop
+    stats, each ranked across the league with 1 = allows the most (the softest matchup)."""
+    totals = games.groupby(["game_id", "team"])[list(PROP_STATS)].sum().reset_index()
+    opponents = games.groupby(["game_id", "team"])["opponent"].first().reset_index()
+    against = (totals.merge(opponents, on=["game_id", "team"]).drop(columns="team")
+               .rename(columns={"opponent": "team"}))
+    out = against.groupby("team")[list(PROP_STATS)].mean()
+    for stat in PROP_STATS:
+        out[f"{stat}_rank"] = out[stat].rank(ascending=False, method="min").astype(int)
+    return out
+
+
 def results(table: pd.DataFrame, team: str, count: int = RESULTS_SENT) -> list[dict]:
     mine = table[table["team"] == team].sort_values("game_date", ascending=False).head(count)
     return [{"date": pd.Timestamp(r["game_date"]).strftime("%Y-%m-%d"), "opponent": r["opponent"],
@@ -95,19 +117,31 @@ def _current_players(games: pd.DataFrame, team: str) -> pd.Series:
     return latest[latest == team].index
 
 
-def roster(games: pd.DataFrame, team: str) -> list[dict]:
-    """Everyone whose latest game was for the team, with his averages for it, most total
-    minutes first."""
+def roster(games: pd.DataFrame, team: str, injuries: list | None = None) -> list[dict]:
+    """Everyone whose latest game was for the team, with his averages for it, his minutes
+    over his last RECENT_FORM games, and his injury status; most total minutes first."""
     mine = games[(games["team"] == team) & games["player_id"].isin(_current_players(games, team))]
     grouped = mine.groupby("player_id").agg(
         name=("player_name", "last"), games=("game_id", "nunique"), minutes=("minutes", "mean"),
         pts=("pts", "mean"), reb=("reb", "mean"), ast=("ast", "mean"), fg3m=("fg3m", "mean"),
         total=("minutes", "sum"))
     grouped = grouped.sort_values("total", ascending=False)
+    recent = (mine.sort_values("game_date").groupby("player_id").tail(RECENT_FORM)
+              .groupby("player_id")["minutes"].mean())
+    status = {nba_players.normalize_name(i.name): nba_injuries.label(i) for i in injuries or []}
     return [{"id": int(pid), "name": row["name"], "photo": nba_parlay.headshot_url(pid),
-             "games": int(row["games"]), **{k: round(float(row[k]), 1)
-                                            for k in ("minutes", "pts", "reb", "ast", "fg3m")}}
+             "games": int(row["games"]), "last5_min": round(float(recent.get(pid, 0.0)), 1),
+             "status": status.get(nba_players.normalize_name(row["name"])),
+             **{k: round(float(row[k]), 1) for k in ("minutes", "pts", "reb", "ast", "fg3m")}}
             for pid, row in grouped.iterrows()]
+
+
+def line_facts(games: pd.DataFrame, player_id: int, line: float, projection: float | None) -> dict:
+    """How often the player scored more than `line` in his last LINE_GAMES games, and how far
+    the projection sits from the line."""
+    last = games[games["player_id"] == player_id].sort_values("game_date").tail(LINE_GAMES)
+    return {"cleared": int((last["pts"] > line).sum()), "games": len(last),
+            "edge": round(projection - line, 1) if projection is not None else None}
 
 
 def with_without(games: pd.DataFrame, team: str, player_id: int) -> dict:
@@ -138,6 +172,25 @@ def with_without(games: pd.DataFrame, team: str, player_id: int) -> dict:
             "teammates": rows[:SPLIT_TEAMMATES]}
 
 
+def _side(code: str, table: pd.DataFrame, rated: pd.DataFrame, allowed_table: pd.DataFrame) -> dict:
+    mine, given = rated.loc[code], allowed_table.loc[code]
+    team_record = record(table, code)
+    return {"code": code, "name": _names().get(code, code), "logo": nba_live.logo_url(code),
+            "color": team_colors.team_color(code),
+            "record": f"{team_record['wins']}-{team_record['losses']}",
+            "ppg": round(float(mine["ppg"]), 1), "opp_ppg": round(float(mine["opp_ppg"]), 1),
+            **{f"{k}_rank": int(mine[f"{k}_rank"]) for k in ("ortg", "drtg", "pace", "net")},
+            "allowed": {stat: {"value": round(float(given[stat]), 1), "rank": int(given[f"{stat}_rank"])}
+                        for stat in PROP_STATS}}
+
+
+def matchup(team: str, opponent: str, table: pd.DataFrame, rated: pd.DataFrame,
+            allowed_table: pd.DataFrame) -> dict:
+    """Both teams' records, ranks and what each allows, side by side; the team first."""
+    return {"sides": [_side(code, table, rated, allowed_table) for code in (team, opponent)
+                      if code in rated.index and code in allowed_table.index]}
+
+
 # ---- names ----------------------------------------------------------------------------------------
 
 def _names() -> dict[str, str]:
@@ -155,9 +208,11 @@ def team_options(games: pd.DataFrame) -> list[dict]:
 # ---- what the API sends ------------------------------------------------------------------------
 
 def _season_games() -> pd.DataFrame:
+    """This season's finished games (last season's early on, before any are played)."""
     games = service.load_games()
     if games.empty:
         return games
+    games = finished(games)
     season = nba_stats.current_season(dt.date.today())
     current = games[games["season"] == season]
     return current if not current.empty else games[games["season"] == games["season"].max()]
@@ -177,25 +232,55 @@ def _injuries(team: str) -> tuple[list[nba_injuries.Injury], bool]:
     return [i for i in listed if i.team == team], True
 
 
-def _tonight(team: str) -> list[dict]:
-    """The team's players with a FanDuel points line on the latest slate, and the
-    projection of the model the app leads with."""
+def _slate(team: str) -> pd.DataFrame:
+    """The team's FanDuel rows on the latest slate (empty when it isn't playing)."""
     ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK)
     if ledger.empty:
-        return []
+        return ledger
     latest = ledger[ledger["game_date"] == ledger["game_date"].max()]
-    names = _names()
-    playing = latest[(latest["home"] == names.get(team)) | (latest["away"] == names.get(team))]
-    current = set(_current_players(service.load_games(), team))
-    rows = playing[playing["player_id"].isin(current)]
+    name = _names().get(team)
+    return latest[(latest["home"] == name) | (latest["away"] == name)]
+
+
+def not_yet_played(slate: pd.DataFrame, games: pd.DataFrame, team: str) -> pd.DataFrame:
+    """The slate rows, or none once the team has a finished game on or after the slate's
+    date: a game that is over is not 'next', and its lines are history."""
+    if slate.empty:
+        return slate
+    played = games.loc[games["team"] == team, "game_date"]
+    if not played.empty and played.max() >= pd.Timestamp(str(slate["game_date"].iloc[0])):
+        return slate.iloc[0:0]
+    return slate
+
+
+def _next_game(team: str, slate: pd.DataFrame) -> dict | None:
+    if slate.empty:
+        return None
+    first = slate.iloc[0]
+    home = nba_players.team_abbreviation(str(first["home"]))
+    away = nba_players.team_abbreviation(str(first["away"]))
+    opponent = away if home == team else home
+    if not opponent:
+        return None
+    return {"opponent": opponent, "home": home == team, "tip": first["commence_time"],
+            "date": first["game_date"]}
+
+
+def _tonight(team: str, slate: pd.DataFrame, games: pd.DataFrame) -> list[dict]:
+    """The team's players with a FanDuel points line on the latest slate: the line, the
+    projection of the model the app leads with, and how often he cleared it lately."""
+    if slate.empty:
+        return []
+    rows = slate[slate["player_id"].isin(set(_current_players(service.load_games(), team)))]
     out = []
     for pid, group in rows.groupby("player_id"):
         first = group.iloc[0]
         model = group[group["model_version"] == PROJECTION_MODEL]
+        projection = service._num(model["model_mean"].iloc[0], 1) if not model.empty else None
         out.append({"id": int(pid), "name": first["player"], "line": float(first["line"]),
                     "over": int(first["over_odds"]), "under": int(first["under_odds"]),
-                    "projection": service._num(model["model_mean"].iloc[0], 1) if not model.empty else None,
-                    "game": f"{first['away']} @ {first['home']}", "date": first["game_date"]})
+                    "projection": projection,
+                    **line_facts(games, int(pid), float(first["line"]), projection)})
     return sorted(out, key=lambda r: -r["line"])
 
 
@@ -220,15 +305,25 @@ def profile(team: str) -> dict:
         raise service.NotFound(f"no games for team {team}")
     table = team_games(games)
     rated = ratings(table)
-    roster_rows = roster(games, code)
+    allowed_table = allowed(games)
     injuries, report_ok = _injuries(code)
+    roster_rows = roster(games, code, injuries)
+    slate = not_yet_played(_slate(code), games, code)
+    upcoming = _next_game(code, slate)
     return {
         "code": code, "name": _names().get(code, code), "season": games["season"].iloc[-1],
         "logo": nba_live.logo_url(code), "color": team_colors.team_color(code),
         "record": record(table, code), "teams_in_league": len(rated),
         "ratings": {k: (service._num(v, 1) if not k.endswith("rank") and k != "games" else int(v))
                     for k, v in rated.loc[code].items()},
-        "results": results(table, code), "roster": roster_rows, "tonight": _tonight(code),
+        "allowed": {stat: {"value": round(float(allowed_table.loc[code, stat]), 1),
+                           "rank": int(allowed_table.loc[code, f"{stat}_rank"])}
+                    for stat in PROP_STATS},
+        "next_game": upcoming,
+        "matchup": (matchup(code, upcoming["opponent"], table, rated, allowed_table)
+                    if upcoming else None),
+        "results": results(table, code), "roster": roster_rows,
+        "tonight": _tonight(code, slate, games),
         "injury_report": report_ok,
         "injuries": [{"name": i.name, "status": nba_injuries.label(i), "detail": i.detail}
                      for i in injuries],

@@ -1,5 +1,7 @@
 import datetime as dt
 
+from game_log_helpers import complete_game
+
 import pandas as pd
 import pytest
 
@@ -129,9 +131,7 @@ def test_a_pick_loses_one_unit_when_the_player_falls_short():
 
 
 def test_a_player_who_never_played_is_voided_once_the_date_has_passed():
-    others = pd.DataFrame({"player_id": [99], "game_date": pd.to_datetime(["2026-11-05"]),
-                           "pts": [10.0]})
-    out = nba_alt.settle(pd.DataFrame(rows()), others, dt.date(2026, 11, 6))
+    out = nba_alt.settle(pd.DataFrame(rows()), complete_game(home="BOS", away="MIL"), dt.date(2026, 11, 6))
     assert (out["status"] == "void").all()
 
 

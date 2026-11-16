@@ -20,7 +20,8 @@ def fair(over, under):
 
 def snap(player="A", line=24.5, over=-125, under=105, event="e1", book=None):
     row = {"fetched_at": LATE, "phase": "late", "event_id": event, "player": player,
-           "line": line, "over_odds": over, "under_odds": under}
+           "line": line, "over_odds": over, "under_odds": under,
+           "commence_time": "2026-11-05T00:00:00Z"}
     return row | ({"book": book} if book else {})
 
 
@@ -139,3 +140,40 @@ def test_a_log_written_before_the_new_column_is_upgraded_before_rows_are_added(t
     gap_log.append([gap(player="B") | {"player_id": 2, "status": "pending"}], path)
     saved = gap_log.load(path)
     assert list(saved.columns) == gap_log.COLUMNS and list(saved["player"]) == ["A", "B"]
+
+
+@pytest.mark.parametrize("stamp", ["2026-11-05T00:00:00Z", "2026-11-05T00:05:00Z"])
+def test_prices_at_or_after_tip_cannot_replace_the_pregame_close(stamp):
+    rows = frame(snap(over=-110, under=-110), snap(over=-900, under=600) | {"fetched_at": stamp})
+    assert closing.fair_closes(rows)[("e1", "A", "points", 24.5)] == pytest.approx(.5)
+    out = settle([fanduel_pick()], rows)
+    assert out.loc[0, "closing_over_odds"] == -110
+    assert out.loc[0, "clv_novig_pct"] == pytest.approx((american_to_decimal(-110) * .5 - 1) * 100)
+
+
+def test_unknown_or_invalid_timestamps_do_not_establish_a_close():
+    for overrides in ({"commence_time": None}, {"commence_time": "bad"}, {"fetched_at": "bad"}):
+        assert closing.fair_closes(frame(snap() | overrides)) == {}
+
+
+def test_kalshi_uses_ledger_tip_when_snapshot_has_none():
+    out = settle_kalshi([pick()], kalshi_close(fetched_at="2026-11-05T00:05:00Z"))
+    assert pd.isna(out.loc[0, "clv_novig_pct"])
+    assert pd.isna(out.loc[0, "closing_over_odds"])
+
+
+def test_recalculation_clears_a_previously_saved_invalid_fair_close():
+    out = settle([fanduel_pick() | {"clv_novig_pct": 25.0}],
+                 frame(snap() | {"fetched_at": "2026-11-05T00:05:00Z"}))
+    assert pd.isna(out.loc[0, "clv_novig_pct"])
+
+
+def test_record_api_uses_fair_close_and_does_not_fall_back_to_old_metric():
+    from edgefinder.api import record
+    ledger = pd.DataFrame([fanduel_pick() | {"status": "settled", "result": "win", "pnl_units": .9,
+                                             "clv_pct": 15.0, "clv_novig_pct": -5.0}],
+                          columns=nba_paper.COLUMNS)
+    [facts] = record._clv(ledger)
+    assert facts["avg_pct"] == -5.0 and facts["beat_pct"] == 0 and facts["measured"] == 1
+    ledger["clv_novig_pct"] = None
+    assert record._clv(ledger) == []

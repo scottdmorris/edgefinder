@@ -1,5 +1,7 @@
 import datetime as dt
 
+from game_log_helpers import complete_game
+
 import pandas as pd
 import pytest
 
@@ -80,7 +82,7 @@ def test_grading_pays_the_odds_on_a_win_and_minus_one_on_a_loss(tmp_path):
 
 def test_a_player_who_never_played_is_void_once_the_day_is_over_and_waits_until_then(tmp_path):
     log = logged(tmp_path)
-    nobody = pd.DataFrame([box(99, 10.0)])
+    nobody = complete_game("2026-11-05", "GSW", "MIA")
     assert gap_log.settle(log, nobody, dt.date(2026, 11, 5)).loc[0, "status"] == "pending"
     done = gap_log.settle(log, nobody, dt.date(2026, 11, 6)).loc[0]
     assert done["status"] == "void" and done["pnl_units"] == 0.0
