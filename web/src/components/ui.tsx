@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 
 export function Pills<T extends string>({ options, value, onChange, label }: {
-  options: { id: T; label: string }[]
+  options: { id: T; label: ReactNode }[]
   value: T
   onChange: (id: T) => void
   label?: string

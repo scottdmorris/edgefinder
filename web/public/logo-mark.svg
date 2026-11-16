@@ -1,21 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ball Knowledge">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Ball Knowledge: Court Vision">
   <defs>
-    <linearGradient id="ball" x1="12" y1="6" x2="54" y2="60" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3AA7FF"/>
-      <stop offset="1" stop-color="#0B63D6"/>
-    </linearGradient>
+    <mask id="court-seams">
+      <rect width="128" height="128" fill="white"/>
+      <g fill="none" stroke="black" stroke-width="4">
+        <path d="M64 38v52M38 64h52M44 43c22 10 22 32 0 42M84 43c-22 10-22 32 0 42"/>
+      </g>
+    </mask>
   </defs>
-  <circle cx="32" cy="32" r="29" fill="url(#ball)"/>
-  <g fill="none" stroke="#0B1220" stroke-width="2.6" stroke-linecap="round" opacity="0.55">
-    <path d="M32 3v58"/>
-    <path d="M3 32h58"/>
-    <path d="M9.5 11.5c11 7.5 11 33.5 0 41"/>
-    <path d="M54.5 11.5c-11 7.5-11 33.5 0 41"/>
-  </g>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M14 45l12-11 9 6 15-18" stroke="#0B1220" stroke-width="8.5"/>
-    <path d="M42 22h8v8" stroke="#0B1220" stroke-width="8.5"/>
-    <path d="M14 45l12-11 9 6 15-18" stroke="#FFFFFF" stroke-width="4.5"/>
-    <path d="M42 22h8v8" stroke="#FFFFFF" stroke-width="4.5"/>
-  </g>
+  <path fill="#1493FF" d="M4 64C23 36 43 23 64 23s41 13 60 41C101 45 81 35 64 35S27 45 4 64Z"/>
+  <path fill="#A5E5FF" d="m4 64 15-8c14 22 29 35 45 35s31-13 45-35l15 8c-19 28-39 41-60 41S23 92 4 64Z"/>
+  <circle cx="64" cy="64" r="25" fill="#F4F7FB" mask="url(#court-seams)"/>
 </svg>

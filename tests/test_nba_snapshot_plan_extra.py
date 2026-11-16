@@ -97,17 +97,17 @@ def many(count, now):
     return [event(f"e{i}", now + 180 * MIN + i * MIN) for i in range(count)]
 
 
-def test_at_most_six_games_get_an_early_snapshot_earliest_tip_first():
+def test_at_most_eight_games_get_an_early_snapshot_earliest_tip_first():
     now = at(20)
     tasks = plan.plan_snapshots(list(reversed(many(9, now))), EMPTY, now)
-    assert phases(tasks) == [(f"e{i}", "early") for i in range(6)]
+    assert phases(tasks) == [(f"e{i}", "early") for i in range(8)]
 
 
 def test_games_already_snapshotted_use_up_the_budget():
     now = at(20)
     already = done(("e0", "early"), ("e1", "early"), ("e2", "early"), ("e3", "early"))
     tasks = plan.plan_snapshots(many(9, now), already, now)
-    assert phases(tasks) == [("e4", "early"), ("e5", "early")]
+    assert phases(tasks) == [(f"e{i}", "early") for i in range(4, 8)]
 
 
 def test_a_full_budget_still_allows_the_late_snapshots():

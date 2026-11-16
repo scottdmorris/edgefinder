@@ -24,7 +24,8 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 EASTERN = ZoneInfo("America/New_York")
-DEFAULT_MAX_GAMES = 6
+# 8 games x 2 snapshots = 16 requests a night, what 6 games plus 4 FanDuel X+ calls cost
+DEFAULT_MAX_GAMES = 8
 LATE_WINDOW = dt.timedelta(minutes=90)
 MIN_EARLY_LEAD = dt.timedelta(minutes=150)
 MAX_EARLY_LEAD = dt.timedelta(minutes=240)

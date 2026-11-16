@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Leg } from '../lib/api'
 import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/ladder'
+import { BookBadge } from './BookBadge'
 import { Empty, Photo, Pills } from './ui'
 
 const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
@@ -116,8 +117,8 @@ export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[
         <div>{compared.quality.injuries}. Historical hit rates are not forecast probabilities.</div>
       </>}
       {compared.comparisons?.map((other) => <div key={other.book}>
-        FanDuel {compared.side} {compared.line}: {american(compared.odds)} ({(1 + (compared.odds > 0 ? compared.odds / 100 : 100 / -compared.odds)).toFixed(2)}× return) ·
-        {' '}{other.book} {compared.side} {other.line}: {american(other.odds)} ({(1 + (other.odds > 0 ? other.odds / 100 : 100 / -other.odds)).toFixed(2)}× return)
+        <BookBadge book="fanduel" /> {compared.side} {compared.line}: {american(compared.odds)} ({(1 + (compared.odds > 0 ? compared.odds / 100 : 100 / -compared.odds)).toFixed(2)}× return) ·
+        {' '}<BookBadge book={other.book} /> {compared.side} {other.line}: {american(other.odds)} ({(1 + (other.odds > 0 ? other.odds / 100 : 100 / -other.odds)).toFixed(2)}× return)
         {' · '}{other.stale ? 'comparison is stale' : !other.same_line ? 'different numbers; payouts are not directly comparable' : other.better_payout ? 'DraftKings pays more on this same number' : 'FanDuel pays at least as much on this same number'}
         {' · '}{new Date(other.fetched_at).toLocaleString()}
       </div>)}

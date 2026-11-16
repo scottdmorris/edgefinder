@@ -4,6 +4,31 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Eight games a night on FanDuel instead of six; FanDuel's X+ lines are no longer fetched
+- The snapshot job bought FanDuel prices for only the first 6 games a night (by tip
+  time), so on busy nights the late West Coast games got Kalshi prices only. On
+  2026-11-15 that left out Thunder at Kings and Hawks at Bucks.
+- The extra request each FanDuel "X+ points" game cost (up to 4 a night) now pays for 2
+  more games instead: 8 games x 2 snapshots is 16 requests a night, the same as before.
+  X+ points picks had the worst record of anything tracked. Kalshi still records its X+
+  rungs for free, and the existing FanDuel X+ ledger is still settled.
+- Validation: 1,423 Python tests passed; ruff clean; a snapshot dry run was clean.
+
+### Court Vision identity, darker theme and clearer team pages
+- Added the selected Court Vision basketball-eye logo as scalable SVG for the app,
+  favicon and wordmark. Preserved the concept sheet and Courtside IQ alternative.
+- Applied a near-black theme with charcoal-blue cards, a restrained header glow and
+  brighter muted text. Team headers retain their team colour.
+- Added local FanDuel, DraftKings and Kalshi brand assets to price-source selectors and
+  comparison rows. Badges preserve accessible names and fall back to text if an image
+  fails. Asset sources are documented in web/public/books/SOURCES.md.
+- Team pages lead with matchup and prop context; full rankings sit in an expandable
+  section. Opponent totals use descriptive labels rather than implying betting-line
+  success. Winning-margin charts have clearer scaling and focus/hover score details.
+- Validation: all 43 web tests passed, including badge fallback/accessibility tests;
+  lint and production build passed. The earlier Teams layout was inspected in-browser;
+  the final darker palette/logo preview could not be verified because the browser timed out.
+
 ### Combined-work review hardening
 - Changing the trial recipe now blocks only new trial entries: old suggested slips and
   their frozen protocol remain readable and gradable after ordinary code updates.

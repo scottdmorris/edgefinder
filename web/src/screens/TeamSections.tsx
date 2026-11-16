@@ -56,8 +56,8 @@ export function Allowed({ team }: { team: Team }) {
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         {(Object.keys(STAT_LABELS) as PropStat[]).map((stat) => {
           const { value, rank } = team.allowed[stat]
-          const tone = rank <= SOFT_RANKS ? 'text-good' : rank >= tougher ? 'text-bad' : 'text-muted'
-          const word = rank <= SOFT_RANKS ? 'soft' : rank >= tougher ? 'tough' : 'average'
+          const tone = rank <= SOFT_RANKS ? 'text-accent' : 'text-muted'
+          const word = rank <= SOFT_RANKS ? 'allows more' : rank >= tougher ? 'allows fewer' : 'mid-table'
           return (
             <div key={stat} className="rounded-2xl border border-line bg-raised px-4 py-3">
               <div className="text-2xl font-black tabular-nums">{value}</div>
@@ -67,7 +67,7 @@ export function Allowed({ team }: { team: Team }) {
           )
         })}
       </div>
-      <p className="mt-2 text-xs text-muted">Soft means opposing players tend to clear their numbers against this team; tough means the opposite.</p>
+      <p className="mt-2 text-xs text-muted">These are opponent totals per game, influenced by pace. Allowing more does not mean players beat their betting lines more often.</p>
     </Section>
   )
 }
@@ -78,14 +78,17 @@ export function Form({ team }: { team: Team }) {
   const margins = games.map((g) => { const [a, b] = g.score.split('-').map(Number); return a - b })
   const top = Math.max(10, ...margins.map(Math.abs))
   return (
-    <Section title="Form" aside={`last ${games.length} games, oldest first`}>
+    <Section title="Winning margin" aside={`last ${games.length} games, oldest first`}>
       <div className="rounded-2xl border border-line bg-raised p-3">
         <div className="flex h-36 items-stretch gap-1">
           {games.map((g, i) => {
             const m = margins[i]
-            const height = `${(Math.abs(m) / top) * 50}%`
+            const height = `${(Math.abs(m) / top) * 100}%`
             return (
-              <div key={g.date} className="relative flex flex-1 flex-col" title={`${g.date} ${g.home ? 'vs' : '@'} ${g.opponent}: ${g.result} ${g.score}`}>
+              <div key={g.date} tabIndex={0} className="group relative flex flex-1 flex-col outline-offset-2" aria-label={`${g.date} ${g.home ? 'vs' : 'at'} ${g.opponent}, ${g.result} ${g.score}`} title={`${g.date} ${g.home ? 'vs' : '@'} ${g.opponent}: ${g.result} ${g.score}`}>
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-max max-w-44 -translate-x-1/2 rounded-lg border border-line-strong bg-raised-2 px-2 py-1 text-center text-[10px] text-text shadow-xl group-hover:block group-focus:block">
+                  {g.date}<br />{g.home ? 'vs' : '@'} {g.opponent} · {g.result} {g.score}
+                </div>
                 <div className="flex flex-1 flex-col justify-end">{m > 0 && <div className="rounded-t bg-good" style={{ height: '100%', maxHeight: height, minHeight: 2 }} />}</div>
                 <div className="h-px bg-line-strong" />
                 <div className="flex flex-1 flex-col justify-start">{m <= 0 && <div className="rounded-b bg-bad" style={{ height: '100%', maxHeight: height, minHeight: 2 }} />}</div>
@@ -175,7 +178,7 @@ export function Roster({ team, onPlayer }: { team: Team; onPlayer: OnPlayer }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-muted">Last 5 is his minutes over his last five games; an arrow marks a change of two minutes or more, often a role change books are slow to price.</p>
+      <p className="mt-2 text-xs text-muted">Last 5 is his minutes over his last five games; an arrow marks a change of two minutes or more, which can reflect a change in playing time. It does not establish a pricing edge.</p>
     </Section>
   )
 }

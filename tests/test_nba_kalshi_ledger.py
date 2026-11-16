@@ -361,7 +361,7 @@ def run_main(script, monkeypatch, tasks, *, remaining):
     monkeypatch.setattr(script.nba_props, "fetch_event_books", fetch)
     monkeypatch.setattr(script.nba_props, "append_snapshot", lambda *a, **k: None)
     monkeypatch.setattr(script, "record_lines", lambda *a, **k: {})
-    monkeypatch.setattr(script, "record_alt_lines", lambda *a, **k: None)
+    monkeypatch.setattr(script.nba_props, "fetch_alt_lines", lambda *a, **k: order.append("x_plus"))
     monkeypatch.setattr(script, "Models", lambda today: Exploding())
     monkeypatch.setattr(
         script, "record_kalshi",
@@ -620,3 +620,15 @@ def test_logging_price_gaps_end_to_end_logs_tonights_gaps_once(script, tmp_path)
     row = gap_log.load(log_path).iloc[0]
     assert (row["bet"], row["book"], row["status"]) == ("25+", "fanduel", "pending")
     assert row["edge_pct"] == pytest.approx(20.0)
+
+
+def test_an_early_snapshot_never_spends_a_request_on_x_plus_lines(script, monkeypatch):
+    tasks = [nba_snapshot_plan.SnapshotTask(EVENTS[0], "early")]
+    order = run_main(script, monkeypatch, tasks, remaining=300)
+    assert "x_plus" not in order
+    assert not hasattr(script, "record_alt_lines")
+
+
+def test_the_requests_freed_from_x_plus_buy_two_more_games_a_night():
+    # 8 games x 2 snapshots costs the same as the old 6 x 2 plus 4 X+ calls
+    assert nba_snapshot_plan.DEFAULT_MAX_GAMES == 8

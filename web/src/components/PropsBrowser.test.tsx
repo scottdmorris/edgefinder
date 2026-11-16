@@ -88,7 +88,7 @@ it('shows both recorded prices without calling different numbers a better price'
       recent_hit_pct: 65, historical_low: 10, historical_high: 30, price_at: '2026-11-15T20:00:00Z',
       price_age_minutes: 5, injuries: 'Injury status is not verified' } }
   render(<PropsBrowser legs={[compared, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
-  expect(screen.getByText(/DraftKings Over 25.5/)).toBeTruthy()
+  expect(screen.getByText(/different numbers; payouts are not directly comparable/).textContent).toContain('DraftKings Over 25.5')
   expect(screen.getByText(/different numbers; payouts are not directly comparable/)).toBeTruthy()
   expect(screen.getByText(/Minutes have been unstable/)).toBeTruthy()
 })

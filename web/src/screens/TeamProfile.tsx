@@ -25,13 +25,16 @@ export function TeamView({ team, onPlayer }: { team: Team; onPlayer: (id: number
   return (
     <div className="mt-5">
       <Header team={team} />
-      <Ranks team={team} />
       <Matchup team={team} />
       <Tonight team={team} onPlayer={onPlayer} />
       <Allowed team={team} />
-      <Form team={team} />
       <Absences team={team} onPlayer={onPlayer} />
+      <Form team={team} />
       <Roster team={team} onPlayer={onPlayer} />
+      <details className="mt-6 rounded-2xl border border-line bg-raised px-4 py-3">
+        <summary className="min-h-8 cursor-pointer text-sm font-bold">Full team rankings</summary>
+        <Ranks team={team} />
+      </details>
     </div>
   )
 }
@@ -49,7 +52,7 @@ function Header({ team }: { team: Team }) {
   const r = team.record
   return (
     <div className="rise relative overflow-hidden rounded-3xl border border-line px-5 py-5"
-      style={{ background: `linear-gradient(110deg, color-mix(in srgb, ${team.color} 32%, #000), #0b0c0e 72%)` }}>
+      style={{ background: `linear-gradient(110deg, color-mix(in srgb, ${team.color} 30%, #0D1B2B), #111C2C 78%)` }}>
       <img src={team.logo} alt="" className="absolute -right-8 -top-8 size-48 opacity-10" />
       <div className="relative flex items-center gap-4">
         <img src={team.logo} alt="" className="size-16 shrink-0 sm:size-20" />

@@ -158,7 +158,7 @@ The full explanation, with a worked example and the limits, is in
 [docs/METHODOLOGY.md](docs/METHODOLOGY.md). In short:
 
 - **Budgeted snapshots.** The free Odds API tier is 500 requests a month, so the
-  job covers at most 6 games a night: one early snapshot 2.5 to 4 hours before
+  job covers at most 8 games a night: one early snapshot 2.5 to 4 hours before
   tip (the price a pick is made at, after the injury report settles) and one
   inside 90 minutes (a closing-price proxy). A reserve stops it before the quota
   runs out. Kalshi costs nothing, so it is recorded alongside.

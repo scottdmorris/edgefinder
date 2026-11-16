@@ -5,6 +5,7 @@ import { api, type Board, type Idea, type Leg, type Market, type Picks } from '.
 import { american, money } from '../lib/ladder'
 import { useSlip } from '../lib/slip'
 import { Empty, Pills, Section } from '../components/ui'
+import { BookBadge } from '../components/BookBadge'
 import { SlipPanel } from '../components/SlipPanel'
 import { PropsBrowser } from '../components/PropsBrowser'
 import { SlipImageReview } from '../components/SlipImageReview'
@@ -88,7 +89,7 @@ export function Parlay() {
           {[board.day_label, board.books.find((b) => b.id === board.book)?.name ?? board.book,
             `${model?.short ?? board.model}${model?.record ? ` ${model.record}` : ''}${model?.recommended ? ' ★' : ''}`].map((text, i) => (
             <button key={i} type="button" onClick={() => setChoosing(true)}
-              className="min-h-9 rounded-full border border-line px-3 text-xs font-semibold hover:border-line-strong">{text}</button>
+              className="min-h-9 rounded-full border border-line px-3 text-xs font-semibold hover:border-line-strong">{i === 1 ? <BookBadge book={board.book} /> : text}</button>
           ))}
           <button type="button" aria-expanded={choosing} onClick={() => setChoosing((open) => !open)}
             className="min-h-9 px-2 text-xs font-semibold text-muted underline hover:text-text">{choosing ? 'Done' : 'Change'}</button>
@@ -98,7 +99,7 @@ export function Parlay() {
             <Pills label="Game day" value={board.date}
               options={board.days.map((d) => ({ id: d.date, label: d.label }))}
               onChange={(date) => { setMarket({ date }); setGame(ALL) }} />
-            <Pills label="Prices" value={board.book} options={board.books.map((b) => ({ id: b.id, label: b.name }))}
+            <Pills label="Prices" value={board.book} options={board.books.map((b) => ({ id: b.id, label: <BookBadge book={b.id} /> }))}
               onChange={(book) => setMarket({ date: board.date, book })} />
             <div>
               <Pills label="Model" value={board.model} onChange={(id) => setMarket({ ...chosen, model: id })}

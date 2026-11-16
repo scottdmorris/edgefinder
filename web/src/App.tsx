@@ -45,8 +45,8 @@ export default function App() {
     <div className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <a href="#/parlay" className="flex items-center gap-2.5">
-          <img src="/logo-mark.svg" alt="" className="size-8" />
-          <span className="text-xl font-black tracking-tight">Ball Knowledge</span>
+          <img src="/logo-mark.svg?v=court-vision-1" alt="" className="brand-mark size-10" />
+          <span className="text-xl font-black tracking-tight sm:text-2xl">Ball Knowledge</span>
         </a>
         <div className="flex items-center gap-2">
           {live > 0 && (

@@ -81,10 +81,10 @@ it("shows each line's gap to the projection and how often it was cleared", () =>
   expect(screen.getByText('4/10')).toBeTruthy()
 })
 
-it('labels soft and tough categories and flags injured players and minutes trends', () => {
+it('describes opponent totals without claiming a betting advantage and flags injured players and minutes trends', () => {
   render(<TeamView team={team} onPlayer={vi.fn()} />)
-  expect(screen.getByText('2nd most · soft')).toBeTruthy()       // 3-pointers allowed
-  expect(screen.getByText('28th most · tough')).toBeTruthy()     // points allowed
+  expect(screen.getByText('2nd most · allows more')).toBeTruthy()       // 3-pointers allowed
+  expect(screen.getByText('28th most · allows fewer')).toBeTruthy()     // points allowed
   expect(screen.getAllByText('OUT').some((el) => el.tagName === 'SPAN' && el.className.includes('rounded'))).toBe(true)
   expect(screen.getByText('37 ▲')).toBeTruthy()
 })
