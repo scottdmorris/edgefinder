@@ -4,6 +4,21 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Teams on the Players screen
+- The search box now finds teams as well as players (by name or code, e.g. "celtics" or
+  "BOS"), and a player's team name links to the team. A team page shows the record (home,
+  away, last 10, streak), points scored and allowed with league ranks, offense, defense and
+  pace ranks from estimated possessions, the team's players on the latest FanDuel slate
+  with their lines and the `context-v2` projection, who is out on the ESPN injury report,
+  the roster with per-game averages, and recent results.
+- For each regular ruled out, the page shows how his teammates scored and how many
+  minutes they played in this season's games with him and without him. Stats sites such
+  as StatMuse show team stats and against-the-spread records but not this next to
+  tonight's lines.
+- New routes `/api/teams` and `/api/teams/{code}` (`src/edgefinder/api/teams.py`).
+- Validation: 10 new Python tests and 4 new web tests pass; web type-check, lint and build
+  pass; the team page and search were checked in a browser against live data.
+
 ### Picks and gap bets are graded against the fair closing price
 - Every settled pick now gets `clv_novig_pct`: its payout times the market's fair closing
   chance of that side, minus 1. The fair close removes the book's cut from each book's last

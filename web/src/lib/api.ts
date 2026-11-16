@@ -242,6 +242,41 @@ export type RecordData = {
 
 export type PlayerOption = { id: number; name: string; team: string; plain: string }
 
+export type TeamOption = { code: string; name: string; logo: string; plain: string }
+
+export type TeammateSplit = {
+  id: number
+  name: string
+  photo: string
+  games_with: number
+  games_without: number
+  pts_with: number
+  pts_without: number
+  min_with: number
+  min_without: number
+}
+
+export type TeamProfile = {
+  code: string
+  name: string
+  season: string
+  logo: string
+  color: string
+  record: { wins: number; losses: number; home: string; away: string; last10: string; streak: string }
+  teams_in_league: number
+  ratings: {
+    games: number
+    ppg: number; opp_ppg: number; ortg: number; drtg: number; net: number; pace: number
+    ppg_rank: number; opp_ppg_rank: number; ortg_rank: number; drtg_rank: number; net_rank: number; pace_rank: number
+  }
+  results: { date: string; opponent: string; home: boolean; result: string; score: string }[]
+  roster: { id: number; name: string; photo: string; games: number; minutes: number; pts: number; reb: number; ast: number; fg3m: number }[]
+  tonight: { id: number; name: string; line: number; over: number; under: number; projection: number | null; game: string; date: string }[]
+  injury_report: boolean
+  injuries: { name: string; status: string; detail: string }[]
+  absences: { id: number; name: string; status: string; detail: string; with_games: number; without_games: number; teammates: TeammateSplit[] }[]
+}
+
 export type PlayerGame = {
   date: string
   opponent: string
@@ -374,5 +409,7 @@ export const api = {
   gradeSlip: (date: string, legs: SlipLegQuery[]) => send<GradedSlip>('/api/review/slip', { date, legs }),
   players: () => get<PlayerOption[]>('/api/players'),
   player: (id: number) => get<PlayerProfile>(`/api/players/${id}`),
+  teams: () => get<TeamOption[]>('/api/teams'),
+  team: (code: string) => get<TeamProfile>(`/api/teams/${encodeURIComponent(code)}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),
 }

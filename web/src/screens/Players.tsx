@@ -1,10 +1,12 @@
-// Players: search anyone, see how they're playing, and how often they've cleared a number.
-// The hit rate and chart are worked out here from the games the API sends, so moving the line
-// answers instantly.
+// Players: search any player or team. A player shows how they're playing and how often they've
+// cleared a number (worked out here from the games the API sends, so moving the line answers
+// instantly); a team shows its record, ranks, who's out and the roster (TeamProfile).
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type PlayerGame, type PlayerOption, type PlayerProfile } from '../lib/api'
+import { api, type PlayerGame, type PlayerOption, type PlayerProfile, type TeamOption } from '../lib/api'
 import { american } from '../lib/ladder'
 import { Empty, Pills, Section, StatStrip } from '../components/ui'
+import { chosenFromHash, findMatches, type Chosen, type Match } from '../lib/search'
+import { TeamProfile } from './TeamProfile'
 
 const STATS = [
   { id: 'pts', label: 'Points' }, { id: 'reb', label: 'Rebounds' },
@@ -12,52 +14,54 @@ const STATS = [
 ] as const
 type Stat = (typeof STATS)[number]['id']
 const CHART_GAMES = 15
-const MATCHES_SHOWN = 8
-
-/** "Dončić" and "doncic" are the same search. */
-const plain = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
 export function Players() {
   const [options, setOptions] = useState<PlayerOption[] | null>(null)
-  const [chosen, setChosen] = useState<number | null>(() => {
-    const id = Number(new URLSearchParams(window.location.hash.split('?')[1]).get('id'))
-    return Number.isFinite(id) && id > 0 ? id : null
-  })
+  const [teams, setTeams] = useState<TeamOption[]>([])
+  const [chosen, setChosen] = useState<Chosen | null>(() => chosenFromHash(window.location.hash))
   useEffect(() => { api.players().then(setOptions).catch(() => setOptions([])) }, [])
+  useEffect(() => { api.teams().then(setTeams).catch(() => setTeams([])) }, [])
 
-  const choose = (id: number) => {
-    setChosen(id)
-    window.history.replaceState(null, '', `#/players?id=${id}`)
+  const choose = (next: Chosen) => {
+    setChosen(next)
+    window.scrollTo({ top: 0 })
+    window.history.replaceState(null, '', next.kind === 'team' ? `#/players?team=${next.code}` : `#/players?id=${next.id}`)
   }
 
   return (
     <div>
-      <h1 className="text-3xl font-black tracking-tight">Players</h1>
-      <Search options={options} onChoose={choose} />
-      {chosen ? <Profile key={chosen} id={chosen} /> : (
-        <p className="mt-4 text-sm text-muted">Search any player to see their averages, recent games and how often they've cleared a number.</p>
+      <h1 className="text-3xl font-black tracking-tight">Players & teams</h1>
+      <Search options={options} teams={teams} onChoose={choose} />
+      {chosen?.kind === 'player' && <Profile key={chosen.id} id={chosen.id} onTeam={(code) => choose({ kind: 'team', code })} />}
+      {chosen?.kind === 'team' && <TeamProfile key={chosen.code} code={chosen.code} onPlayer={(id) => choose({ kind: 'player', id })} />}
+      {!chosen && (
+        <p className="mt-4 text-sm text-muted">Search any player for their averages, recent games and how often they've cleared a number, or any team for its record, ranks, who's out and how teammates do without them.</p>
       )}
     </div>
   )
 }
 
-function Search({ options, onChoose }: { options: PlayerOption[] | null; onChoose: (id: number) => void }) {
+interface SearchProps {
+  options: PlayerOption[] | null
+  teams: TeamOption[]
+  onChoose: (chosen: Chosen) => void
+}
+
+function Search({ options, teams, onChoose }: SearchProps) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const box = useRef<HTMLInputElement>(null)
-  const matches = useMemo(() => {
-    const q = plain(query.trim())
-    if (!q || !options) return []
-    const starts = options.filter((o) => plain(o.name).split(' ').some((w) => w.startsWith(q)) || plain(o.name).startsWith(q))
-    const contains = options.filter((o) => !starts.includes(o) && plain(o.name).includes(q))
-    return [...starts, ...contains].slice(0, MATCHES_SHOWN)
-  }, [query, options])
+  const matches = useMemo(() => (options ? findMatches(query, options, teams) : []), [query, options, teams])
 
-  const pick = (o: PlayerOption) => { onChoose(o.id); setQuery(''); box.current?.blur() }
+  const pick = (m: Match) => {
+    onChoose(m.kind === 'team' ? { kind: 'team', code: m.option.code } : { kind: 'player', id: m.option.id })
+    setQuery('')
+    box.current?.blur()
+  }
   return (
     <div className="relative mt-4">
-      <input ref={box} type="search" value={query} placeholder={options ? 'Search any player…' : 'Loading players…'}
-        aria-label="Search players" role="combobox" aria-expanded={matches.length > 0} aria-controls="player-matches"
+      <input ref={box} type="search" value={query} placeholder={options ? 'Search any player or team…' : 'Loading players…'}
+        aria-label="Search players and teams" role="combobox" aria-expanded={matches.length > 0} aria-controls="player-matches"
         onChange={(e) => { setQuery(e.target.value); setActive(0) }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(active + 1, matches.length - 1)) }
@@ -68,24 +72,28 @@ function Search({ options, onChoose }: { options: PlayerOption[] | null; onChoos
         className="min-h-12 w-full rounded-full border border-line bg-raised px-5 font-semibold outline-none placeholder:text-muted focus:border-line-strong" />
       {matches.length > 0 && (
         <ul id="player-matches" role="listbox" className="absolute inset-x-0 top-14 z-30 overflow-hidden rounded-2xl border border-line bg-raised-2 shadow-2xl">
-          {matches.map((o, i) => (
-            <li key={o.id} role="option" aria-selected={i === active}>
-              <button type="button" onMouseEnter={() => setActive(i)} onClick={() => pick(o)}
+          {matches.map((m, i) => (
+            <li key={m.kind === 'team' ? `team-${m.option.code}` : m.option.id} role="option" aria-selected={i === active}>
+              <button type="button" onMouseEnter={() => setActive(i)} onClick={() => pick(m)}
                 className={`flex min-h-11 w-full items-center gap-3 px-4 text-left ${i === active ? 'bg-raised' : ''}`}>
-                <img src={`https://cdn.nba.com/headshots/nba/latest/260x190/${o.id}.png`} alt="" className="h-8 w-10 object-contain object-bottom" />
-                <span className="flex-1 font-semibold">{o.name}</span>
-                <span className="text-xs text-muted">{o.team}</span>
+                {m.kind === 'team' ? (
+                  <img src={m.option.logo} alt="" className="h-8 w-10 object-contain" />
+                ) : (
+                  <img src={`https://cdn.nba.com/headshots/nba/latest/260x190/${m.option.id}.png`} alt="" className="h-8 w-10 object-contain object-bottom" />
+                )}
+                <span className="flex-1 font-semibold">{m.option.name}</span>
+                <span className="text-xs text-muted">{m.kind === 'team' ? 'Team' : m.option.team}</span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      {options && query.trim() && matches.length === 0 && <p className="mt-2 text-sm text-muted">No player matches “{query}”.</p>}
+      {options && query.trim() && matches.length === 0 && <p className="mt-2 text-sm text-muted">Nothing matches “{query}”.</p>}
     </div>
   )
 }
 
-function Profile({ id }: { id: number }) {
+function Profile({ id, onTeam }: { id: number; onTeam: (code: string) => void }) {
   const [player, setPlayer] = useState<PlayerProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => { api.player(id).then(setPlayer).catch((e: Error) => setError(e.message)) }, [id])
@@ -102,7 +110,9 @@ function Profile({ id }: { id: number }) {
           <div className="pb-5">
             <div className="text-2xl font-black leading-tight sm:text-3xl">{player.name}</div>
             <div className="mt-1 flex items-center gap-1.5 text-sm text-muted">
-              <img src={player.logo} alt="" className="size-5" /> {player.team} · {player.season} · {player.season_games} games
+              <img src={player.logo} alt="" className="size-5" />
+              <button type="button" onClick={() => onTeam(player.team)} className="font-semibold text-text hover:underline">{player.team}</button>
+              · {player.season} · {player.season_games} games
             </div>
           </div>
         </div>

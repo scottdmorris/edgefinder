@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from ..data import nba_live
-from . import live, picks, players, record, review, service, slip_review
+from . import live, picks, players, record, review, service, slip_review, teams
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
@@ -175,6 +175,18 @@ def player_list() -> list[dict]:
 @app.get("/api/players/{player_id}")
 def player_profile(player_id: int) -> dict:
     return _guard(lambda: players.profile(player_id))
+
+
+@app.get("/api/teams")
+def team_list() -> list[dict]:
+    return teams.options()
+
+
+@app.get("/api/teams/{code}")
+def team_profile(code: str) -> dict:
+    if not code.isalpha() or len(code) > 4:
+        raise HTTPException(status_code=404, detail="no such team")
+    return _guard(lambda: teams.profile(code))
 
 
 def web_file(root: Path, path: str) -> Path | None:
