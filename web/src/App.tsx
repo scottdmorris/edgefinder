@@ -1,12 +1,40 @@
-import { useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api } from './lib/api'
+import { useLiveGames } from './lib/live'
 import { usePoll } from './lib/poll'
-import { Live } from './screens/Live'
-import { Parlay } from './screens/Parlay'
-import { Picks } from './screens/Picks'
-import { Players } from './screens/Players'
-import { Record } from './screens/Record'
-import { Review } from './screens/Review'
+
+const Live = lazy(() => import('./screens/Live').then((module) => ({ default: module.Live })))
+const Parlay = lazy(() => import('./screens/Parlay').then((module) => ({ default: module.Parlay })))
+const Picks = lazy(() => import('./screens/Picks').then((module) => ({ default: module.Picks })))
+const Players = lazy(() => import('./screens/Players').then((module) => ({ default: module.Players })))
+const Record = lazy(() => import('./screens/Record').then((module) => ({ default: module.Record })))
+const Review = lazy(() => import('./screens/Review').then((module) => ({ default: module.Review })))
+
+// Keep failures local to the screen. Reload only when requested, including after a deploy
+// removes an old chunk; automatically reloading could trap users in a reload loop.
+class ScreenBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div role="alert" className="rounded-2xl border border-warn/40 p-5">
+          <p>This section could not load. Try another section or reload the page to try again.</p>
+          <button type="button" onClick={() => window.location.reload()}
+            className="mt-3 rounded-full bg-button px-4 py-2 font-bold text-button-text">
+            Reload page
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // Screens are switched by the address (#/parlay, #/live…) so the back button and links work.
 const SCREENS = [
@@ -28,7 +56,7 @@ function current(): ScreenId {
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>(current)
   const health = usePoll(api.health, LIVE_CHECK_MS, 'health').data
-  const games = usePoll(api.live, LIVE_CHECK_MS, 'header')
+  const games = useLiveGames(screen === 'live' ? 10_000 : LIVE_CHECK_MS)
   const live = games.data?.filter((g) => g.state === 'live').length ?? 0
 
   useEffect(() => {
@@ -80,12 +108,16 @@ export default function App() {
       </nav>
 
       <main>
-        {screen === 'parlay' && <Parlay />}
-        {screen === 'live' && <Live />}
-        {screen === 'review' && <Review />}
-        {screen === 'players' && <Players />}
-        {screen === 'picks' && <Picks />}
-        {screen === 'record' && <Record />}
+        <ScreenBoundary key={screen}>
+          <Suspense fallback={<p role="status" className="py-8 text-muted">Loading {SCREENS.find((s) => s.id === screen)?.label}…</p>}>
+            {screen === 'parlay' && <Parlay />}
+            {screen === 'live' && <Live />}
+            {screen === 'review' && <Review />}
+            {screen === 'players' && <Players />}
+            {screen === 'picks' && <Picks />}
+            {screen === 'record' && <Record />}
+          </Suspense>
+        </ScreenBoundary>
       </main>
 
       <footer className="mt-16 border-t border-line pt-5 text-xs leading-relaxed text-muted">

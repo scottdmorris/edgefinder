@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Shared live updates, on-demand screens and API profiling
+- The header and Live page now share one scoreboard request loop, using the fastest
+  requested interval without duplicate requests. Hidden tabs pause; failed refreshes
+  retain the last successful board and its receipt time.
+- Screens load on demand with an accessible loading state. A failed screen offers
+  manual reload while navigation stays available. The default Parlay opening uses
+  about 21% less raw JavaScript than the previous all-screen bundle.
+- Added an offline API benchmark with cold/warm measurements and optional profiling;
+  it blocks outbound connections and reads suggested offers without writing them.
+  Measurements and limits are recorded in docs/PERFORMANCE.md. Quote enrichment is
+  the measured backend hotspot; the frozen trial recipe and cache TTLs are unchanged.
+- Validation: all 53 web tests, web lint and production build passed. The local API
+  benchmark ran across eight routes; Python lint passed for the benchmark script.
+
 ### Eight games a night on FanDuel instead of six; FanDuel's X+ lines are no longer fetched
 - The snapshot job bought FanDuel prices for only the first 6 games a night (by tip
   time), so on busy nights the late West Coast games got Kalshi prices only. On

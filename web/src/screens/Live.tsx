@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { api, type GameCard, type Side, type Tracked, type TrackedLeg } from '../lib/api'
 import { shortStatus } from '../lib/format'
 import { usePoll, usePrevious } from '../lib/poll'
+import { useLiveGames } from '../lib/live'
 import { savedSlip } from '../lib/slip'
 import { Empty, Photo } from '../components/ui'
 import { GameCenter } from '../components/GameCenter'
@@ -12,7 +13,7 @@ import { Freshness } from '../components/Freshness'
 const REFRESH_MS = 10_000
 
 export function Live() {
-  const games = usePoll(api.live, REFRESH_MS, 'games')
+  const games = useLiveGames(REFRESH_MS)
   const [chosen, setChosen] = useState<string | null>(null)
   const slip = savedSlip()
   const slipKey = slip ? `${slip.market.date}|${slip.market.book}|${slip.market.model}|${slip.legs.join(',')}` : 'none'
