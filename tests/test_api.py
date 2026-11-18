@@ -80,6 +80,30 @@ def test_board_defaults_to_the_latest_day_and_lists_every_leg(client):
     assert board["default_style"] in board["styles"]
 
 
+def test_board_switches_to_draftkings_and_compares_the_matching_fanduel_price(client, monkeypatch):
+    from edgefinder.data import nba_props
+
+    fanduel = _ledger()
+    draftkings = fanduel.assign(book="draftkings")
+    monkeypatch.setattr(service, "load_ledger", lambda: pd.concat([fanduel, draftkings], ignore_index=True))
+    event = GAMES[0]
+    snapshots = pd.DataFrame([{"event_id": event["event_id"], "player": PLAYERS[0][0], "line": 24.5,
+                               "over_odds": -105, "under_odds": -115, "fetched_at": WHEN}])
+    monkeypatch.setattr(nba_props, "load_snapshots", lambda: snapshots)
+    monkeypatch.setattr(nba_props, "load_book_snapshots",
+                        lambda: snapshots.assign(book="draftkings", over_odds=115, under_odds=-135))
+
+    response = client.get("/api/board", params={"book": "draftkings"})
+    assert response.status_code == 200, response.text
+    board = response.json()
+    assert board["book"] == "draftkings"
+    assert board["books"] == [{"id": "fanduel", "name": "FanDuel"}, {"id": "draftkings", "name": "DraftKings"}]
+    leg = next(row for row in board["legs"] if row["player"] == PLAYERS[0][0] and row["side"] == "Over")
+    assert leg["odds"] == 115
+    assert [(other["book"], other["odds"], other["same_line"]) for other in leg["comparisons"]] == [
+        ("FanDuel", -105, True)]
+
+
 def _steady_logs() -> pd.DataFrame:
     """Brown scored 25+ in 19 of his last 20 games; Brunson has only played five."""
     rows = []

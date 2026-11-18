@@ -61,8 +61,10 @@ def assess(row: pd.Series | dict, games: pd.DataFrame, recorded_at, now) -> dict
             "injuries": "Injury status is not verified by these history checks"}
 
 
-def comparisons(row: pd.Series, snapshots: pd.DataFrame, now, tip) -> list[dict]:
-    """Both prices, including different lines; only equal lines get a better-price label."""
+def comparisons(row: pd.Series, snapshots: pd.DataFrame, now, tip,
+                book: str = "DraftKings") -> list[dict]:
+    """Both prices, including different lines; only equal lines get a better-price label.
+    `snapshots` are the other sportsbook's, and `book` its name."""
     if snapshots.empty or row["stat_key"] != "points":
         return []
     mine = snapshots[(snapshots.event_id.astype(str) == str(row["event_id"]))
@@ -78,7 +80,7 @@ def comparisons(row: pd.Series, snapshots: pd.DataFrame, now, tip) -> list[dict]
         return []
     same = float(latest.line) == float(row["line"])
     age = (pd.Timestamp(now) - pd.Timestamp(latest.fetched_at)).total_seconds() / 60
-    return [{"book": "DraftKings", "line": float(latest.line), "odds": int(latest[side]),
+    return [{"book": book, "line": float(latest.line), "odds": int(latest[side]),
              "fetched_at": latest.fetched_at, "stale": age > MAX_PRICE_AGE_MINUTES,
              "same_line": same,
              "better_payout": bool(same and age <= MAX_PRICE_AGE_MINUTES

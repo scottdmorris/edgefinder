@@ -68,7 +68,8 @@ export function Parlay() {
 
   const shown = board.legs.filter((l) => game === ALL || l.game === game)
   const gameShort = board.games.find((g) => g.game === game)?.short
-  const otherBook = board.books.find((b) => b.id !== board.book)
+  const otherBook = board.books.find((b) => b.id === 'kalshi' && b.id !== board.book)
+    ?? board.books.find((b) => b.id !== board.book)
   const model = board.models.find((m) => m.id === board.model)
   const bookName = board.books.find((b) => b.id === board.book)?.name ?? board.book
   const quick = quickAdds(board, picks, game, gameShort, shown, bookName)
@@ -162,19 +163,20 @@ export function Parlay() {
 }
 
 // Model picks, price gaps and steady legs in one list, each saying which it is and why.
-// Model picks are made on FanDuel's lines. The two price sources offer different numbers, so on
+// Model picks are made on FanDuel's lines. Price sources offer different numbers, so on
 // another source a pick can only be added when that source lists the very same bet.
 function quickAdds(board: Board, picks: Picks['liked'], game: string, gameShort: string | undefined, shown: Leg[],
   bookName: string): QuickAdd[] {
   const everywhere = game === ALL
   const liked = picks.filter((p) => everywhere || p.game_short === gameShort).slice(0, PICKS_SHOWN).map((p): QuickAdd => {
-    const legId = board.legs.find((l) => l.player_id === p.player_id && l.bet === p.bet)?.id ?? null
+    const leg = board.legs.find((l) => l.player_id === p.player_id && l.bet === p.bet)
+    const source = board.book === 'fanduel' ? '' : 'FanDuel '
     return {
       key: `pick-${p.player_id}-${p.bet}`, kind: 'Model pick', player: p.player, photo: p.photo,
-      bet: p.bet, odds: p.odds, game: p.game_short,
-      why: `Projects ${p.projects} · ${p.agree > 1 ? `${p.agree} models agree` : 'one model'}`,
-      figure: `${p.ev_pct > 0 ? '+' : ''}${p.ev_pct}%`, legId,
-      missing: legId === null ? `FanDuel line. ${bookName} doesn't offer this number.` : undefined,
+      bet: p.bet, odds: leg?.odds ?? p.odds, game: p.game_short,
+      why: `${source}models project ${p.projects} · ${p.agree > 1 ? `${p.agree} models agree` : 'one model'}`,
+      figure: `${source}${p.ev_pct > 0 ? '+' : ''}${p.ev_pct}%`, legId: leg?.id ?? null,
+      missing: !leg ? `FanDuel price shown. ${bookName} doesn't offer this number.` : undefined,
     }
   })
   const gaps = board.gaps.filter((g) => everywhere || shown.some((l) => l.id === g.leg_id)).slice(0, GAPS_SHOWN).map((g): QuickAdd => ({

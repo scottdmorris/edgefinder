@@ -28,7 +28,7 @@ STEADY_GAMES = 20             # the same window the season backtest measured
 STEADY_MIN_RATE = 0.9
 STEADY_SHOWN = 8
 RECOMMEND_MIN_LINES = 100     # graded lines every model priced before one is recommended
-BOOK_NAMES = {"fanduel": "FanDuel", "kalshi": "Kalshi"}
+BOOK_NAMES = {"fanduel": "FanDuel", "draftkings": "DraftKings", "kalshi": "Kalshi"}
 _cache: dict[tuple, tuple[float, object]] = {}
 
 

@@ -126,7 +126,7 @@ export default function App() {
           stake money you can't afford to lose. Problem gambling help: 1-800-GAMBLER.
         </p>
         <p className="mt-2">
-          Player and game data from NBA.com, prices from FanDuel (via The Odds API) and Kalshi. ·{' '}
+          Player and game data from NBA.com, prices from FanDuel and DraftKings (via The Odds API), and Kalshi. ·{' '}
           <a href="/api/docs" className="underline hover:text-text">API</a>
         </p>
       </footer>

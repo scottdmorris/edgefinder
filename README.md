@@ -49,8 +49,10 @@ refreshes this table each morning; the live version is the Record tab.
 - **Parlay pricing that knows legs are linked.** Same-game bets are priced with
   a Gaussian copula using correlations measured from three seasons of logs,
   including how one player's points, rebounds and threes move together.
-- **Two price sources.** FanDuel lines (The Odds API) and Kalshi's public
-  prediction-market prices, with a FanDuel/Kalshi switch and a Kalshi-style list.
+- **Three price sources.** FanDuel and DraftKings lines (one Odds API request
+  returns both) and Kalshi's public prediction-market prices, with a source
+  switch and a Kalshi-style list. Sportsbook props show the other book's price
+  when a comparable pregame quote is available.
 - **A tamper-evident record.** Every pick and result is written to an append-only
   hash-chained log, audited against the ledger, with a published fingerprint.
 - **Live game center.** Scoreboard, shot chart on the home team's floor, box
@@ -81,7 +83,7 @@ for its detailed box score and plays.
 ```mermaid
 flowchart LR
     subgraph Sources
-        OA[The Odds API<br>FanDuel lines]
+        OA[The Odds API<br>FanDuel and DraftKings lines]
         KA[Kalshi<br>public markets]
         NB[NBA stats and live feed]
         EI[Injury report]
@@ -134,7 +136,7 @@ requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
 .venv\Scripts\python scripts\nba_props_settle.py               # grade picks, print the report
 .venv\Scripts\python scripts\verify_record.py                  # check the log and the ledger
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # schedule both jobs
-.venv\Scripts\python -m pytest                                 # about 1,350 tests
+.venv\Scripts\python -m pytest                                 # about 1,430 tests
 ```
 
 ## The views
@@ -147,7 +149,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # sched
   chart, box score and plays, and your slip tracked while the games are on.
 - **Players.** Search a player: averages, recent games, tonight's lines and both
   projections, and how often they have cleared a number.
-- **Picks.** Suggested bets, X+ points ladders, and every line next to the
+- **Picks.** Suggested bets and every line next to the
   market's devigged probability.
 - **Record.** Whether the log is intact, whether the price moved our way after
   each pick, each model's record, accuracy against the market, and every pick.

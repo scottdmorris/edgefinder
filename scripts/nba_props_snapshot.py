@@ -8,8 +8,8 @@ paper ledger, so the models are judged head to head on the same lines.
 The same games' liquid Kalshi prices (points, rebounds, assists, threes) are
 recorded at the same moment, with book="kalshi". Kalshi spends no Odds API
 requests and its failure never stops the FanDuel work.
-The FanDuel request also returns DraftKings' lines at no extra cost; they are archived
-to their own file and compared with FanDuel's in the log. Picks stay FanDuel's.
+The FanDuel request also returns DraftKings' lines at no extra cost. DraftKings snapshots
+are archived separately, and early lines are priced into the ledger under their own book.
 FanDuel's "X+ points" lines are no longer fetched: the request each one cost now pays for
 two more games a night (nba_snapshot_plan.DEFAULT_MAX_GAMES). Kalshi still prices X+ rungs.
 
@@ -131,6 +131,24 @@ class Models:
             nba_kalshi_ledger.KalshiModel(m.version, {"points": m.dispersion}, points_only(m))
             for m in self.get() if m.version != nba_points.MODEL_VERSION]
         return models
+
+
+def record_other_books(event: dict, books: dict[str, list[dict]], models: Models) -> None:
+    """Price the other books' lines from the same request into the ledger, under their own
+    book name, so the Parlay screen can offer them as a price source. Costs no request, and
+    nothing it raises may fail the run."""
+    for book in nba_props.OTHER_BOOKS:
+        lines = books.get(book, [])
+        if not lines:
+            continue
+        try:
+            added = nba_recording.record_event(
+                event, lines, models.get(),
+                recorded_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+                game_date=nba_snapshot_plan.tip_date(event), book=book)
+            log.info("%s ledger %s", book, describe(added))
+        except Exception:
+            log.exception("Pricing %s lines failed; the FanDuel snapshot is unaffected", book)
 
 
 def record_lines(event: dict, lines: list[dict], models: Models) -> dict[str, int]:
@@ -329,7 +347,9 @@ def main() -> None:
         lines = books.get(nba_props.BOOKMAKER, [])
         fetched_at = dt.datetime.now(dt.timezone.utc).isoformat()
         nba_props.append_snapshot(task.event, task.phase, lines, fetched_at)
-        recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" else "-"
+        recorded = describe(record_lines(task.event, lines, models)) if task.phase == "early" and lines else "-"
+        if task.phase == "early":
+            record_other_books(task.event, books, models)
         archive_other_books(task.event, task.phase, books, fetched_at)   # after: it needs the ids
         log.info("%-5s %s @ %s: %d lines archived, ledger %s",
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)

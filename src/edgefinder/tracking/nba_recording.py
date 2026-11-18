@@ -30,8 +30,9 @@ def record_event(
     recorded_at: str,
     game_date: str,
     path: Path | None = None,
+    book: str = nba_paper.DEFAULT_BOOK,
 ) -> dict[str, int]:
-    """Price one game's lines with each model. Returns how many new rows
+    """Price one game's lines, from `book`, with each model. Returns how many new rows
     each model version added (0 for a model that failed)."""
     names = [line["player"] for line in lines]
     added: dict[str, int] = {}
@@ -40,7 +41,7 @@ def record_event(
             projections = model.project(event, names)
             rows = nba_paper.build_ledger_rows(
                 event, lines, projections, recorded_at, game_date,
-                model_version=model.version, dispersion=model.dispersion)
+                model_version=model.version, dispersion=model.dispersion, book=book)
             added[model.version] = nba_paper.append_rows(rows, path=path)
         except Exception:
             log.exception("model %s failed on %s @ %s; the other models are unaffected",

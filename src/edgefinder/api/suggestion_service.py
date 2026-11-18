@@ -13,11 +13,25 @@ log = logging.getLogger(__name__)
 STYLE = "Higher hit rate"
 
 
+def price_sources(book: str, fanduel: pd.DataFrame,
+                  others: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """For a sportsbook source: its own refreshed prices, the other sportsbook's to compare
+    with, and that book's name. Kalshi gets neither."""
+    draftkings = others[others["book"] == "draftkings"] if "book" in others.columns else others
+    if book == "fanduel":
+        return fanduel, draftkings, "DraftKings"
+    if book == "draftkings":
+        return draftkings, fanduel, "FanDuel"
+    return pd.DataFrame(), pd.DataFrame(), ""
+
+
 def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.DataFrame,
            games: pd.DataFrame, now: dt.datetime) -> pd.DataFrame:
     out = table.copy()
-    own = nba_props.load_snapshots() if chosen["book"] == "fanduel" else pd.DataFrame()
-    other = nba_props.load_book_snapshots() if chosen["book"] == "fanduel" else pd.DataFrame()
+    sportsbook = chosen["book"] in nba_paper.SPORTSBOOKS
+    own, other, other_name = price_sources(
+        chosen["book"], nba_props.load_snapshots() if sportsbook else pd.DataFrame(),
+        nba_props.load_book_snapshots() if sportsbook else pd.DataFrame())
     qualities, comparisons, tips = [], [], []
     for index, row in out.iterrows():
         alternate = str(row["Side"]).endswith("+")
@@ -70,7 +84,8 @@ def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.Data
             quality["warnings"].append("Game has started or its start time is unavailable")
             quality["eligible"] = False
         qualities.append(quality)
-        comparisons.append(quote_evidence.comparisons(out.loc[index], other, now, tip) if tip else [])
+        comparisons.append(quote_evidence.comparisons(out.loc[index], other, now, tip, other_name)
+                           if tip and not alternate else [])
         tips.append(tip)
     out["quality"], out["comparisons"], out["tip"] = qualities, comparisons, tips
     return out

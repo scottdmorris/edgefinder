@@ -50,6 +50,8 @@ COLUMNS = [
 _TEXT_COLUMNS = ["status", "result", "pick_side", "went_over", "stat", "book"]
 DEFAULT_STAT = "points"
 DEFAULT_BOOK = "fanduel"
+# sportsbooks whose picks are graded against the sportsbooks' averaged fair close
+SPORTSBOOKS = frozenset({DEFAULT_BOOK, "draftkings"})
 # rows written before these columns existed were all FanDuel points lines
 _LEGACY_DEFAULTS = {"stat": DEFAULT_STAT, "book": DEFAULT_BOOK}
 
@@ -271,7 +273,7 @@ def _attach_fair_close(out: pd.DataFrame, sportsbooks: dict, kalshi: dict) -> No
     for index in picks:
         row = out.loc[index]
         book = row["book"]
-        source = kalshi if book == "kalshi" else sportsbooks if book == DEFAULT_BOOK else {}
+        source = kalshi if book == "kalshi" else sportsbooks if book in SPORTSBOOKS else {}
         key = (str(row["event_id"]), str(row["player"]), str(row["stat"]), float(row["line"]))
         if key in source:
             out.loc[index, "clv_novig_pct"] = closing.novig_clv_pct(

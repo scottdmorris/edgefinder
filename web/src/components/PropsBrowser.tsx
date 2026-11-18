@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Leg } from '../lib/api'
 import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/ladder'
-import { BookBadge } from './BookBadge'
+import { QuoteNotes } from './QuoteNotes'
 import { Empty, Photo, Pills } from './ui'
 
 const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
@@ -41,6 +41,7 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
       <p className="mt-3 text-xs text-muted">
         {kalshi ? 'Tap a number to change the line, then Yes or No to add it.' : 'Tap a number to change the line, then Over or Under to add it.'} The
         big % is the chance the price implies; "model" is the chosen model's view, green when it rates the bet higher and red when lower.
+        Hit rates come from past games, not forecasts, and injury news isn't checked.
       </p>
       <div className="mt-2 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">{(open ? rows : rows.slice(0, SHOWN)).map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} />)}</div>
       {!open && rows.length > SHOWN && <button type="button" onClick={() => setAll(true)}
@@ -108,20 +109,6 @@ export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[
       <div className={`text-[11px] font-semibold tabular-nums ${leanTone}`}>model {compared.model_pct?.toFixed(0) ?? '–'}%</div>
     </div>
     <div className="flex basis-full gap-1.5 sm:basis-auto">{button(step.yes)}{step.no && button(step.no, true)}</div>
-    <div className="basis-full text-xs text-muted">
-      {compared.quality && <>
-        <div>{compared.quality.history_games} prior games · historical hit rate {compared.quality.recent_hit_pct == null ? 'unavailable' : `${compared.quality.recent_hit_pct}%`}
-          {compared.quality.historical_low != null && ` · middle 80% of past results: ${compared.quality.historical_low}–${compared.quality.historical_high}`}</div>
-        <div>{compared.quality.price_at ? `Price checked ${new Date(compared.quality.price_at).toLocaleString()}` : 'Price timestamp unavailable'}</div>
-        {compared.quality.warnings.length > 0 && <div className="text-warn">Pass for higher-hit suggestions: {compared.quality.warnings.join('; ')}</div>}
-        <div>{compared.quality.injuries}. Historical hit rates are not forecast probabilities.</div>
-      </>}
-      {compared.comparisons?.map((other) => <div key={other.book}>
-        <BookBadge book="fanduel" /> {compared.side} {compared.line}: {american(compared.odds)} ({(1 + (compared.odds > 0 ? compared.odds / 100 : 100 / -compared.odds)).toFixed(2)}× return) ·
-        {' '}<BookBadge book={other.book} /> {compared.side} {other.line}: {american(other.odds)} ({(1 + (other.odds > 0 ? other.odds / 100 : 100 / -other.odds)).toFixed(2)}× return)
-        {' · '}{other.stale ? 'comparison is stale' : !other.same_line ? 'different numbers; payouts are not directly comparable' : other.better_payout ? 'DraftKings pays more on this same number' : 'FanDuel pays at least as much on this same number'}
-        {' · '}{new Date(other.fetched_at).toLocaleString()}
-      </div>)}
-    </div>
+    <QuoteNotes quality={compared.quality} comparisons={compared.comparisons} side={compared.side} />
   </div>
 }

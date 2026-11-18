@@ -13,7 +13,7 @@ from ..tracking import suggested_record
 
 DIGESTS = Path(__file__).resolve().parents[3] / "record" / "DIGESTS.md"
 LOG_ROWS = 400                # most recent picks sent to the page; the full ledger is in the repo
-BOOKS = (("fanduel", "FanDuel"), ("kalshi", "Kalshi"))
+BOOKS = (("fanduel", "FanDuel"), ("draftkings", "DraftKings"), ("kalshi", "Kalshi"))
 
 
 def _time(value) -> str | None:

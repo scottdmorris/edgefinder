@@ -24,6 +24,33 @@ Newest first. Dates are when the work was committed.
   modal focus/Escape/labels, repricing, profile navigation, search and review recovery.
   Physical-device and Safari testing remain unverified.
 
+### DraftKings as a price source on the Parlay screen; a tidier line under each prop
+- DraftKings lines were archived but never priced by the models, so the Parlay screen
+  could not offer them. From the next early snapshot, every model prices DraftKings' lines
+  too (they come back on the same request, so this costs nothing) and they are recorded
+  with `book="draftkings"`. DraftKings then appears next to FanDuel and Kalshi under the
+  price source. DraftKings picks are graded against the sportsbooks' fair close and get
+  their own rows in the Record screen's by-book and fair-close sections; the headline
+  record and the published README table stay FanDuel's. (The first snapshots after the
+  change, on Nov 17, already priced DraftKings.)
+- With DraftKings chosen, each quote is compared with FanDuel's price, the mirror of the
+  FanDuel view. Comparisons apply to sportsbook over/under lines when both books
+  have a quote. Quick Adds show the selected source's odds for matching bets and
+  label the FanDuel estimate. The missing-stat shortcut prefers Kalshi.
+- The five lines of quote detail under each player are now one: the hit rate over his last
+  games, his usual range, and the other sportsbook's price with a one- or two-word reading
+  ("other number", "pays more there", "old price"). Quotes left out of suggestions get a
+  "Not suggested · why" toggle with the reasons and timestamps; the general caveats about
+  hit rates and injuries are stated once above the list.
+- The README now lists three price sources, drops the X+ ladders from the Picks
+  description, and gives the current test count.
+- Changing the suggestion code also changes its frozen trial fingerprint. The local
+  archive had no frozen trial. Installations with an existing fingerprint retain
+  their recorded results and reject new entries under the old fingerprint.
+- Validation: 1,434 Python tests passed with 97% coverage. Ruff, 77 web tests,
+  web lint and production build passed.
+  `verify_record.py` reported an intact chain with all 17,391 ledger rows matching.
+
 ### Shared live updates, on-demand screens and API profiling
 - The header and Live page now share one scoreboard request loop, using the fastest
   requested interval without duplicate requests. Hidden tabs pause; failed refreshes
