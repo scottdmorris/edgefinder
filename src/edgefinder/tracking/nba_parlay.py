@@ -355,11 +355,14 @@ def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:
 
 # How much risk a suggested slip may carry, as the least chance it must have of
 # hitting. A slip multiplies its legs' chances, so a few ordinary legs shrink fast.
-STYLES = {"Higher hit rate": 0.60, "Safer": 0.35, "Balanced": 0.20, "Bigger payouts": 0.08}
+# "Long shot" has no chance floor: it is built by long_shot_slip, not searched.
+STYLES = {"Higher hit rate": 0.60, "Safer": 0.35, "Balanced": 0.20, "Bigger payouts": 0.08,
+          "Long shot": 0.0}
 DEFAULT_STYLE = "Higher hit rate"
 # A slip must also be worth the stake: the least it may win per $1 (so $10 on Safer wins
 # at least $10), and it needs one real leg, not just locks, so locks only ever help.
-MIN_PROFIT = {"Higher hit rate": .30, "Safer": 1.0, "Balanced": 2.0, "Bigger payouts": 6.0}
+MIN_PROFIT = {"Higher hit rate": .30, "Safer": 1.0, "Balanced": 2.0, "Bigger payouts": 6.0,
+              "Long shot": 0.0}
 REAL_LEG_DECIMAL = 1.5          # about -200: the cheapest price that counts as a real leg
 
 
@@ -428,6 +431,38 @@ def suggest_parlays(candidates: pd.DataFrame, max_legs: int = 3, top: int = 5,
             exact["joint_probability"] * 100.0, exact["decimal_odds"] - 1.0,
             exact["ev_per_unit"] * 100.0]
     return best
+
+
+# A "long shot" slip is many legs, not long-shot legs: the likeliest bets on the board, each
+# worth betting on its own, stacked until the payout is big. Last season's markets say this
+# loses money at real prices (docs/KALSHI_BACKTEST.md), so it is offered as a tracked paper
+# experiment, not an edge. The snapshot covers at most 8 games, so two players a game.
+LONG_SHOT = "Long shot"
+LONG_SHOT_LEGS = 10
+LONG_SHOT_MIN_LEGS = 8
+LONG_SHOT_PER_GAME = 2
+
+
+def long_shot_slip(candidates: pd.DataFrame, legs: int = LONG_SHOT_LEGS,
+                   min_legs: int = LONG_SHOT_MIN_LEGS, per_game: int = LONG_SHOT_PER_GAME,
+                   bench: frozenset[int] = frozenset()) -> pd.DataFrame:
+    """One slip of up to `legs` legs (at least `min_legs`): the likeliest worthwhile legs, one
+    bet a player and at most `per_game` a game, priced with the measured same-game
+    correlations. Empty when fewer than `min_legs` qualify. Same columns as suggest_parlays."""
+    columns = ["Slip", "Legs", "Chance %", "Pays", "EV %", "bets"]
+    good = _worthwhile_legs(candidates)
+    if bench:
+        good = good[~(good["player_id"].astype(int).isin(bench) & (good["Model %"] >= LOCK_CHANCE * 100.0))]
+    ranked = good.sort_values(["prob", "Leg EV %"], ascending=False).drop_duplicates("player_id")
+    chosen = ranked[ranked.groupby("event_id").cumcount() < per_game].head(legs)
+    if len(chosen) < min_legs:
+        return pd.DataFrame(columns=columns)
+    summary = correlated.summarise(to_legs(chosen, {}))
+    return pd.DataFrame([{"Slip": "  +  ".join(chosen["Leg"]), "Legs": len(chosen),
+                          "Chance %": summary["joint_probability"] * 100.0,
+                          "Pays": summary["decimal_odds"] - 1.0,
+                          "EV %": summary["ev_per_unit"] * 100.0, "bets": list(chosen.index)}],
+                        columns=columns)
 
 
 def _worthwhile_legs(candidates: pd.DataFrame) -> pd.DataFrame:

@@ -361,11 +361,11 @@ def main() -> None:
         record_kalshi(early_events + kalshi_early, models)
     if early_events:
         log_price_gaps(early_events)
-    if early_events:
+    if early_events or kalshi_early:
         try:
             capture_nightly()
         except Exception:
-            log.exception("Could not record nightly higher-hit trial")
+            log.exception("Could not record the nightly slip trials")
     late_events = [task.event for task in tasks + kalshi_only if task.phase == "late"]
     if late_events:
         archive_kalshi_closing(late_events)

@@ -144,7 +144,10 @@ powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # sched
 - **Parlay.** Every prop for a game day as stacked Points, Rebounds, Assists and
   3-pointer sections, filterable by game, in a list or grid. Suggested slips per
   risk style (each must pay enough to be worth the stake and hold a real leg),
-  and a slip that prices the chance it all hits.
+  and a slip that prices the chance it all hits. **Long shot** stacks 8 to 10
+  of the likeliest worthwhile legs for a big payout. Last season it lost money
+  at real prices ([docs/MANY_LEG_BACKTEST.md](docs/MANY_LEG_BACKTEST.md)), so it
+  is tracked on paper, one slip a night.
 - **Live.** Scoreboard with a "+3" pop when a team scores, any game's shot
   chart, box score and plays, and your slip tracked while the games are on.
 - **Players.** Search a player: averages, recent games, tonight's lines and both

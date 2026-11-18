@@ -318,10 +318,13 @@ def ideas(date: str | None, book: str | None, model: str | None, style: str,
         raise NotFound(f"unknown style {style}")
     table, chosen = candidates(date, book, model)
     pool = table if not game else table[table["Game"] == game]
-    if style == suggestion_service.STYLE:
+    if style in (suggestion_service.STYLE, nba_parlay.LONG_SHOT):
         pool = pool[pool["quality"].map(lambda q: q["eligible"])]
 
     def search() -> pd.DataFrame:
+        if style == nba_parlay.LONG_SHOT:      # many legs across games; not built for one game
+            return nba_parlay.long_shot_slip(pool.iloc[:0] if game else pool,
+                                             bench=nba_parlay.bench_players(_averages()))
         return nba_parlay.suggest_parlays(
             pool, top=IDEAS_SHOWN, min_chance=nba_parlay.STYLES[style],
             min_profit=nba_parlay.MIN_PROFIT[style], real_leg_decimal=1.10 if style == suggestion_service.STYLE else nba_parlay.REAL_LEG_DECIMAL,

@@ -4,6 +4,29 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Long shot: a many-leg slip, tracked on paper
+- New **Long shot** betting style on the Parlay screen: one slip of 8 to 10 of the
+  likeliest legs that are each worth betting on their own and pass the quote checks, one
+  bet a player and at most two a game (the snapshot covers at most 8 games), priced with
+  the measured same-game correlations. It is not built for a single game. Kalshi usually
+  has enough legs; FanDuel and DraftKings rarely do, and then it says so.
+- Tested first on last season's markets (`scripts/nba_many_leg_backtest.py`,
+  docs/MANY_LEG_BACKTEST.md). Every extra leg made the return worse. The 10-leg,
+  two-a-game rule won 18% of nights at a typical +352 and returned -32% at Kalshi prices
+  (95% interval -64% to +3%). The card says this under the style switch.
+- A second frozen paper trial, `long-shot-v1`, records the first qualifying Kalshi slip
+  each day from Context v2 alongside the higher-hit trial. Either trial failing never
+  stops the other, and the nightly capture now also runs on Kalshi-only snapshots. The
+  Record tab shows it as its own card.
+- Chances under 10% now show one decimal on the suggested slip.
+- Note: both trials freeze a hash of the slip code (nba_parlay.py, service.py,
+  suggestion_service.py and others) when they record their first slip. After that, a code
+  change to those files stops new entries until a new trial ID is used. Neither trial had
+  recorded a slip yet, so this change breaks nothing.
+- Validation: 1,447 Python tests passed with coverage (13 new) and ruff is clean; all 79
+  web tests (2 new), type-check and lint passed. The backtest script was run on both
+  market sets above.
+
 ### Desktop and mobile audit fixes
 - Slip estimates immediately reprice after refreshed odds, probabilities or board
   revisions; superseded estimates stay hidden while the new request runs.

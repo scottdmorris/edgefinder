@@ -105,8 +105,12 @@ def archive_idea(chosen: dict, style: str, game: str | None, table: pd.DataFrame
                "style": style, "game": game, "legs": legs, "probability": probability,
                "payout": payout, "market_probability": 1 / payout,
                "payout_basis": "product of quoted single-leg prices; sportsbook SGP payout may differ"}
-    trial = (style == STYLE and not game and chosen["book"] == "fanduel"
-             and chosen["model"] == "context-v2" and len(legs) == 2)
+    trial: bool | str = (style == STYLE and not game and chosen["book"] == "fanduel"
+                         and chosen["model"] == "context-v2" and len(legs) == 2)
+    long_shot = suggested_record.LONG_SHOT_EXPERIMENT
+    if (style == long_shot["style"] and not game and chosen["book"] == long_shot["book"]
+            and chosen["model"] == long_shot["model"]):
+        trial = long_shot["id"]
     try:
         return suggested_record.archive(payload, now, experiment=trial)
     except (OSError, ValueError, sqlite3.Error):
@@ -118,7 +122,12 @@ def capture_nightly() -> None:
     """Run after snapshots; do not backfill or select a winner after seeing results."""
     from . import service
     service.clear_cache()
-    try:
-        service.ideas(service.today().isoformat(), "fanduel", "context-v2", STYLE)
-    except (service.NotFound, ValueError):
-        log.info("No qualifying higher-hit trial slip available at this snapshot")
+    long_shot = suggested_record.LONG_SHOT_EXPERIMENT
+    for name, book, model, style in (("higher-hit", "fanduel", "context-v2", STYLE),
+                                     ("long-shot", long_shot["book"], long_shot["model"], long_shot["style"])):
+        try:                                   # one trial failing never stops the other
+            service.ideas(service.today().isoformat(), book, model, style)
+        except (service.NotFound, ValueError):
+            log.info("No qualifying %s trial slip available at this snapshot", name)
+        except Exception:
+            log.exception("Could not record the %s trial", name)

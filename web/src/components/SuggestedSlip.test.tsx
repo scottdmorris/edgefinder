@@ -73,3 +73,17 @@ it('shows break-even separately from the estimated chance and labels the paper r
   expect(screen.getByText(/Recorded for paper grading: 12345678/)).toBeTruthy()
   expect(screen.getByText('estimated to hit')).toBeTruthy()
 })
+
+it('explains the Long shot style, its two-a-game rule and a small chance to one decimal', () => {
+  const many = new Map(Array.from({ length: 8 }, (_, i) => [i + 1, leg(i + 1, `Player ${i + 1}`)] as [number, Leg]))
+  render(<SuggestedSlip {...base} legs={many} style="Long shot" ideas={[{ legs: [...many.keys()], chance_pct: 6.64, pays: 21.3, ev_pct: 30 }]} />)
+  expect(screen.getByText('Up to two players a game')).toBeTruthy()
+  expect(screen.getByText(/lost money at real prices/)).toBeTruthy()
+  expect(screen.getByText('6.6%')).toBeTruthy()
+  expect(screen.getAllByText(/^Player \d/)).toHaveLength(8)
+})
+
+it('points a single-game Long shot to the whole board instead of an empty card', () => {
+  render(<SuggestedSlip {...base} sameGame style="Long shot" ideas={[]} />)
+  expect(screen.getByText(/clear the game filter/)).toBeTruthy()
+})

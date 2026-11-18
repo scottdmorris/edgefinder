@@ -26,6 +26,15 @@ EXPERIMENT = {"id": "higher-hit-v1", "model": "context-v2", "book": "fanduel",
               "success": "positive flat-unit return and Brier score below quoted market baseline",
               "min_leg_decimal": 1.10, "market_baseline": "1 / simulated product payout (margin included)",
               "fees": "before fees; simulated product payout, not a verified sportsbook parlay quote"}
+# Many legs, one a night: Kalshi is the only source with enough worthwhile legs most nights.
+# Last season's markets say it loses at real prices; this records whether it does here.
+LONG_SHOT_EXPERIMENT = {"id": "long-shot-v1", "model": "context-v2", "book": "kalshi",
+                        "style": "Long shot", "min_legs": 8, "max_legs": 10, "max_per_game": 2,
+                        "min_leg_ev": .02, "first_qualifying_slip_per_day": True,
+                        "review_after_game_days": 60,
+                        "success": "positive flat-unit return over the review window",
+                        "fees": "before Kalshi fees; product of the leg prices"}
+EXPERIMENTS = {spec["id"]: spec for spec in (EXPERIMENT, LONG_SHOT_EXPERIMENT)}
 
 
 @contextmanager
@@ -43,8 +52,9 @@ def connect(path: Path | None = None):
         db.close()
 
 
-def freeze_protocol(db: sqlite3.Connection) -> None:
+def freeze_protocol(db: sqlite3.Connection, spec: dict | None = None) -> None:
     """Reject new trial entries after a rule change; old results remain readable/gradable."""
+    spec = spec or EXPERIMENT
     recipe_files = [Path(__file__).with_name("nba_parlay.py"),
                     Path(__file__).parents[1] / "models" / "recalibration.json",
                     Path(__file__).with_name("quote_evidence.py"),
@@ -53,38 +63,51 @@ def freeze_protocol(db: sqlite3.Connection) -> None:
                     Path(__file__).parents[1] / "betting" / "correlated.py",
                     Path(__file__).parents[1] / "models" / "nba_recalibration.py"]
     hashes = {p.name: hashlib.sha256(p.read_text(encoding="utf-8").encode()).hexdigest() for p in recipe_files}
-    protocol = json.dumps(EXPERIMENT | {"recipe_sha256": hashes}, sort_keys=True)
-    db.execute("INSERT OR IGNORE INTO protocol VALUES (?, ?)", (EXPERIMENT["id"], protocol))
-    stored = db.execute("SELECT payload FROM protocol WHERE id=?", (EXPERIMENT["id"],)).fetchone()[0]
+    protocol = json.dumps(spec | {"recipe_sha256": hashes}, sort_keys=True)
+    db.execute("INSERT OR IGNORE INTO protocol VALUES (?, ?)", (spec["id"], protocol))
+    stored = db.execute("SELECT payload FROM protocol WHERE id=?", (spec["id"],)).fetchone()[0]
     if stored != protocol:
         raise ValueError("Experiment rules changed: use a new experiment ID")
 
 
-def archive(payload: dict, now: dt.datetime, path: Path | None = None, experiment: bool = False) -> str | None:
-    """No retrospective offers. Original prices and probabilities cannot be overwritten."""
+def _qualifies(payload: dict, spec: dict) -> bool:
+    """The trial's own rules, checked again here so a caller cannot bypass the search."""
+    legs = payload["legs"]
+    if not (payload.get("model") == spec["model"] and payload.get("book") == spec["book"]
+            and payload.get("style") == spec["style"] and not payload.get("game")
+            and all(leg.get("evidence", {}).get("eligible") for leg in legs)):
+        return False
+    if spec is LONG_SHOT_EXPERIMENT:
+        per_game = max((sum(leg["event_id"] == other["event_id"] for other in legs) for leg in legs), default=0)
+        return (spec["min_legs"] <= len(legs) <= spec["max_legs"] and per_game <= spec["max_per_game"]
+                and len({leg["player_id"] for leg in legs}) == len(legs))
+    return (len(legs) == 2 and len({leg["event_id"] for leg in legs}) == 2
+            and payload["probability"] >= .60 and payload["payout"] >= 1.30
+            and payload["probability"] * payload["payout"] - 1 >= .02)
+
+
+def archive(payload: dict, now: dt.datetime, path: Path | None = None,
+            experiment: bool | str = False) -> str | None:
+    """No retrospective offers. Original prices and probabilities cannot be overwritten.
+    `experiment` is True for the higher-hit trial, or another trial's id."""
     if not payload["legs"] or any(pd.Timestamp(leg["tip"]) <= pd.Timestamp(now) for leg in payload["legs"]):
         return None
+    spec = None
     if experiment:
-        legs = payload["legs"]
-        valid = (payload.get("model") == EXPERIMENT["model"] and payload.get("book") == EXPERIMENT["book"]
-                 and payload.get("style") == EXPERIMENT["style"] and not payload.get("game")
-                 and len(legs) == 2 and len({leg["event_id"] for leg in legs}) == 2
-                 and payload["probability"] >= .60 and payload["payout"] >= 1.30
-                 and payload["probability"] * payload["payout"] - 1 >= .02
-                 and all(leg.get("evidence", {}).get("eligible") for leg in legs))
-        if not valid:
+        spec = EXPERIMENT if experiment is True else EXPERIMENTS[experiment]
+        if not _qualifies(payload, spec):
             return None
     canonical = payload | {"legs": sorted(payload["legs"], key=lambda leg: json.dumps(leg, sort_keys=True))}
     identity = json.dumps(canonical, sort_keys=True, allow_nan=False)
     identifier = hashlib.sha256(identity.encode()).hexdigest()[:24]
     saved = json.dumps(payload | {"recorded_at": now.isoformat()}, sort_keys=True, allow_nan=False)
     with connect(path) as db:
-        if experiment:
-            freeze_protocol(db)
+        if spec:
+            freeze_protocol(db, spec)
         db.execute("INSERT OR IGNORE INTO offers VALUES (?, ?, NULL)", (identifier, saved))
-        if experiment:
+        if spec:
             db.execute("INSERT OR IGNORE INTO experiment VALUES (?, ?, ?)",
-                       (EXPERIMENT["id"], payload["day"], identifier))
+                       (spec["id"], payload["day"], identifier))
     return identifier
 
 
@@ -126,14 +149,21 @@ def grade(games: pd.DataFrame, today: dt.date, path: Path | None = None) -> int:
 
 def summary(path: Path | None = None) -> dict:
     if not (path or DB_PATH).exists():
-        return {"offered": facts([]), "experiment": facts([]), "protocol": EXPERIMENT}
+        return {"offered": facts([]), "experiment": facts([]), "protocol": EXPERIMENT,
+                "long_shot": facts([]), "long_shot_protocol": LONG_SHOT_EXPERIMENT}
     with connect(path) as db:
-        selected = {r[0] for r in db.execute("SELECT offer FROM experiment WHERE trial=?", (EXPERIMENT["id"],))}
         rows = [(i, json.loads(p), json.loads(r) if r else None)
                 for i, p, r in db.execute("SELECT id,payload,result FROM offers")]
-        stored = db.execute("SELECT payload FROM protocol WHERE id=?", (EXPERIMENT["id"],)).fetchone()
-        protocol = json.loads(stored[0]) if stored else EXPERIMENT
-    return {"offered": facts(rows), "experiment": facts([r for r in rows if r[0] in selected]), "protocol": protocol}
+        trial, trial_protocol = _trial(db, rows, EXPERIMENT)
+        long_shot, long_shot_protocol = _trial(db, rows, LONG_SHOT_EXPERIMENT)
+    return {"offered": facts(rows), "experiment": trial, "protocol": trial_protocol,
+            "long_shot": long_shot, "long_shot_protocol": long_shot_protocol}
+
+
+def _trial(db: sqlite3.Connection, rows: list, spec: dict) -> tuple[dict, dict]:
+    selected = {r[0] for r in db.execute("SELECT offer FROM experiment WHERE trial=?", (spec["id"],))}
+    stored = db.execute("SELECT payload FROM protocol WHERE id=?", (spec["id"],)).fetchone()
+    return facts([r for r in rows if r[0] in selected]), json.loads(stored[0]) if stored else spec
 
 
 def facts(rows: list) -> dict:

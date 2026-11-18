@@ -6,6 +6,13 @@ import { american, money } from '../lib/ladder'
 import { Photo, Pills } from './ui'
 
 const EXAMPLE_STAKE = 10
+const LONG_SHOT = 'Long shot'
+
+/** What each style is, said once under the switch. */
+const STYLE_NOTES: Record<string, string> = {
+  'Higher hit rate': 'Higher hit rate uses at most two legs and seeks a 60%+ model estimate. That is a target to test, not a proven win rate.',
+  [LONG_SHOT]: 'Long shot stacks 8 to 10 of the likeliest legs worth betting, at most two players a game, for a big payout. Every leg adds the book’s cut again: on last season’s markets slips like this lost money at real prices. It is tracked on paper in the Record tab. Kalshi usually has enough legs; FanDuel and DraftKings rarely do.',
+}
 
 export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, inUse, onUse }: {
   /** null while the suggestions load */
@@ -27,7 +34,7 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-extrabold">Suggested slip</h2>
-          <div className="text-xs text-muted">{sameGame ? 'Same game' : 'One leg per game'}{ideas && ideas.length > 1 && ` · ${(at % ideas.length) + 1} of ${ideas.length}`}</div>
+          <div className="text-xs text-muted">{sameGame ? 'Same game' : style === LONG_SHOT ? 'Up to two players a game' : 'One leg per game'}{ideas && ideas.length > 1 && ` · ${(at % ideas.length) + 1} of ${ideas.length}`}</div>
         </div>
         <div className="min-w-0 max-w-full">
           <Pills label="Betting style" options={styles.map((name) => ({ id: name, label: name }))}
@@ -36,8 +43,10 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
       </div>
 
       {ideas === null && <div className="mt-3 h-32 animate-pulse rounded-2xl bg-raised-2" />}
-      {ideas?.length === 0 && <p className="mt-4 text-sm text-muted">No qualifying slip right now. Passing is part of this style; do not add legs just to get a suggestion.</p>}
-      <p className="mt-2 text-xs text-muted">Higher hit rate uses at most two legs and seeks a 60%+ model estimate. That is a target to test, not a proven win rate.</p>
+      {ideas?.length === 0 && <p className="mt-4 text-sm text-muted">{style === LONG_SHOT && sameGame
+        ? 'Long shot needs legs from several games; clear the game filter to see one.'
+        : 'No qualifying slip right now. Passing is part of this style; do not add legs just to get a suggestion.'}</p>}
+      {STYLE_NOTES[style] && <p className="mt-2 text-xs text-muted">{STYLE_NOTES[style]}</p>}
       {idea && (
         <div key={idea.legs.join(',')} className="rise">
           <p className="mt-2 text-xs text-muted">
@@ -63,7 +72,7 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
           </div>
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
             <div className="flex flex-wrap gap-6">
-              <Figure value={`${idea.chance_pct.toFixed(0)}%`} label="estimated to hit" />
+              <Figure value={`${idea.chance_pct.toFixed(idea.chance_pct < 10 ? 1 : 0)}%`} label="estimated to hit" />
               <Figure value={money(idea.pays * EXAMPLE_STAKE)} label={`back on $${EXAMPLE_STAKE}, before fees`} />
             </div>
             <div className="flex flex-wrap gap-2">
