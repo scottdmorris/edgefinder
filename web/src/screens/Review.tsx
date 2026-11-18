@@ -18,17 +18,40 @@ export function Review() {
   const [date, setDate] = useState<string | undefined>()
   const [data, setData] = useState<ReviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [attempt, setAttempt] = useState(0)
   const [everyPick, setEveryPick] = useState(false)
 
   useEffect(() => {
     let live = true
     api.review(date).then((d) => { if (live) { setData(d); setError(null) } })
       .catch((e: Error) => live && setError(e.message))
+      .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [date])
+  }, [date, attempt])
 
-  if (error) return <Empty title="Nothing graded yet" hint="Picks are graded the morning after the games. Check back then." />
-  if (!data) return <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-raised" />)}</div>
+  const requestDay = (next = date) => {
+    setLoading(true)
+    setError(null)
+    setDate(next)
+    setAttempt((n) => n + 1)
+  }
+
+  const requestedDay = data?.days.find((day) => day.date === date)?.label ?? date ?? 'the latest game day'
+  const notice = error ? (
+    <div role="alert" className="my-4 rounded-2xl border border-warn p-4 text-sm">
+      <p>Review unavailable for {requestedDay}: {error}</p>
+      {data && <p>Showing previous results for {data.label}.</p>}
+      <button type="button" onClick={() => requestDay()}
+        className="mt-2 min-h-11 rounded-full border border-line px-4 font-semibold">Retry review</button>
+    </div>
+  ) : loading ? <p role="status" className="my-4 text-sm text-muted">Loading review for {requestedDay}.{data && ` Showing previous results for ${data.label}.`}</p> : null
+
+  if (!data) return <div>
+    <h1 className="text-3xl font-black tracking-tight">Last night</h1>
+    {notice}
+    {loading && <div aria-hidden="true" className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-raised" />)}</div>}
+  </div>
 
   const hits = data.picks.filter((p) => p.status === 'Hit').length
   const misses = data.picks.filter((p) => p.status === 'Missed').length
@@ -39,9 +62,10 @@ export function Review() {
         {data.label}: {hits} of {hits + misses} model picks hit{data.pending > 0 && `, ${data.pending} not graded yet`}.
       </p>
       <div className="mt-4">
-        <Pills label="Game day" value={data.date} onChange={setDate}
+        <Pills label="Game day" value={date ?? data.date} onChange={requestDay}
           options={data.days.slice(0, DAYS_SHOWN).map((d) => ({ id: d.date, label: d.label }))} />
       </div>
+      {notice}
 
       <YourSlip key={data.date} date={data.date} />
 
@@ -63,13 +87,14 @@ export function Review() {
 
       {data.misses.length > 0 && (
         <Section title="Misses worth a second look" aside="furthest from the projection">
-          <div className="grid gap-2.5 sm:grid-cols-2">{data.misses.map((p) => <PickCard key={`${p.player_id}${p.bet}`} pick={p} />)}</div>
+          <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">{data.misses.map((p) => <PickCard key={`${p.player_id}${p.bet}`} pick={p} />)}</div>
           <p className="mt-2 text-xs text-muted">A big miss usually means news the model did not have: an injury, a short night, a blowout.</p>
         </Section>
       )}
 
       <Section title="Every pick" aside={`${data.picks.length} bets`}>
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        {data.picks.length === 0 && <Empty title="Nothing graded yet" hint="No model picks for this game day. Picks are graded the morning after the games." />}
+        <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
           {(everyPick ? data.picks : data.picks.slice(0, 6)).map((p) => <PickCard key={`${p.player_id}${p.bet}`} pick={p} />)}
         </div>
         {!everyPick && data.picks.length > 6 && <button type="button" onClick={() => setEveryPick(true)}
@@ -81,17 +106,17 @@ export function Review() {
 
 function PickCard({ pick }: { pick: ReviewPick }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-line bg-raised p-3">
+    <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-line bg-raised p-3 sm:flex-nowrap">
       <Photo src={pick.photo} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-bold">{pick.player}</div>
+      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        <div className="font-bold">{pick.player}</div>
         <div className="text-xs text-muted">{pick.bet}{pick.odds !== null && ` · ${american(pick.odds)}`} · {pick.game_short}</div>
         <div className="text-xs text-muted">
           Projected {pick.projects ?? '–'}{pick.actual !== null && `, scored ${pick.actual}`} · {pick.models.join(', ')}
         </div>
         {pick.note && <div className="text-xs text-warn">{pick.note}</div>}
       </div>
-      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[pick.status] ?? ''}`}>{pick.status}</span>
+      <div className="w-full sm:w-auto"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[pick.status] ?? ''}`}>{pick.status}</span></div>
     </div>
   )
 }
@@ -128,10 +153,10 @@ function YourSlip({ date }: { date: string }) {
         {slip.legs.map((leg, i) => {
           const result = graded?.legs[i]
           return (
-            <div key={leg.id} className={`flex items-center gap-3 rounded-2xl border bg-raised p-3 ${i === sank ? 'border-bad/60' : 'border-line'}`}>
+            <div key={leg.id} className={`flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border bg-raised p-3 sm:flex-nowrap ${i === sank ? 'border-bad/60' : 'border-line'}`}>
               <Photo src={leg.photo} size={40} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">{leg.player} <span className="font-semibold text-muted">· {leg.bet}</span></div>
+              <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                <div className="text-sm font-bold">{leg.player} <span className="font-semibold text-muted">· {leg.bet}</span></div>
                 <div className="text-xs text-muted">
                   {result?.actual != null ? `Finished with ${result.actual}` : 'No result yet'}
                   {leg.chance_pct != null && ` · you added it at a ${leg.chance_pct.toFixed(0)}% chance`}
@@ -139,7 +164,7 @@ function YourSlip({ date }: { date: string }) {
                 {result?.note && <div className="text-xs text-warn">{result.note}</div>}
                 {i === sank && <div className="text-xs font-bold text-bad">This leg sank the slip{graded && graded.missed > 1 ? ` (${graded.missed} legs missed)` : ''}.</div>}
               </div>
-              {result && <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[result.status] ?? ''}`}>{result.status}</span>}
+              {result && <div className="w-full sm:w-auto"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold ${BADGE[result.status] ?? ''}`}>{result.status}</span></div>}
             </div>
           )
         })}

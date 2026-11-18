@@ -85,7 +85,7 @@ export function Form({ team }: { team: Team }) {
             const m = margins[i]
             const height = `${(Math.abs(m) / top) * 100}%`
             return (
-              <div key={g.date} tabIndex={0} className="group relative flex flex-1 flex-col outline-offset-2" aria-label={`${g.date} ${g.home ? 'vs' : 'at'} ${g.opponent}, ${g.result} ${g.score}`} title={`${g.date} ${g.home ? 'vs' : '@'} ${g.opponent}: ${g.result} ${g.score}`}>
+              <div key={g.date} role="img" tabIndex={0} className="group relative flex flex-1 flex-col outline-offset-2" aria-label={`${g.date} ${g.home ? 'vs' : 'at'} ${g.opponent}, ${g.result} ${g.score}`} title={`${g.date} ${g.home ? 'vs' : '@'} ${g.opponent}: ${g.result} ${g.score}`}>
                 <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-max max-w-44 -translate-x-1/2 rounded-lg border border-line-strong bg-raised-2 px-2 py-1 text-center text-[10px] text-text shadow-xl group-hover:block group-focus:block">
                   {g.date}<br />{g.home ? 'vs' : '@'} {g.opponent} · {g.result} {g.score}
                 </div>

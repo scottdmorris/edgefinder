@@ -19,6 +19,7 @@ const GAPS_SHOWN = 6
 export function Parlay() {
   const [market, setMarket] = useState<Market>({})
   const [board, setBoard] = useState<Board | null>(null)
+  const [boardRevision, setBoardRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [game, setGame] = useState(ALL)
   const [style, setStyle] = useState('Higher hit rate')
@@ -32,7 +33,7 @@ export function Parlay() {
   useEffect(() => {
     let live = true
     setLoading(true)
-    api.board(market).then((b) => { if (live) { setBoard(b); setError(null); setLoadedAt(new Date().toLocaleTimeString()) } })
+    api.board(market).then((b) => { if (live) { setBoard(b); setBoardRevision((n) => n + 1); setError(null); setLoadedAt(new Date().toLocaleTimeString()) } })
       .catch((e: Error) => live && setError(e.message))
       .finally(() => { if (live) setLoading(false) })
     return () => { live = false }
@@ -154,7 +155,7 @@ export function Parlay() {
         <SlipImageReview market={chosen} legs={legsById} onApply={slip.set} />
       </div>
 
-      <SlipPanel market={chosen} legs={slip.legs} legsById={legsById}
+      <SlipPanel market={chosen} legs={slip.legs} legsById={legsById} revision={boardRevision}
         onRemove={slip.toggle} onClear={slip.clear} onPriced={slip.rememberEstimate} />
     </div>
   )

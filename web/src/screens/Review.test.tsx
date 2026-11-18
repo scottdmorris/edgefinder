@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { api, type GradedSlip, type Leg, type Review as ReviewData } from '../lib/api'
 import { Review } from './Review'
@@ -37,4 +37,33 @@ it('grades the slip built for that day and names the leg that sank it', async ()
   expect(await screen.findByText('This leg sank the slip.')).toBeTruthy()
   expect(screen.getByText(/Finished with 2 · you added it at a 61% chance/)).toBeTruthy()
   expect(grade).toHaveBeenCalledWith('2026-11-10', [{ player_id: 2, stat: 'points', side: 'Over', line: 9.5 }])
+})
+
+it('distinguishes a failed request from empty results and retries it', async () => {
+  vi.mocked(api.review).mockRejectedValueOnce(new Error('Upstream unavailable'))
+  render(<Review />)
+  expect((await screen.findByRole('alert')).textContent).toContain('Review unavailable')
+  expect(screen.queryByText('Nothing graded yet')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry review' }))
+  expect(await screen.findByText('Tue, Nov 10: 1 of 2 model picks hit.')).toBeTruthy()
+})
+
+it('retains prior results and day controls after a failed date change', async () => {
+  vi.mocked(api.review).mockResolvedValueOnce({ ...night, days: [...night.days, { date: '2026-11-09', label: 'Mon, Nov 9' }] })
+  render(<Review />)
+  await screen.findByText('Tue, Nov 10: 1 of 2 model picks hit.')
+  vi.mocked(api.review).mockRejectedValueOnce(new Error('Try again later'))
+  fireEvent.click(screen.getByRole('radio', { name: 'Mon, Nov 9' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Showing previous results for Tue, Nov 10')
+  expect(screen.getByRole('radio', { name: 'Tue, Nov 10' })).toBeTruthy()
+  expect(screen.getByText('Tue, Nov 10: 1 of 2 model picks hit.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('radio', { name: 'Tue, Nov 10' }))
+  expect(await screen.findByText('Tue, Nov 10: 1 of 2 model picks hit.')).toBeTruthy()
+})
+
+it('labels a successful empty review as empty', async () => {
+  vi.mocked(api.review).mockResolvedValueOnce({ ...night, picks: [], misses: [] })
+  render(<Review />)
+  expect(await screen.findByText('Nothing graded yet')).toBeTruthy()
+  expect(screen.queryByRole('alert')).toBeNull()
 })

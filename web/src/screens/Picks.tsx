@@ -45,16 +45,16 @@ export function Picks() {
           missing news, not that it found an edge.
         </div>
         {data.liked.length === 0 ? <Empty title="No model sees value on this day" /> : (
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
             {data.liked.map((p) => (
-              <div key={`${p.player_id}${p.bet}`} className="rise flex items-center gap-3 rounded-2xl border border-line bg-raised p-3">
+              <div key={`${p.player_id}${p.bet}`} className="rise flex min-w-0 items-center gap-3 rounded-2xl border border-line bg-raised p-3">
                 <Photo src={p.photo} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-bold">{p.player}</div>
+                  <div className="break-words font-bold">{p.player}</div>
                   <div className="text-xs text-muted">{p.bet} · {p.game_short}</div>
                   <div className="text-xs text-muted">Projects {p.projects} · edge {p.ev_pct > 0 ? '+' : ''}{p.ev_pct}% · {p.agree > 1 ? `${p.agree} models agree` : 'one model'}</div>
                 </div>
-                <div className="rounded-full border border-line px-2.5 py-1 text-xs font-bold">{american(p.odds)}</div>
+                <div className="shrink-0 rounded-full border border-line px-2.5 py-1 text-xs font-bold">{american(p.odds)}</div>
               </div>
             ))}
           </div>
@@ -76,7 +76,7 @@ export function Picks() {
               <div className="flex items-center gap-3">
                 {l.photo && <Photo src={l.photo} size={40} />}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold">{l.player} <span className="font-semibold text-muted">· {l.line} pts</span></div>
+                  <div className="break-words text-sm font-bold">{l.player} <span className="font-semibold text-muted">· {l.line} pts</span></div>
                   <div className="text-xs text-muted">{l.game_short} · O {american(l.over)} / U {american(l.under)} · market {l.market_pct}% over</div>
                 </div>
                 <div className={`text-right text-lg font-black tabular-nums ${(l.gap ?? 0) > 0 ? 'text-good' : (l.gap ?? 0) < 0 ? 'text-bad' : ''}`}>

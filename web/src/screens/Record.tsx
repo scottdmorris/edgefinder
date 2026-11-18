@@ -1,6 +1,6 @@
 // Our record: every FanDuel pick as it was locked, how it turned out, and proof nothing was
 // changed afterwards. It refuses to call a winner until there are enough graded lines to mean it.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type ModelRecord, type RecordData } from '../lib/api'
 import { american } from '../lib/ladder'
 import { Empty, Pills, Section, StatStrip } from '../components/ui'
@@ -118,7 +118,7 @@ function Calibration({ model }: { model: ModelRecord }) {
   return (
     <div className="mt-4">
       <div className="text-xs font-semibold text-muted">When it says 60%, does it happen 60% of the time?</div>
-      <div className="mt-3 grid grid-flow-col gap-3" style={{ gridAutoColumns: 'minmax(0, 1fr)' }}>
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-flow-col sm:auto-cols-fr sm:grid-cols-none" aria-hidden="true">
         {model.calibration.map((bin) => (
           <div key={bin.bucket}>
             <div className="flex h-28 items-end justify-center gap-1 border-b border-line">
@@ -128,12 +128,25 @@ function Calibration({ model }: { model: ModelRecord }) {
                   style={{ height: `${bin[b.key] ?? 0}%`, background: b.color }} />
               ))}
             </div>
-            <div className="mt-1 text-center text-[11px] font-semibold">{bin.bucket}</div>
-            <div className="text-center text-[10px] text-muted">{bin.lines} lines</div>
+            <div className="mt-1 text-center text-xs font-semibold">{bin.bucket}</div>
+            <div className="text-center text-xs text-muted">{bin.lines} lines</div>
           </div>
         ))}
       </div>
       <Legend items={bars.map((b) => ({ label: b.label, color: b.color }))} />
+      <ScrollRegion label="Calibration data">
+        <table className="w-full text-sm tabular-nums">
+          <caption className="py-2 text-left font-semibold">{model.name} calibration (%)</caption>
+          <thead><tr>
+            {['Probability group', 'Lines', ...bars.map((b) => b.label)].map((label) => <th key={label} scope="col" className="px-3 py-2 text-left">{label}</th>)}
+          </tr></thead>
+          <tbody>{model.calibration.map((bin) => <tr key={bin.bucket} className="border-t border-line">
+            <th scope="row" className="px-3 py-2 text-left">{bin.bucket}</th>
+            <td className="px-3 py-2">{bin.lines}</td>
+            {bars.map((b) => <td key={b.key} className="px-3 py-2">{bin[b.key] == null ? '–' : `${bin[b.key].toFixed(0)}%`}</td>)}
+          </tr>)}</tbody>
+        </table>
+      </ScrollRegion>
       <p className="mt-1 text-xs text-muted">Green should match white. Small groups swing a lot.</p>
     </div>
   )
@@ -147,18 +160,21 @@ function Profit({ running, models }: { running: RecordData['running']; models: M
   const values = running.map((r) => r.units)
   const top = Math.max(1, ...values)
   const bottom = Math.min(-1, ...values)
-  const W = 600, H = 200, PAD = 28
+  const W = 600, H = 200, PAD = 48
+  // Limit axis labels, while retaining every point and every row in the table.
+  const labelDays = new Set(Array.from({ length: Math.min(7, days.length) }, (_, i) => days[Math.round(i * (days.length - 1) / Math.max(1, Math.min(7, days.length) - 1))]))
   const x = (day: string) => PAD + (days.length === 1 ? (W - 2 * PAD) / 2 : (days.indexOf(day) / (days.length - 1)) * (W - 2 * PAD))
   const y = (u: number) => 10 + ((top - u) / (top - bottom)) * (H - 30)
   return (
     <Section title="Running profit" aside="units won, all graded FanDuel picks">
       <div className="rounded-2xl border border-line bg-raised p-3">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Running profit by model">
+        <ScrollRegion label="Running profit chart">
+        <svg viewBox={`0 0 ${W} ${H}`} className="min-w-[600px] w-full" role="img" aria-label="Running profit by model; all cumulative values are in the table below">
           <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="#536471" strokeDasharray="4 4" />
-          <text x={4} y={y(0) + 4} fontSize={10} fill="#71767b">0</text>
-          <text x={4} y={y(top) + 4} fontSize={10} fill="#71767b">{top > 0 ? `+${top.toFixed(0)}` : ''}</text>
-          <text x={4} y={y(bottom) + 4} fontSize={10} fill="#71767b">{bottom.toFixed(0)}</text>
-          {days.map((d) => <text key={d} x={x(d)} y={H - 4} fontSize={10} fill="#71767b" textAnchor="middle">{d.slice(5)}</text>)}
+          <text x={4} y={y(0) + 4} fontSize={12} fill="#A0AFC3">0</text>
+          <text x={4} y={y(top) + 4} fontSize={12} fill="#A0AFC3">{top > 0 ? `+${top.toFixed(0)}` : ''}</text>
+          <text x={4} y={y(bottom) + 4} fontSize={12} fill="#A0AFC3">{bottom.toFixed(0)}</text>
+          {days.filter((d) => labelDays.has(d)).map((d) => <text key={d} x={x(d)} y={H - 4} fontSize={12} fill="#A0AFC3" textAnchor="middle">{d.slice(5)}</text>)}
           {series.map((s) => (
             <g key={s.id}>
               <polyline fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round"
@@ -171,7 +187,21 @@ function Profit({ running, models }: { running: RecordData['running']; models: M
             </g>
           ))}
         </svg>
+        </ScrollRegion>
         <Legend items={series.map((s) => ({ label: `${s.short} ${units(s.points[s.points.length - 1].units)}`, color: s.color }))} />
+        <ScrollRegion label="Cumulative profit data">
+          <table className="w-full text-sm tabular-nums">
+            <caption className="py-2 text-left font-semibold">Cumulative profit by game day (units)</caption>
+            <thead><tr>{['Game day', 'Model', 'Cumulative units'].map((label) => <th key={label} scope="col" className="px-3 py-2 text-left">{label}</th>)}</tr></thead>
+            <tbody>{days.flatMap((day) => series.flatMap((s) => s.points.filter((p) => p.day === day).map((p) => (
+              <tr key={`${s.id}-${p.day}`} className="border-t border-line">
+                <th scope="row" className="px-3 py-2 text-left whitespace-nowrap">{p.day}</th>
+                <td className="px-3 py-2">{s.name}</td>
+                <td className={`px-3 py-2 ${tone(p.units)}`}>{units(p.units)}</td>
+              </tr>
+            ))))}</tbody>
+          </table>
+        </ScrollRegion>
       </div>
     </Section>
   )
@@ -273,7 +303,7 @@ function Days({ days, models }: { days: RecordData['days']; models: ModelRecord[
   const name = (id: string) => models.find((m) => m.id === id)?.short ?? id
   return (
     <Section title="Day by day">
-      <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
+      <ScrollRegion label="Day by day results">
         <table className="w-full text-sm tabular-nums">
           <thead><tr className="text-xs text-muted">
             <th className="px-4 py-2 text-left font-semibold">Game day</th><th className="px-2 py-2 text-left font-semibold">Model</th>
@@ -290,7 +320,7 @@ function Days({ days, models }: { days: RecordData['days']; models: ModelRecord[
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </Section>
   )
 }
@@ -317,8 +347,8 @@ function Log({ log, models }: { log: RecordData['log']; models: ModelRecord[] })
               {r.result === 'win' ? 'W' : r.result === 'loss' ? 'L' : '·'}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold">{r.player} <span className="font-semibold text-muted">· {r.bet} {r.odds != null ? american(r.odds) : ''}</span></div>
-              <div className="truncate text-xs text-muted">{r.day} · {name(r.model)} · locked {when(r.locked)} ET · {r.lead}</div>
+              <div className="break-words text-sm font-bold">{r.player} <span className="font-semibold text-muted">· {r.bet} {r.odds != null ? american(r.odds) : ''}</span></div>
+              <div className="break-words text-xs text-muted">{r.day} · {name(r.model)} · locked {when(r.locked)} ET · {r.lead}</div>
             </div>
             <span className={`shrink-0 text-sm font-bold tabular-nums ${tone(r.units)}`}>{r.result ? units(r.units) : 'Pending'}</span>
           </div>
@@ -334,6 +364,13 @@ function Log({ log, models }: { log: RecordData['log']; models: ModelRecord[] })
       <p className="mt-2 text-xs text-muted">Picks stay on this list win or lose. Players who don't play are graded void and don't count.</p>
     </Section>
   )
+}
+
+function ScrollRegion({ label, children }: { label: string; children: ReactNode }) {
+  return <div role="region" aria-label={label} tabIndex={0}
+    className="max-w-full overflow-x-auto rounded-2xl border border-line bg-raised focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2">
+    {children}
+  </div>
 }
 
 function Fact({ label, value, className = '', mono }: { label: string; value: string; className?: string; mono?: boolean }) {

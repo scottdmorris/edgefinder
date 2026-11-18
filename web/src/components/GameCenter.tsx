@@ -18,7 +18,7 @@ export function GameCenter({ game, mine = [] }: { game: GameDetail & { detail: D
   const colors = { [game.away.team]: game.away.color, [game.home.team]: game.home.color }
   return (
     <div className="mt-5">
-      <Pills value={tab} onChange={setTab} options={TABS} />
+      <Pills label="Game view" value={tab} onChange={setTab} options={TABS} />
       <div className="mt-4">
         {tab === 'stats' && <Stats game={game} colors={colors} surnames={surnames} onAllPlays={() => setTab('plays')} />}
         {tab === 'plays' && <Plays plays={game.detail.plays} colors={colors} gameId={game.id} surnames={surnames} />}
@@ -131,16 +131,16 @@ function Shots({ game, colors }: { game: GameDetail & { detail: Detail }; colors
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <Heading>Shot chart</Heading>
         {periods.length > 1 && (
-          <Pills value={period} onChange={setPeriod}
+          <Pills label="Shot period" value={period} onChange={setPeriod}
             options={[{ id: 'all', label: 'All' }, ...periods.map(([id, label]) => ({ id, label }))]} />
         )}
       </div>
       {shots.length === 0 ? <div className="text-sm text-muted">No shots with a location yet.</div> : (
         <>
           <div className="mb-1.5 flex items-center justify-between text-sm">
-            <span>◀ <b style={{ color: game.away.color }}>{game.away.team}</b> {line(game.away.team)}</span>
+            <span>◀ <b>{game.away.team}</b> {line(game.away.team)}</span>
             <span className="text-xs text-muted">● made · ✕ missed</span>
-            <span><b style={{ color: game.home.color }}>{game.home.team}</b> {line(game.home.team)} ▶</span>
+            <span><b>{game.home.team}</b> {line(game.home.team)} ▶</span>
           </div>
           <Court shots={shown} colors={colors} homeColor={game.home.color} homeLogo={game.home.logo} freshFrom={freshFrom} />
         </>
@@ -180,11 +180,11 @@ function Box({ game }: { game: GameDetail & { detail: Detail } }) {
   const box = game.detail.box[team]
   return (
     <div>
-      <Pills value={team} onChange={setTeam} options={[game.away.team, game.home.team].map((t) => ({ id: t, label: t }))} />
+      <Pills label="Box score team" value={team} onChange={setTeam} options={[game.away.team, game.home.team].map((t) => ({ id: t, label: t }))} />
       {(['starters', 'bench'] as const).map((group) => box?.[group].length ? (
         <div key={group} className="mt-4">
           <Heading>{group === 'starters' ? 'Starters' : 'Bench'}</Heading>
-          <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
+          <div tabIndex={0} role="region" aria-label={`${team} ${group} box score`} className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full text-sm tabular-nums">
               <thead>
                 <tr className="text-xs text-muted">
@@ -218,5 +218,5 @@ function Box({ game }: { game: GameDetail & { detail: Detail } }) {
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wider text-muted">{children}</h3>
+  return <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wider text-muted">{children}</h2>
 }

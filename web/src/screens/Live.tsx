@@ -22,18 +22,18 @@ export function Live() {
   const list = games.data ?? []
   const id = chosen && list.some((g) => g.id === chosen) ? chosen : list[0]?.id ?? null
 
-  if (games.error && !games.data) return <Empty title="NBA's live feed isn't answering" hint={`${games.error}. It tries again on its own.`} />
-  if (!games.data) return <Loading />
-  if (!list.length) return <Empty title="No NBA games on the board right now" hint="Tonight's games show up here once NBA posts the day's schedule." />
-
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-black tracking-tight">Live</h1>
         <Freshness receivedAt={games.receivedAt} error={games.error} label="Board received" />
       </div>
-      {games.error && <p role="alert" className="mt-3 text-sm text-warn">Showing the last successful board. {games.error}</p>}
-      <Overview games={list} chosen={id} onChoose={setChosen} legs={tracked.error ? [] : tracked.data?.legs ?? []} />
+      {games.error && <p role="alert" className="mt-3 text-sm text-warn">{games.data && 'Showing the last successful board. '}{games.error}</p>}
+      {!games.data && (games.error
+        ? <Empty title="NBA's live feed isn't answering" hint="It tries again on its own." />
+        : <Loading />)}
+      {games.data && !list.length && <Empty title="No NBA games on the board right now" hint="Tonight's games show up here once NBA posts the day's schedule." />}
+      {list.length > 0 && <Overview games={list} chosen={id} onChoose={setChosen} legs={tracked.error ? [] : tracked.data?.legs ?? []} />}
       {id && <Game key={id} id={id} card={list.find((g) => g.id === id)!}
         legs={(tracked.error ? [] : tracked.data?.legs ?? []).filter((leg) => leg.game_id === id)} />}
       {/* the whole slip, across every game, sits under the game being watched */}
@@ -138,7 +138,7 @@ function TeamSide({ side, started, gameId, right }: { side: Side; started: boole
     <div className={`flex min-w-0 items-center gap-2 sm:gap-3 ${right ? 'flex-row-reverse text-right' : ''}`}>
       <img src={side.logo} alt="" className="size-9 shrink-0 sm:size-12" />
       <div className="min-w-0">
-        <div className="text-sm font-bold" style={{ color: side.color }}>{side.team}</div>
+        <div className="text-sm font-bold text-text">{side.team}</div>
         {started && <div key={side.score} className={`text-3xl font-black tabular-nums sm:text-4xl ${scored ? 'score-pop' : ''}`}>{side.score}</div>}
       </div>
     </div>
@@ -190,7 +190,7 @@ function MyPlayer({ leg }: { leg: TrackedLeg }) {
 function Notes({ side, right }: { side: Side; right?: boolean }) {
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted ${right ? 'justify-end' : ''}`}>
-      <span aria-label={`${side.timeouts} timeouts left`} title="Timeouts left" className="flex gap-0.5">
+      <span role="img" aria-label={`${side.timeouts} timeouts left`} title="Timeouts left" className="flex gap-0.5">
         {Array.from({ length: 7 }, (_, i) => <span key={i} className={`h-1 w-2 rounded-full ${i < side.timeouts ? 'bg-text' : 'bg-line'}`} />)}
       </span>
       {side.fouls !== null && <span>{side.fouls} fouls</span>}

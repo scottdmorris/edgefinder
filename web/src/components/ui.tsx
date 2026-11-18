@@ -10,12 +10,25 @@ export function Pills<T extends string>({ options, value, onChange, label }: {
   return (
     <div>
       {label && <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">{label}</div>}
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
-        {options.map((option) => {
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label ?? 'Options'}>
+        {options.map((option, index) => {
           const active = option.id === value
+          const focusable = active || (!options.some((item) => item.id === value) && index === 0)
           return (
             <button key={option.id} type="button" role="radio" aria-checked={active}
+              tabIndex={focusable ? 0 : -1}
               onClick={() => onChange(option.id)}
+              onKeyDown={(event) => {
+                let next = index
+                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % options.length
+                else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index + options.length - 1) % options.length
+                else if (event.key === 'Home') next = 0
+                else if (event.key === 'End') next = options.length - 1
+                else return
+                event.preventDefault()
+                onChange(options[next].id)
+                ;(event.currentTarget.parentElement?.children[next] as HTMLButtonElement)?.focus()
+              }}
               className={`min-h-10 rounded-full border px-4 text-sm font-semibold transition-colors ${
                 active ? 'border-button bg-button text-button-text'
                   : 'border-line text-text hover:border-line-strong'}`}>

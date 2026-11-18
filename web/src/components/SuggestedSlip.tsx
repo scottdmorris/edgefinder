@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { Idea, Leg } from '../lib/api'
 import { american, money } from '../lib/ladder'
-import { Photo } from './ui'
+import { Photo, Pills } from './ui'
 
 const EXAMPLE_STAKE = 10
 
@@ -29,13 +29,9 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
           <h2 className="text-lg font-extrabold">Suggested slip</h2>
           <div className="text-xs text-muted">{sameGame ? 'Same game' : 'One leg per game'}{ideas && ideas.length > 1 && ` · ${(at % ideas.length) + 1} of ${ideas.length}`}</div>
         </div>
-        <div className="flex gap-1 rounded-full border border-line p-1" role="radiogroup" aria-label="Style">
-          {styles.map((name) => (
-            <button key={name} type="button" role="radio" aria-checked={name === style} onClick={() => onStyle(name)}
-              className={`min-h-9 rounded-full px-3 text-xs font-bold transition-colors ${name === style ? 'bg-button text-button-text' : 'text-muted hover:text-text'}`}>
-              {name}
-            </button>
-          ))}
+        <div className="min-w-0 max-w-full">
+          <Pills label="Betting style" options={styles.map((name) => ({ id: name, label: name }))}
+            value={style} onChange={onStyle} />
         </div>
       </div>
 
@@ -56,9 +52,9 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
               return (
                 <div key={id} className="flex items-center gap-3 py-2">
                   <Photo src={leg.photo} size={40} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">{leg.player} <span className="font-semibold text-muted">· {leg.bet}</span></div>
-                    <div className="truncate text-xs text-muted">{leg.game_short}{leg.average?.season != null && ` · averages ${leg.average.season}`}</div>
+                  <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                    <div className="text-sm font-bold">{leg.player} <span className="font-semibold text-muted">· {leg.bet}</span></div>
+                    <div className="text-xs text-muted">{leg.game_short}{leg.average?.season != null && ` · averages ${leg.average.season}`}</div>
                   </div>
                   <div className="shrink-0 rounded-full border border-line px-2.5 py-1 text-xs font-bold tabular-nums">{american(leg.odds)}</div>
                 </div>
@@ -66,11 +62,11 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
             })}
           </div>
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <Figure value={`${idea.chance_pct.toFixed(0)}%`} label="estimated to hit" />
               <Figure value={money(idea.pays * EXAMPLE_STAKE)} label={`back on $${EXAMPLE_STAKE}, before fees`} />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {ideas!.length > 1 && <button type="button" onClick={() => setAt((n) => n + 1)}
                 className="min-h-11 rounded-full border border-line px-4 text-sm font-semibold hover:border-line-strong">Another</button>}
               <button type="button" aria-pressed={using} onClick={() => onUse(idea.legs)}

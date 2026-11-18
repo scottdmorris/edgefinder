@@ -81,5 +81,5 @@ def comparisons(row: pd.Series, snapshots: pd.DataFrame, now, tip) -> list[dict]
     return [{"book": "DraftKings", "line": float(latest.line), "odds": int(latest[side]),
              "fetched_at": latest.fetched_at, "stale": age > MAX_PRICE_AGE_MINUTES,
              "same_line": same,
-             "better_payout": same and age <= MAX_PRICE_AGE_MINUTES
-             and american_to_decimal(latest[side]) > american_to_decimal(row["Odds"])}]
+             "better_payout": bool(same and age <= MAX_PRICE_AGE_MINUTES
+                                  and american_to_decimal(latest[side]) > american_to_decimal(row["Odds"]))}]

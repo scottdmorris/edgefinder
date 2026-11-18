@@ -4,6 +4,26 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Desktop and mobile audit fixes
+- Slip estimates immediately reprice after refreshed odds, probabilities or board
+  revisions; superseded estimates stay hidden while the new request runs.
+- Mobile slips use a named native modal with contained keyboard focus, Escape dismissal,
+  restored opener focus, scroll locking, safe-area padding and unique Stake labels.
+- Player/team profiles follow query-only URL navigation. Search catalogs and Last night
+  distinguish failures from valid empty data, offer retry and retain available content.
+- Added keyboard radio navigation, active search-option announcements, readable player
+  headers, and narrow-screen wrapping for Review, Picks, slip and audit details.
+- Chart values are available by touch/keyboard and through equivalent data tables;
+  improved axis readability, table headers, scroll-region focus and graphic semantics.
+  Saved slips remain visible when the live scoreboard is empty or unavailable.
+- Browser verification also exposed a fresh comparison returning a NumPy boolean;
+  convert it to a JSON boolean so the Parlay board cannot fail serialization.
+- Validation: all 77 web tests, lint and production build passed; 49 focused Python
+  tests and Python lint passed. All 32 desktop/mobile viewport checks have no document
+  overflow or automated axe findings after rechecking Picks. Browser checks verified
+  modal focus/Escape/labels, repricing, profile navigation, search and review recovery.
+  Physical-device and Safari testing remain unverified.
+
 ### Shared live updates, on-demand screens and API profiling
 - The header and Live page now share one scoreboard request loop, using the fastest
   requested interval without duplicate requests. Hidden tabs pause; failed refreshes
