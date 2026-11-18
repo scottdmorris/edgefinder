@@ -312,6 +312,7 @@ def script(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "capture_nightly", lambda: None)
+    monkeypatch.setattr(module, "draw_tonight_card", lambda: None)     # no Edge in tests
     return module
 
 

@@ -4,6 +4,47 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Tonight's card, and a punchier morning post
+- New afternoon post, `scripts/tonight_post.py`: the Sharpest model's FanDuel points picks
+  for today, as already locked in the log (player, game and tip, pick, odds, chance and
+  edge; up to 6 rows, then "+N more in the app"), plus the Long shot trial's Kalshi slip
+  beside them when one is recorded. Saved as `data/posts/<day>-tonight.png` and `.txt`.
+  Each snapshot run refreshes it, since later games lock later, and it redraws only when the
+  picks or the slip change. The morning post grades the same picks.
+- The morning caption now leads with the result ("5-3 last night, +1.45u 📈"), states the
+  season with its losses, points to tonight's card, and asks "Tail or fade?". The GitHub
+  link and the fingerprint moved to `<day>-reply.txt`, to post as the first reply.
+- The record card reads on a phone: bigger table headers, labels and footer, no small
+  column key, and no URL on the card.
+- `--preview` on either script draws the post as it would read in an X feed, with the
+  reply under the morning post.
+- Validation: 1,466 Python tests passed with coverage (5 new for tonight's card, 3 new or
+  updated for the morning post) and ruff is clean. Both cards and feed previews were
+  rendered with Edge from real ledger data (Nov 16 results, Nov 17 picks) and checked by
+  eye, plus a sample tonight's card with a Long shot panel.
+
+### A daily record card for X
+- `scripts/daily_post.py` makes the morning post for @BalllKnowledge from the last graded
+  night: a 16:9 card (2400×1350 PNG) in the app's colours and logo, and a caption under
+  280 characters, saved to `data/posts/<day>.png` and `.txt` (git-ignored). Nothing is
+  posted automatically.
+- The card leads with one fixed model, Sharpest (the app's default), so the headline is
+  never the night's luckiest model. All four models follow with last night's and the
+  season's record, units and how often they beat the closing price. Losses show in red.
+  Graded Long shot and higher-hit trial slips appear as result lines. The footer carries
+  the published fingerprint, where to verify it, and "paper bets, not betting advice, 21+,
+  1-800-GAMBLER".
+- `--preview` also draws `<day>-preview.png`: the post as it would read in an X feed,
+  with the caption and the card together.
+- The card is HTML (`scripts/daily_post_card.html`) saved as a picture by Microsoft Edge
+  running headless, so it uses real fonts and the SVG logo without new dependencies.
+- The 9:00 settle job makes the post after it publishes the record, so the card carries
+  the new fingerprint. A failure is logged and never fails the settle, and a failed
+  settle makes no post.
+- Validation: 1,458 Python tests passed with coverage (11 new: 8 for the post, 3 for the
+  settle hook) and ruff is clean. The Nov 16 card was rendered with Edge and checked by
+  eye, along with a sample that shows trial results.
+
 ### Long shot: a many-leg slip, tracked on paper
 - New **Long shot** betting style on the Parlay screen: one slip of 8 to 10 of the
   likeliest legs that are each worth betting on their own and pass the quote checks, one

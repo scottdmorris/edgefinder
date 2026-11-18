@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ball Knowledge daily record</title>
+<style>
+  :root {
+    --ink: #070A10; --raised: #0E141E; --raised-2: #161F2C; --line: #263244;
+    --text: #EDF3FC; --muted: #A0AFC3; --accent: #75BCFF; --sky: #A5E5FF; --blue: #1493FF;
+    --good: #36D6A0; --bad: #FF6479;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 675px; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(ellipse 70% 420px at 18% -80px, #1493FF33, transparent 70%),
+      radial-gradient(ellipse 50% 360px at 100% 110%, #A5E5FF14, transparent 70%),
+      var(--ink);
+    padding: 40px 52px 30px; display: flex; flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-family: "Bahnschrift", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .flat { color: var(--muted); }
+
+  header { display: flex; align-items: center; justify-content: space-between; }
+  header .logo svg { height: 58px; width: auto; display: block; }
+  header .when { text-align: right; }
+  header .kicker { font-size: 15px; font-weight: 700; letter-spacing: .22em; color: var(--accent); }
+  header .date { font-size: 26px; font-weight: 700; margin-top: 2px; }
+
+  main { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: 370px 1fr; gap: 40px; margin-top: 30px; }
+
+  .hero { border: 1px solid var(--line); border-radius: 28px; padding: 28px 30px;
+          background: linear-gradient(160deg, #14253D 0%, var(--raised) 60%); position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -90px; top: -90px; width: 230px; height: 230px;
+                 border-radius: 50%; border: 16px solid #1493FF1A; }
+  .label { font-size: 16px; font-weight: 700; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  .big { font-size: 120px; font-weight: 700; line-height: 1; margin-top: 14px; letter-spacing: -.02em; }
+  .units { font-size: 44px; font-weight: 700; margin-top: 6px; }
+  .sub { font-size: 19px; color: var(--muted); margin-top: 10px; }
+  .season { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); position: relative; z-index: 1; }
+  .season-line { display: flex; gap: 18px; font-size: 34px; margin-top: 6px; }
+  .season-line b { font-weight: 700; }
+  .key { font-size: 14px; color: var(--muted); margin-top: 16px; line-height: 1.5; }
+
+  .board h2 { font-size: 16px; font-weight: 700; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th { font-size: 16px; font-weight: 600; color: var(--muted); text-align: right; padding: 0 0 10px 14px; }
+  th:first-child { text-align: left; padding-left: 16px; }
+  th.group { text-align: center; color: var(--accent); letter-spacing: .12em; font-size: 15px; padding-bottom: 4px; }
+  td { font-family: "Bahnschrift", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
+       font-size: 25px; text-align: right; padding: 11px 0 11px 14px; border-top: 1px solid var(--line); }
+  td.name { font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 21px; font-weight: 600;
+            text-align: left; padding-left: 16px; }
+  tr.lead td { background: #75BCFF14; }
+  tr.lead td:first-child { border-radius: 14px 0 0 14px; box-shadow: inset 4px 0 0 var(--accent); }
+  tr.lead td:last-child { border-radius: 0 14px 14px 0; padding-right: 12px; }
+  td:last-child, th:last-child { padding-right: 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .chips:empty { display: none; }
+  .chip { font-size: 17px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px;
+          white-space: nowrap; }
+  .chip b { color: var(--text); }
+  .chip.good { border-color: #36D6A066; } .chip.bad { border-color: #FF647955; }
+
+  footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 18px;
+           padding-top: 16px; border-top: 1px solid var(--line); }
+  .proof { font-size: 19px; color: var(--muted); line-height: 1.45; }
+  .proof code { font-family: "Cascadia Mono", Consolas, monospace; color: var(--sky); font-size: 19px; }
+  .handle { text-align: right; white-space: nowrap; }
+  .handle b { font-size: 24px; font-weight: 700; color: var(--text); display: block; }
+  .handle span { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">$logo</div>
+    <div class="when">
+      <div class="kicker">DAILY RECORD</div>
+      <div class="date">$date</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="label">Last night · $lead_name</div>
+      <div class="big num">$lead_record</div>
+      <div class="units num $lead_tone">$lead_units</div>
+      <div class="sub">$lead_count picks · FanDuel points · 1u each</div>
+      <div class="season">
+        <div class="label">Since $first_day · $days days</div>
+        <div class="season-line num"><b>$season_record</b><b class="$season_tone">$season_units</b></div>
+      </div>
+    </section>
+
+    <section class="board">
+      <h2>All four models</h2>
+      <table>
+        <thead>
+          <tr><th></th><th class="group" colspan="2">LAST NIGHT</th><th class="group" colspan="2">SEASON</th><th></th></tr>
+          <tr><th>Model</th><th>Record</th><th>Units</th><th>Record</th><th>Units</th><th>Beat close</th></tr>
+        </thead>
+        <tbody>
+$rows
+        </tbody>
+      </table>
+      <div class="chips">$trials</div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="proof">Locked before tip · hash-chained · fingerprint <code>$digest</code><br>
+      Paper bets, not betting advice · 21+ · 1-800-GAMBLER</div>
+    <div class="handle"><b>$handle</b><span>Ball Knowledge</span></div>
+  </footer>
+</body>
+</html>

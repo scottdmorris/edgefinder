@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Post preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 600px; background: #000; }
+  body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #E7E9EA;
+         -webkit-font-smoothing: antialiased; }
+  .post { display: flex; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid #2F3336; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #0E141E; flex: none;
+            display: grid; place-items: center; overflow: hidden; border: 1px solid #263244; }
+  .avatar svg { width: 34px; height: 34px; }
+  .body { min-width: 0; flex: 1; }
+  .who { font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; }
+  .who b { font-weight: 700; } .who span { color: #71767B; }
+  .text { font-size: 15px; line-height: 20px; white-space: pre-wrap; margin-top: 2px; overflow-wrap: anywhere; }
+  .text a { color: #1D9BF0; text-decoration: none; }
+  .media { margin-top: 12px; border: 1px solid #2F3336; border-radius: 16px; overflow: hidden; }
+  .media img { display: block; width: 100%; }
+  .actions { display: flex; justify-content: space-between; color: #71767B; font-size: 13px;
+             margin-top: 10px; padding-right: 40px; }
+  .actions span { display: inline-flex; gap: 6px; align-items: center; }
+  .reply { border-bottom: 1px solid #2F3336; }
+  .note { color: #71767B; font-size: 12px; padding: 8px 16px 12px; }
+</style>
+</head>
+<body>
+  <article class="post">
+    <div class="avatar">$avatar</div>
+    <div class="body">
+      <div class="who"><b>Ball Knowledge</b> <span>$handle · $time</span></div>
+      <div class="text">$text</div>
+      <div class="media"><img src="$image" alt="Daily record card"></div>
+      <div class="actions"><span>Reply</span><span>Repost</span><span>Like</span><span>Views</span></div>
+    </div>
+  </article>
+  $reply
+  <div class="note">Preview of how the post reads in a feed. Not posted.</div>
+</body>
+</html>

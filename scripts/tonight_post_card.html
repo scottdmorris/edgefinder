@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ball Knowledge tonight's card</title>
+<style>
+  :root {
+    --ink: #070A10; --raised: #0E141E; --line: #263244; --text: #EDF3FC; --muted: #A0AFC3;
+    --accent: #75BCFF; --sky: #A5E5FF; --good: #36D6A0; --warn: #f5b83d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 675px; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(ellipse 70% 420px at 82% -80px, #1493FF33, transparent 70%),
+      radial-gradient(ellipse 50% 360px at 0% 110%, #A5E5FF14, transparent 70%),
+      var(--ink);
+    padding: 40px 52px 30px; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased;
+  }
+  .num, td { font-family: "Bahnschrift", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+
+  header { display: flex; align-items: center; justify-content: space-between; }
+  header .logo svg { height: 58px; width: auto; display: block; }
+  header .when { text-align: right; }
+  header .kicker { font-size: 16px; font-weight: 700; letter-spacing: .22em; color: var(--accent); }
+  header .date { font-size: 26px; font-weight: 700; margin-top: 2px; }
+
+  main { flex: 1; min-height: 0; overflow: hidden; display: grid; gap: 34px; margin-top: 24px; }
+  main.with-side { grid-template-columns: 1fr 330px; }
+  main.solo { grid-template-columns: 1fr; }
+
+  .label { font-size: 16px; font-weight: 700; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th { font-size: 16px; font-weight: 600; color: var(--muted); text-align: right; padding: 0 0 8px 14px; }
+  th:first-child, th.bet { text-align: left; }
+  td { font-size: 23px; text-align: right; padding: 9px 0 9px 14px; border-top: 1px solid var(--line);
+       white-space: nowrap; }
+  td.who { text-align: left; padding-left: 0; font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+  td.who b { font-size: 21px; font-weight: 700; }
+  td.who span { font-size: 15px; color: var(--muted); margin-left: 10px; }
+  td.bet { text-align: left; font-weight: 700; color: var(--sky); }
+  td.edge { color: var(--good); }
+  .more { font-size: 16px; color: var(--muted); margin-top: 8px; }
+
+  .longshot { border: 1px solid #f5b83d55; border-radius: 24px; padding: 20px 22px;
+              background: linear-gradient(160deg, #2a2210 0%, var(--raised) 55%); overflow: hidden; }
+  .longshot .label { color: var(--warn); }
+  .pays { font-size: 56px; font-weight: 700; line-height: 1; margin-top: 8px; }
+  .sub { font-size: 15px; color: var(--muted); margin-top: 6px; }
+  .longshot ol { list-style: none; margin-top: 12px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .longshot ol b { color: var(--text); font-weight: 600; }
+
+  footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 14px;
+           padding-top: 14px; border-top: 1px solid var(--line); }
+  .proof { font-size: 19px; color: var(--muted); line-height: 1.45; }
+  .handle { text-align: right; white-space: nowrap; }
+  .handle b { font-size: 24px; font-weight: 700; display: block; }
+  .handle span { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">$logo</div>
+    <div class="when">
+      <div class="kicker">TONIGHT'S CARD</div>
+      <div class="date">$date</div>
+    </div>
+  </header>
+
+  <main class="$layout">
+    <section>
+      <div class="label">Sharpest model · $count · FanDuel points</div>
+      <table>
+        <thead><tr><th>Player</th><th class="bet">Pick</th><th>Odds</th><th>Chance</th><th>Edge</th></tr></thead>
+        <tbody>
+$rows
+        </tbody>
+      </table>
+      $more
+    </section>
+    $longshot
+  </main>
+
+  <footer>
+    <div class="proof">Locked before tip, last at $as_of ET · graded tomorrow, wins and losses<br>
+      Paper bets, not betting advice · 21+ · 1-800-GAMBLER</div>
+    <div class="handle"><b>$handle</b><span>Ball Knowledge</span></div>
+  </footer>
+</body>
+</html>

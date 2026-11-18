@@ -135,6 +135,8 @@ requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
 .venv\Scripts\python scripts\nba_props_snapshot.py             # one snapshot cycle
 .venv\Scripts\python scripts\nba_props_settle.py               # grade picks, print the report
 .venv\Scripts\python scripts\verify_record.py                  # check the log and the ledger
+.venv\Scripts\python scripts\daily_post.py --preview           # the morning X card, caption and reply, in data\posts
+.venv\Scripts\python scripts\tonight_post.py --preview         # the afternoon card of tonight's picks
 powershell -ExecutionPolicy Bypass -File scripts\install_nba_tasks.ps1   # schedule both jobs
 .venv\Scripts\python -m pytest                                 # about 1,430 tests
 ```

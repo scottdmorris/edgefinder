@@ -10,6 +10,8 @@ Usage:  python scripts/nba_props_settle.py [--log-file PATH] [--publish]
   --log-file  also append the report to PATH (scheduled runs have no console)
   --publish   then refresh the README record and the published fingerprint, and commit
               and push those two files (scripts/publish_record.py)
+Every successful run then makes the morning's X card and caption in data/posts/
+(scripts/daily_post.py); nothing is posted.
 """
 
 import argparse
@@ -156,6 +158,16 @@ def publish_line(today: dt.date) -> str:
         return f"Record not published: {type(exc).__name__}: {str(detail).strip()[:200]}"
 
 
+def post_line(today: dt.date) -> str:
+    """Make the morning's X card and caption; a failure is reported but never fails the settle."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import daily_post
+        return daily_post.run(today)
+    except Exception as exc:       # noqa: BLE001 - see docstring
+        return f"Daily post not made: {type(exc).__name__}: {str(exc)[:200]}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--log-file", type=Path)
@@ -171,6 +183,8 @@ def main() -> None:
         failed = False
     if args.publish and not failed:
         report += "\n\n" + publish_line(today)
+    if not failed:                 # after publishing, so the card carries the new fingerprint
+        report += "\n" + post_line(today)
     print(report)  # a no-op under pythonw, where there is no console
     if args.log_file is not None:
         args.log_file.parent.mkdir(parents=True, exist_ok=True)

@@ -151,6 +151,16 @@ def record_other_books(event: dict, books: dict[str, list[dict]], models: Models
             log.exception("Pricing %s lines failed; the FanDuel snapshot is unaffected", book)
 
 
+def draw_tonight_card() -> None:
+    """Refresh the afternoon X card (scripts/tonight_post.py) now that new picks are locked.
+    It redraws only when something changed, and nothing it raises may fail the run."""
+    try:
+        import tonight_post                 # same folder as this script
+        log.info("%s", tonight_post.run())
+    except Exception:
+        log.exception("Could not draw tonight's card; the snapshot is unaffected")
+
+
 def record_lines(event: dict, lines: list[dict], models: Models) -> dict[str, int]:
     return nba_recording.record_event(
         event, lines, models.get(),
@@ -366,6 +376,7 @@ def main() -> None:
             capture_nightly()
         except Exception:
             log.exception("Could not record the nightly slip trials")
+        draw_tonight_card()
     late_events = [task.event for task in tasks + kalshi_only if task.phase == "late"]
     if late_events:
         archive_kalshi_closing(late_events)
