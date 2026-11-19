@@ -25,12 +25,12 @@ at a flat 1 unit):
 <!-- record:start -->
 | Model | Graded picks | Record | Units | Beat the closing price |
 |---|---:|---:|---:|---:|
-| Smartest (`context-v1`) | 189 | 98-91 | -3.83 | 49% of 138 |
-| Sharpest (`context-v2`) | 139 | 69-70 | -9.03 | 50% of 101 |
-| Simple (`ewma-v1`) | 243 | 121-122 | -14.43 | 48% of 181 |
-| Smarter (`minutes-v1`) | 185 | 94-91 | -7.09 | 49% of 142 |
+| Smartest (`context-v1`) | 206 | 105-101 | -7.55 | 50% of 151 |
+| Sharpest (`context-v2`) | 152 | 77-75 | -6.84 | 50% of 110 |
+| Simple (`ewma-v1`) | 263 | 131-132 | -16.03 | 49% of 195 |
+| Smarter (`minutes-v1`) | 201 | 103-98 | -5.96 | 49% of 152 |
 
-14 game days graded (2026-11-04 to 2026-11-17), as of 2026-11-18.
+15 game days graded (2026-11-04 to 2026-11-18), as of 2026-11-19.
 <!-- record:end -->
 
 That is still
