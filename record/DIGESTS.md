@@ -19,3 +19,4 @@ Add a line with `python scripts/verify_record.py --write-digest`, then commit an
 | 2026-11-17 | 31286 | `a91ae7fde81c877adbb5cafbea1e3a2f19991e818621a31bc3fa2a630324804b` |
 | 2026-11-18 | 34782 | `7e7bd801cc10f13a51db313ce941507f8fddc240af037c2a5a8d87e0e7db9174` |
 | 2026-11-19 | 39720 | `4cbdc54011b1003ca10b1efda0e76d6a2b58c0cb2627a94b5dfb73cc370ffc09` |
+| 2026-11-20 | 42022 | `c8070fe8f6862e198156e6f2fdd427b049836d286ce048f5f8f5244c950efb6d` |
