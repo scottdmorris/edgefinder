@@ -95,7 +95,9 @@ def caption(day: str, plays: list[dict], slip: dict | None) -> str:
     top = max(plays, key=lambda p: p["edge"])
     lines = [f"Tonight's card 🏀 {_picks_word(len(plays))} from the Sharpest model, locked before tip."]
     if slip:
-        lines.append(f"Plus a {len(slip['legs'])}-leg Long shot at {dp.american(slip['payout'])}.")
+        legs = len(slip["legs"])
+        article = "an" if str(legs).startswith("8") or legs in (11, 18) else "a"
+        lines.append(f"Plus {article} {legs}-leg Long shot at {dp.american(slip['payout'])}.")
     lines += ["", f"Biggest edge: {top['player']} {top['bet']} ({top['odds']})",
               "", "Tail or fade? Graded tomorrow morning, wins and losses.",
               "", "Paper bets · 21+ · not betting advice"]
@@ -113,9 +115,9 @@ def card_html(day: str, plays: list[dict], slip: dict | None, logo_svg: str, as_
     if slip:
         legs = "".join(f'<li><b>{html.escape(leg["player"])}</b> {html.escape(leg["bet"])}</li>'
                        for leg in slip["legs"])
-        side = (f'<aside class="longshot"><div class="label">Long shot · {len(slip["legs"])} legs · Kalshi</div>'
+        side = (f'<aside class="longshot"><div class="label">Long shot · {len(slip["legs"])} legs</div>'
                 f'<div class="pays num">{dp.american(slip["payout"])}</div>'
-                f'<div class="sub">about {slip["chance"]:.1f}% to hit, by our estimate</div>'
+                f'<div class="sub">Kalshi · about {slip["chance"]:.1f}% to hit, our estimate</div>'
                 f'<ol>{legs}</ol></aside>')
     else:
         side = ""

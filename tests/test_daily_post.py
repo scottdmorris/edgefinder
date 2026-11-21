@@ -110,6 +110,11 @@ def test_rendering_asks_edge_for_a_2x_screenshot_and_fails_loudly_without_one(tm
     assert "--force-device-scale-factor=2" in seen[0] and f"--window-size={post.WIDTH},{post.HEIGHT}" in seen[0]
     with pytest.raises(RuntimeError):
         post.render("<html></html>", tmp_path / "none.png", Path("edge.exe"), run=lambda *a, **k: None)
+    stale = tmp_path / "stale.png"                   # an earlier card must not pass for a new one
+    stale.write_bytes(b"old")
+    with pytest.raises(RuntimeError):
+        post.render("<html></html>", stale, Path("edge.exe"), run=lambda *a, **k: None)
+    assert stale.read_bytes() == b"old"
     monkeypatch.setattr(post, "find_edge", lambda: None)
     with pytest.raises(FileNotFoundError, match="Edge"):
         post.render("x", tmp_path / "n.png", run=lambda *a, **k: None)

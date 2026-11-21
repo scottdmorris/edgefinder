@@ -14,6 +14,7 @@ import base64
 import datetime as dt
 import html
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -224,13 +225,15 @@ def render(page: str, png: Path, browser: Path | None = None, run=subprocess.run
     png.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as scratch:
         source = Path(scratch) / "card.html"
+        drawn = Path(scratch) / "card.png"       # never trust a stale card already at `png`
         source.write_text(page, encoding="utf-8")
         run([str(browser), "--headless=new", "--disable-gpu", "--hide-scrollbars",
              "--force-device-scale-factor=2", f"--window-size={size[0]},{size[1]}",
-             f"--user-data-dir={Path(scratch) / 'profile'}", f"--screenshot={png}",
+             f"--user-data-dir={Path(scratch) / 'profile'}", f"--screenshot={drawn}",
              source.as_uri()], check=False, capture_output=True, timeout=RENDER_TIMEOUT_SECONDS)
-    if not png.exists():
-        raise RuntimeError("Edge did not write the card")
+        if not drawn.exists() or drawn.stat().st_size == 0:
+            raise RuntimeError("Edge did not write the card")
+        os.replace(drawn, png)
     return png
 
 

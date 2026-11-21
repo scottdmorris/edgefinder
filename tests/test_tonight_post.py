@@ -73,6 +73,8 @@ def test_the_caption_fits_names_the_biggest_edge_and_the_long_shot():
     assert "Biggest edge: Late Game Under 20.5 pts (−110)" in text
     assert "21+" in text and "not betting advice" in text
     assert "Long shot" not in tonight.caption(DAY, plays, None)
+    eight = tonight.caption(DAY, plays, slip | {"legs": [{}] * 8})
+    assert "Plus an 8-leg Long shot" in eight
 
 
 def test_the_card_caps_its_rows_and_shows_the_long_shot_beside_them():

@@ -16,6 +16,15 @@ Newest first. Dates are when the work was committed.
 - Validation: 66 focused Python tests and Ruff passed. The existing Long shot
   protocol was checked on a read-only copy of the local database.
 
+### X card fixes from the first live days
+- A card that Edge fails to draw now raises an error instead of passing as done. Before,
+  the check only asked whether a PNG existed, so an earlier card at the same path counted
+  as the new one. Edge now draws into a scratch folder and the file is moved into place only
+  when it comes out; a failed draw leaves the earlier card untouched.
+- Tonight's caption says "an 8-leg Long shot", not "a 8-leg".
+- The Long shot panel's label no longer wraps: "Kalshi" moved to the line under the payout.
+- Validation: 1,469 tests pass and ruff is clean; Nov 19's card redrawn from real data and checked by eye.
+
 ### Tonight's card, and a punchier morning post
 - New afternoon post, `scripts/tonight_post.py`: the Sharpest model's FanDuel points picks
   for today, as already locked in the log (player, game and tip, pick, odds, chance and
