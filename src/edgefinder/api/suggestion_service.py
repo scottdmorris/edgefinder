@@ -2,6 +2,8 @@
 import datetime as dt
 import logging
 import sqlite3
+from collections.abc import Callable, Hashable
+from functools import cache
 
 import pandas as pd
 
@@ -25,6 +27,41 @@ def price_sources(book: str, fanduel: pd.DataFrame,
     return pd.DataFrame(), pd.DataFrame(), ""
 
 
+def _group_lookup(frame: pd.DataFrame, *keys: str) -> Callable[[Hashable], pd.DataFrame]:
+    """Look up a small slice without scanning the full table for each leg."""
+    positions = frame.groupby(list(keys), sort=False).indices if not frame.empty else {}
+    empty = frame.iloc[:0]
+
+    @cache
+    def lookup(key: Hashable) -> pd.DataFrame:
+        rows = positions.get(key)
+        return empty if rows is None else frame.take(rows)
+
+    return lookup
+
+
+def _snapshots_by_player(frame: pd.DataFrame) -> Callable[[Hashable], pd.DataFrame]:
+    if not frame.empty:
+        frame = frame.assign(event_id=frame.event_id.astype(str))
+    return _group_lookup(frame, "event_id", "player")
+
+
+def _recorded_quotes(frame: pd.DataFrame, chosen: dict, *, alternate: bool = False) -> dict:
+    if frame.empty:
+        return {}
+    rows = frame[frame.model_version == chosen["model"]]
+    if not alternate:
+        rows = rows[rows.book == chosen["book"]]
+    keys = ["event_id", "player_id", "threshold"] if alternate else ["event_id", "player_id", "stat", "line"]
+    fields = [*keys, "commence_time", "recorded_at"]
+    quotes = {}
+    for event, player, *values in rows[fields].itertuples(index=False, name=None):
+        *quote, tip, stamp = values
+        # The original lookup used the first ledger row for duplicate keys.
+        quotes.setdefault((str(event), player, *quote), (tip, stamp))
+    return quotes
+
+
 def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.DataFrame,
            games: pd.DataFrame, now: dt.datetime) -> pd.DataFrame:
     out = table.copy()
@@ -32,30 +69,38 @@ def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.Data
     own, other, other_name = price_sources(
         chosen["book"], nba_props.load_snapshots() if sportsbook else pd.DataFrame(),
         nba_props.load_book_snapshots() if sportsbook else pd.DataFrame())
+    own_by_player = _snapshots_by_player(own)
+    other_by_player = _snapshots_by_player(other)
+    history = _group_lookup(games, "player_id")
+    main_quotes = _recorded_quotes(ledger, chosen)
+    alt_quotes = _recorded_quotes(alt, chosen, alternate=True)
+    now_stamp = pd.Timestamp(now)
+
+    @cache
+    def latest_own(key: tuple[str, str], tip: str) -> pd.Series | None:
+        current = own_by_player(key)
+        if current.empty:
+            return None
+        times = pd.to_datetime(current.fetched_at, utc=True, errors="coerce")
+        current = current[(times <= now_stamp) & (times < pd.Timestamp(tip))]
+        return None if current.empty else current.sort_values("fetched_at").iloc[-1]
+
     qualities, comparisons, tips = [], [], []
     for index, row in out.iterrows():
         alternate = str(row["Side"]).endswith("+")
-        source = alt if alternate else ledger
-        matches = source[(source.event_id.astype(str) == str(row["event_id"]))
-                         & (source.player_id == int(row["player_id"]))
-                         & (source.model_version == chosen["model"])]
-        if not alternate:
-            matches = matches[(matches.stat == row["stat_key"]) & (matches.book == chosen["book"])
-                              & (matches.line == row["line"])]
+        event, player_id = str(row["event_id"]), int(row["player_id"])
+        player_key = event, row["Player"]
+        if alternate:
+            quote = alt_quotes.get((event, player_id, float(row["line"]) + .5))
         else:
-            matches = matches[matches.threshold == float(row["line"]) + .5]
-        recorded = matches.iloc[0] if not matches.empty else None
-        tip = recorded.commence_time if recorded is not None else None
-        stamp = recorded.recorded_at if recorded is not None else None
+            quote = main_quotes.get((event, player_id, row["stat_key"], row["line"]))
+        tip, stamp = quote if quote is not None else (None, None)
         # Main sportsbook prices may have been refreshed since the model's early snapshot.
         changed_number = False
         incomplete_price = False
-        if tip and not alternate and not own.empty and row["stat_key"] == "points":
-            current = own[(own.event_id.astype(str) == str(row["event_id"])) & (own.player == row["Player"])]
-            times = pd.to_datetime(current.fetched_at, utc=True, errors="coerce")
-            current = current[(times <= pd.Timestamp(now)) & (times < pd.Timestamp(tip))]
-            if not current.empty:
-                latest = current.sort_values("fetched_at").iloc[-1]
+        if tip and not alternate and row["stat_key"] == "points":
+            latest = latest_own(player_key, tip)
+            if latest is not None:
                 changed_number = float(latest.line) != float(row["line"])
                 field = "under_odds" if row["Side"] == "Under" else "over_odds"
                 if not changed_number and pd.notna(latest[field]):
@@ -73,7 +118,7 @@ def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.Data
                     out.at[index, "Odds"] = float(latest[field])
                     out.at[index, "Leg EV %"] = (probability * american_to_decimal(latest[field]) - 1) * 100
                     stamp = latest.fetched_at
-        quality = quote_evidence.assess(row.to_dict() | {"date": chosen["date"]}, games, stamp, now)
+        quality = quote_evidence.assess(row.to_dict() | {"date": chosen["date"]}, history(player_id), stamp, now)
         if incomplete_price:
             quality["warnings"].append("Two-sided market price unavailable")
             quality["eligible"] = False
@@ -84,7 +129,7 @@ def enrich(table: pd.DataFrame, chosen: dict, ledger: pd.DataFrame, alt: pd.Data
             quality["warnings"].append("Game has started or its start time is unavailable")
             quality["eligible"] = False
         qualities.append(quality)
-        comparisons.append(quote_evidence.comparisons(out.loc[index], other, now, tip, other_name)
+        comparisons.append(quote_evidence.comparisons(out.loc[index], other_by_player(player_key), now, tip, other_name)
                            if tip and not alternate else [])
         tips.append(tip)
     out["quality"], out["comparisons"], out["tip"] = qualities, comparisons, tips

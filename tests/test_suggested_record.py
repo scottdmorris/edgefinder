@@ -81,6 +81,21 @@ def test_ineligible_trial_cannot_be_recorded_by_bypassing_the_search():
     assert sr.archive(offer(), NOW, experiment=True) is None
 
 
+@pytest.mark.parametrize("spec", [sr.EXPERIMENT, sr.LONG_SHOT_EXPERIMENT])
+def test_indexed_quote_lookups_accept_only_the_verified_previous_fingerprint(spec, monkeypatch):
+    with sr.connect() as db:
+        sr.freeze_protocol(db, spec)
+        protocol = json.loads(db.execute("SELECT payload FROM protocol").fetchone()[0])
+        protocol["recipe_sha256"]["suggestion_service.py"] = sr._PRE_INDEXED_QUOTES
+        previous = json.dumps(protocol, sort_keys=True)
+        db.execute("UPDATE protocol SET payload=?", (previous,))
+        sr.freeze_protocol(db, spec)
+        assert db.execute("SELECT payload FROM protocol").fetchone()[0] == previous
+        monkeypatch.setattr(sr, "_INDEXED_QUOTES", "unrecognized recipe")
+        with pytest.raises(ValueError, match="rules changed"):
+            sr.freeze_protocol(db, spec)
+
+
 def test_reordered_legs_are_the_same_offer_not_an_extra_win_opportunity():
     payload = offer()
     first = sr.archive(payload, NOW)

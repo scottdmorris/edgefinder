@@ -4,6 +4,18 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Faster Parlay quote enrichment
+- Index ledger rows, price snapshots and player history once per request instead
+  of scanning whole tables for each leg. Refresh prices and check eligibility
+  against the current clock on every request.
+- Verified exact output parity across 12,016 leg evaluations on FanDuel,
+  DraftKings and Kalshi. On the larger measured FanDuel board, median warm
+  response fell from 3.00 s to 2.22 s. Both timed boards returned identical JSON.
+- Existing trial protocols accept this verified refactor's fingerprint while
+  retaining their original protocol and continuing to reject other revisions.
+- Validation: 66 focused Python tests and Ruff passed. The existing Long shot
+  protocol was checked on a read-only copy of the local database.
+
 ### Tonight's card, and a punchier morning post
 - New afternoon post, `scripts/tonight_post.py`: the Sharpest model's FanDuel points picks
   for today, as already locked in the log (player, game and tip, pick, odds, chance and

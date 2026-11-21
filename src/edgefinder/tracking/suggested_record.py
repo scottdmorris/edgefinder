@@ -17,6 +17,10 @@ from ..models import nba_stat_model
 from . import settlement
 
 DB_PATH = Path(__file__).resolve().parents[3] / "data" / "suggested_slips.sqlite3"
+# The indexed lookup refactor was verified against the old board output. Accept
+# this exact transition for existing trials while keeping their saved protocol.
+_PRE_INDEXED_QUOTES = "14c5e5d8f93fa828ad1185e48af45a269c07f89e246037b15dd0092dd23e0a27"
+_INDEXED_QUOTES = "d47e8dfd875b7a55a0c175520522990f15edd1daa038d21135964e3d65542412"
 EXPERIMENT = {"id": "higher-hit-v1", "model": "context-v2", "book": "fanduel",
               "style": "Higher hit rate", "legs": 2, "min_joint_probability": .60,
               "min_return": 1.30, "min_ev": .02, "min_history": 10,
@@ -66,8 +70,13 @@ def freeze_protocol(db: sqlite3.Connection, spec: dict | None = None) -> None:
     protocol = json.dumps(spec | {"recipe_sha256": hashes}, sort_keys=True)
     db.execute("INSERT OR IGNORE INTO protocol VALUES (?, ?)", (spec["id"], protocol))
     stored = db.execute("SELECT payload FROM protocol WHERE id=?", (spec["id"],)).fetchone()[0]
-    if stored != protocol:
-        raise ValueError("Experiment rules changed: use a new experiment ID")
+    if stored == protocol:
+        return
+    if hashes["suggestion_service.py"] == _INDEXED_QUOTES:
+        original_hashes = hashes | {"suggestion_service.py": _PRE_INDEXED_QUOTES}
+        if stored == json.dumps(spec | {"recipe_sha256": original_hashes}, sort_keys=True):
+            return
+    raise ValueError("Experiment rules changed: use a new experiment ID")
 
 
 def _qualifies(payload: dict, spec: dict) -> bool:

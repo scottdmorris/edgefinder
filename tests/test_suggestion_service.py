@@ -75,3 +75,27 @@ def test_one_sided_refresh_cannot_qualify_using_an_old_market_probability(monkey
     row = out[(out.player_id==1)&(out.Side=='Over')].iloc[0]
     assert not row.quality['eligible']
     assert 'Two-sided market price unavailable' in row.quality['warnings']
+
+
+def test_indexed_quotes_preserve_first_ledger_row_and_snapshot_cutoffs(monkeypatch):
+    pool, ledger = table()
+    duplicate = ledger.iloc[[0]].assign(commence_time="2026-11-04T19:00:00Z")
+    ledger = pd.concat([ledger, duplicate], ignore_index=True)
+    fresh = snapshots()
+    mixed = pd.concat([fresh.assign(fetched_at="2026-11-04T20:01:00Z", over_odds=250),
+                       fresh.assign(fetched_at="2026-11-05T00:00:00Z", over_odds=500),
+                       fresh, fresh.assign(event_id="e2", over_odds=999)], ignore_index=True)
+    monkeypatch.setattr(ss.nba_props, "load_snapshots", lambda: mixed)
+    monkeypatch.setattr(ss.nba_props, "load_book_snapshots", lambda: mixed)
+    enriched = ss.enrich(pool, CHOSEN, ledger, pd.DataFrame(), history(), NOW)
+    row = enriched[(enriched.player_id == 1) & (enriched.Side == "Over")].iloc[0]
+    assert row.Odds == 110
+    assert row.quality["eligible"] is True
+    assert row.comparisons[0]["odds"] == 110
+
+    tip = pd.Timestamp(row.tip).to_pydatetime()
+    at_tip = ss.enrich(pool, CHOSEN, ledger, pd.DataFrame(), history(), tip)
+    row = at_tip[(at_tip.player_id == 1) & (at_tip.Side == "Over")].iloc[0]
+    assert row.Odds == 250
+    assert row.quality["eligible"] is False
+    assert row.comparisons[0]["odds"] == 250

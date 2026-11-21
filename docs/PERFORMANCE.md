@@ -62,9 +62,24 @@ measurements. Repeated history assessment and sportsbook comparison filtering
 dominate that work. Record is expensive cold, but its existing warm cache is
 effective.
 
-The next backend optimization should prepare player histories and quote lookups
-once per request, then prove the complete output is identical. Do not simply
-cache eligibility: price age, game start times and refreshed quotes must still
-be evaluated. Enrichment code is fingerprinted by the prospective trial, so a
-refactor also needs an explicit trial-protocol decision. This change leaves the
-recipe and its fingerprints untouched; it introduces no new backend cache TTLs.
+## Quote enrichment follow-up
+
+On 2026-11-19, quote enrichment began building request-local lookups for ledger
+rows, price snapshots and player histories. Each request still reads the current
+snapshots and evaluates price age and tip time. Five warm requests per board and
+version were measured locally with the same data and clock.
+
+| Board | Warm board before | Warm board after | Warm enrichment before | Warm enrichment after |
+|---|---:|---:|---:|---:|
+| Nov 19 FanDuel, 102 legs | 1,586 ms | 1,535 ms | 1,100 ms | 989 ms |
+| Nov 18 FanDuel, 196 legs | 2,999 ms | 2,222 ms | 2,527 ms | 1,728 ms |
+
+Both timed API responses were byte-identical. A separate replay compared entire
+enriched tables on the two slates for FanDuel, DraftKings and Kalshi, with four
+clock settings per slate and book. All 24 batches (12,016 leg evaluations) matched
+exactly, including the odds, blended and market probabilities, eligibility,
+warnings and comparisons. These measurements exclude browser and network time.
+
+The trial archive accepts the exact old and new enrichment fingerprints for this
+verified transition. It retains the saved protocol and still checks every other
+recipe file. No cache lifetime was added or increased.
