@@ -128,7 +128,10 @@ The app only reads files the scheduled jobs
 write, so it works without an API key and never spends Odds API requests. To
 record live FanDuel lines, get a free key at https://the-odds-api.com (500
 requests a month) and put it in `data/odds_api_key.txt` (git-ignored) or the
-`ODDS_API_KEY` environment variable.
+`ODDS_API_KEY` environment variable. To also archive FanDuel and DraftKings
+rebounds, assists and threes lines, get a free PropLine key at https://prop-line.com
+(1,000 requests a day) and put it in `data/propline_key.txt` (git-ignored) or the
+`PROPLINE_API_KEY` environment variable.
 
 ```powershell
 .venv\Scripts\python scripts\nba_props_snapshot.py --dry-run   # what is due; spends nothing
@@ -168,7 +171,9 @@ The full explanation, with a worked example and the limits, is in
   job covers at most 8 games a night: one early snapshot 2.5 to 4 hours before
   tip (the price a pick is made at, after the injury report settles) and one
   inside 90 minutes (a closing-price proxy). A reserve of 50 requests stops it before the quota
-  runs out. Kalshi costs nothing, so it is recorded alongside.
+  runs out. Kalshi costs nothing, so it is recorded alongside, and so are PropLine's
+  FanDuel and DraftKings lines for all four stats (one request a run, archived in
+  `data/nba_propline_lines.csv`; not yet priced into the ledger).
 - **A projection becomes a chance** through a negative binomial whose spread
   depends on the size of the projection: a 6-point projection is far noisier,
   relative to its size, than a 25-point one. That change improved the log score

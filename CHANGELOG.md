@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### PropLine archived as a second source for all four stats
+- The Odds API's free quota only covers FanDuel points. Each snapshot run now also makes one
+  PropLine request (free plan: 1,000 a day) and saves FanDuel and DraftKings main lines for
+  points, rebounds, assists and threes, for the games due that run, to
+  `data/nba_propline_lines.csv` with NBA player ids. Games past the Odds API budget are
+  included. Picks, the ledger and the published record are unchanged.
+- Skipped when no key is set (`data/propline_key.txt`, git-ignored, or `PROPLINE_API_KEY`);
+  a PropLine failure is logged and never stops the snapshot. The key goes in a header and
+  never appears in an error.
+- Validation: 1,484 tests pass (8 new), ruff clean. A live side-by-side pull on Nov 22
+  matched The Odds API's FanDuel points lines on all 14 players of one game (DraftKings: 9
+  of 14 the same, pulled a second or two apart). A live archive into a scratch file
+  matched 5 of the next day's 10 games (the rest had no lines posted yet).
+
 ### A cut-off record publish is finished automatically
 - Each snapshot run now checks for a morning publish that never reached GitHub and finishes
   it: it commits the README table and fingerprint exactly as the 9:00 job staged them (the

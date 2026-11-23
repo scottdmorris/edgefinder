@@ -15,6 +15,7 @@ data/job_heartbeat.json
 data/*.chain.jsonl
 data/*.log
 data/odds_api_key.txt
+data/propline_key.txt
 data/bet_log.csv
 data/paper_log.csv
 data/line_history.csv

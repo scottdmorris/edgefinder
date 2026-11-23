@@ -10,6 +10,8 @@ recorded at the same moment, with book="kalshi". Kalshi spends no Odds API
 requests and its failure never stops the FanDuel work.
 The FanDuel request also returns DraftKings' lines at no extra cost. DraftKings snapshots
 are archived separately, and early lines are priced into the ledger under their own book.
+PropLine's FanDuel and DraftKings lines for all four stats are archived at the same moment
+(one request a run, its own file), when a key is configured.
 FanDuel's "X+ points" lines are no longer fetched: the request each one cost now pays for
 two more games a night (nba_snapshot_plan.DEFAULT_MAX_GAMES). Kalshi still prices X+ rungs.
 
@@ -34,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from edgefinder.api.suggestion_service import capture_nightly  # noqa: E402
 
 from edgefinder.data import (  # noqa: E402
-    job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats)
+    job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats, propline)
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import (  # noqa: E402
@@ -303,6 +305,20 @@ def plan_kalshi_only(events: list[dict], now: dt.datetime) -> list[nba_snapshot_
         return []
 
 
+def archive_propline(due: list[nba_snapshot_plan.SnapshotTask]) -> None:
+    """Save PropLine's FanDuel and DraftKings lines (all four stats) for the games due this
+    run. One request; skipped without a key, and nothing it raises may fail the run."""
+    if not propline.get_api_key():
+        return
+    try:
+        games, left = propline.fetch_slate()
+        saved = propline.archive(games, [(task.event, task.phase) for task in due],
+                                 dt.datetime.now(dt.timezone.utc).isoformat())
+        log.info("PropLine lines saved: %d (%s requests left today)", saved, left)
+    except Exception:
+        log.exception("PropLine snapshot failed; the FanDuel snapshot is unaffected")
+
+
 def retry_publish() -> None:
     """Finish a morning record publish that was cut off; never stops the snapshot."""
     try:
@@ -378,6 +394,7 @@ def main() -> None:
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
         archived += 1
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
+    archive_propline(tasks + kalshi_only)
     early_events = [task.event for task in tasks if task.phase == "early"]
     kalshi_early = [task.event for task in kalshi_only if task.phase == "early"]
     if early_events or kalshi_early:
