@@ -4,6 +4,22 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A cut-off record publish is finished automatically
+- Each snapshot run now checks for a morning publish that never reached GitHub and finishes
+  it: it commits the README table and fingerprint exactly as the 9:00 job staged them (the
+  fingerprint is never recomputed, so it still matches the morning post) and pushes. A
+  record commit whose push failed is pushed the same way.
+- It acts only on the job's own work. A README edit outside the record table, a README edit
+  with no new fingerprint, or any unpushed commit that is not a record commit is left alone.
+- Validation: 1,477 tests pass (6 new, against a real temporary git repo and remote), ruff
+  clean.
+
+### Odds API reserve lowered to 50
+- Snapshots now stop at 50 remaining requests instead of 100, so November's free quota
+  should last to the Dec 1 reset rather than going dark a day or two early. Nothing in
+  the web app spends Odds API requests, so the smaller cushion only affects manual runs.
+- Validation: 1,471 tests pass, ruff clean.
+
 ### The morning post holds its fingerprint until the record is published
 - On Nov 22 the 9:00 publish was cut off mid-commit, but the morning post still named that
   day's fingerprint, which nobody could find on GitHub yet. Now, when the record does not

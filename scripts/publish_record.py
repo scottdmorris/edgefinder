@@ -71,6 +71,56 @@ def commit_and_push(repo: Path, files: list[Path], message: str, run=subprocess.
     return "pushed"
 
 
+RECORD_FILES = (Path("README.md"), Path("record") / "DIGESTS.md")
+RECORD_SUBJECT = "docs: record as of "
+
+
+def _outside_record(text: str) -> str:
+    text = text.replace("\r\n", "\n")
+    if START not in text or END not in text:
+        return text
+    head, rest = text.split(START, 1)
+    return head + rest.split(END, 1)[1]
+
+
+def retry_unpublished(repo: Path = REPO, run=subprocess.run) -> str | None:
+    """Finish a morning publish that was cut off: commit the record exactly as the job staged
+    it (the fingerprint is never recomputed, so it still matches the morning post) and push.
+    Acts only on what is plainly the job's own work. A README edit outside the record table,
+    or any unpushed commit that is not a record commit, is left for the owner. Returns one
+    line for the log, or None when nothing is waiting."""
+    names = [file.as_posix() for file in RECORD_FILES]
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    def git(*args: str, check: bool = True):
+        return run(["git", *args], cwd=repo, env=env, check=check, capture_output=True,
+                   text=True, timeout=GIT_TIMEOUT_SECONDS)
+
+    changed = git("status", "--porcelain", "--", *names).stdout.splitlines()
+    if changed:
+        if not any(line.endswith(names[1]) for line in changed):
+            return None                          # no new fingerprint: an edit by hand, not ours
+        before = git("show", f"HEAD:{names[0]}").stdout
+        now = (repo / RECORD_FILES[0]).read_text(encoding="utf-8")
+        old_rows = git("show", f"HEAD:{names[1]}").stdout.replace("\r\n", "\n")
+        rows = (repo / RECORD_FILES[1]).read_text(encoding="utf-8").replace("\r\n", "\n")
+        if _outside_record(before) != _outside_record(now) or not rows.startswith(old_rows):
+            return "Record retry skipped: the README or fingerprint file has other edits."
+        day = rows.strip().splitlines()[-1].split("|")[1].strip()
+        outcome = commit_and_push(repo, list(RECORD_FILES), f"{RECORD_SUBJECT}{day}", run=run)
+        return f"Record published on retry ({outcome}) for {day}."
+    ahead = git("log", "@{u}..HEAD", "--format=%s", check=False)
+    subjects = ahead.stdout.split("\n") if ahead.returncode == 0 else []
+    subjects = [subject for subject in subjects if subject]
+    if not subjects or not all(subject.startswith(RECORD_SUBJECT) for subject in subjects):
+        return None
+    touched = {name for name in git("diff", "--name-only", "@{u}..HEAD").stdout.split("\n") if name}
+    if not touched <= set(names):
+        return None
+    git("push")
+    return "Record pushed on retry."
+
+
 def run(today: dt.date, repo: Path = REPO, run=subprocess.run) -> str:
     """Refresh and publish. Returns one line for the settle report."""
     verification, audit = verify_record.check()

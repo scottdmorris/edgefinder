@@ -28,7 +28,7 @@ BOOKMAKER = "fanduel"
 OTHER_BOOKS = ("draftkings",)
 MARKET = "player_points"
 ALT_MARKET = "player_points_alternate"
-QUOTA_RESERVE = 100  # never spend the last requests; the board needs them
+QUOTA_RESERVE = 50  # never spend the last requests; the board needs them
 
 COLUMNS = [
     "fetched_at", "phase", "event_id", "commence_time", "home", "away",

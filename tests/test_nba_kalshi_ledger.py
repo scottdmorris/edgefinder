@@ -313,6 +313,7 @@ def script(monkeypatch):
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "capture_nightly", lambda: None)
     monkeypatch.setattr(module, "draw_tonight_card", lambda: None)     # no Edge in tests
+    monkeypatch.setattr(module, "retry_publish", lambda: None)         # never touch the real repo
     return module
 
 

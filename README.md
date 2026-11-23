@@ -167,7 +167,7 @@ The full explanation, with a worked example and the limits, is in
 - **Budgeted snapshots.** The free Odds API tier is 500 requests a month, so the
   job covers at most 8 games a night: one early snapshot 2.5 to 4 hours before
   tip (the price a pick is made at, after the injury report settles) and one
-  inside 90 minutes (a closing-price proxy). A reserve stops it before the quota
+  inside 90 minutes (a closing-price proxy). A reserve of 50 requests stops it before the quota
   runs out. Kalshi costs nothing, so it is recorded alongside.
 - **A projection becomes a chance** through a negative binomial whose spread
   depends on the size of the projection: a 6-point projection is far noisier,

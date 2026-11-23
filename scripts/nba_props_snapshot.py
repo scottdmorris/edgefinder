@@ -303,6 +303,17 @@ def plan_kalshi_only(events: list[dict], now: dt.datetime) -> list[nba_snapshot_
         return []
 
 
+def retry_publish() -> None:
+    """Finish a morning record publish that was cut off; never stops the snapshot."""
+    try:
+        import publish_record
+        line = publish_record.retry_unpublished()
+        if line:
+            log.info("%s", line)
+    except Exception:
+        log.exception("Could not retry the record publish; the snapshot is unaffected")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dry-run", action="store_true")
@@ -318,6 +329,8 @@ def main() -> None:
     if args.backfill_models:
         backfill_models(models, now, args.dry_run)
         return
+    if not args.dry_run:
+        retry_publish()
 
     try:
         events = with_retries(nba_props.upcoming_events)

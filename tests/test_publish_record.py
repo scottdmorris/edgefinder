@@ -124,3 +124,82 @@ def test_failed_push_can_be_retried_after_commit_without_new_file_changes(publis
     retry = Git(staged=False)
     publish.commit_and_push(tmp_path, files, "docs: record", run=retry)
     assert [call[0] for call in retry.calls] == ["add", "diff", "push"]
+
+
+# A publish cut off at 9:00 is finished by a later snapshot run, without recomputing the
+# fingerprint and without touching anything the owner changed or committed by hand.
+
+DIGESTS = "| Day | Entries | Fingerprint |\n|---|---:|---|\n| 2026-11-21 | 10 | `aaa` |\n"
+NEW_ROW = "| 2026-11-22 | 12 | `bbb` |\n"
+
+
+def git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout
+
+
+@pytest.fixture
+def repos(tmp_path):
+    origin, repo = tmp_path / "origin.git", tmp_path / "repo"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    git(tmp_path, "clone", "-q", str(origin), str(repo))
+    git(repo, "config", "user.email", "test@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "checkout", "-q", "-b", "main")
+    (repo / "record").mkdir()
+    (repo / "README.md").write_text(README, encoding="utf-8", newline="\n")
+    (repo / "record" / "DIGESTS.md").write_text(DIGESTS, encoding="utf-8", newline="\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "start")
+    git(repo, "push", "-q", "-u", "origin", "main")
+    return origin, repo
+
+
+def stage_cut_off_publish(repo: Path, readme: str = README.replace("old table", "new table")) -> None:
+    (repo / "README.md").write_text(readme, encoding="utf-8", newline="\n")
+    (repo / "record" / "DIGESTS.md").write_text(DIGESTS + NEW_ROW, encoding="utf-8", newline="\n")
+    git(repo, "add", "README.md", "record/DIGESTS.md")
+
+
+def test_nothing_waiting_does_nothing(publish, repos):
+    assert publish.retry_unpublished(repos[1]) is None
+
+
+def test_a_cut_off_publish_is_committed_as_staged_and_pushed(publish, repos):
+    origin, repo = repos
+    stage_cut_off_publish(repo)
+    line = publish.retry_unpublished(repo)
+    assert line.startswith("Record published on retry") and "2026-11-22" in line
+    assert git(origin, "log", "-1", "--format=%s", "main").strip() == "docs: record as of 2026-11-22"
+    assert "`bbb`" in git(origin, "show", "main:record/DIGESTS.md")     # the staged fingerprint, as is
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_owner_edits_outside_the_record_table_are_never_swept_in(publish, repos):
+    origin, repo = repos
+    stage_cut_off_publish(repo, README.replace("old table", "new table").replace("intro", "my edit"))
+    assert "skipped" in publish.retry_unpublished(repo)
+    assert git(origin, "log", "-1", "--format=%s", "main").strip() == "start"
+
+
+def test_a_readme_edit_without_a_new_fingerprint_is_not_ours(publish, repos):
+    origin, repo = repos
+    (repo / "README.md").write_text(README.replace("intro", "my edit"), encoding="utf-8", newline="\n")
+    assert publish.retry_unpublished(repo) is None
+    assert git(origin, "log", "-1", "--format=%s", "main").strip() == "start"
+
+
+def test_a_committed_record_whose_push_failed_is_pushed(publish, repos):
+    origin, repo = repos
+    stage_cut_off_publish(repo)
+    git(repo, "commit", "-q", "-m", "docs: record as of 2026-11-22")
+    assert publish.retry_unpublished(repo) == "Record pushed on retry."
+    assert git(origin, "log", "-1", "--format=%s", "main").strip() == "docs: record as of 2026-11-22"
+
+
+def test_the_owners_unpushed_commits_are_never_pushed(publish, repos):
+    origin, repo = repos
+    (repo / "notes.txt").write_text("mine", encoding="utf-8")
+    git(repo, "add", "notes.txt")
+    git(repo, "commit", "-q", "-m", "feat: my own work")
+    assert publish.retry_unpublished(repo) is None
+    assert git(origin, "log", "-1", "--format=%s", "main").strip() == "start"
