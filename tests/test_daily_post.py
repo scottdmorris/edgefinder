@@ -132,6 +132,17 @@ def test_run_writes_the_caption_and_the_card(monkeypatch, tmp_path):
     assert "nothing to post" in post.run(out=tmp_path, render_fn=lambda *a: None)
 
 
+def test_an_unpublished_record_holds_the_reply_and_keeps_the_fingerprint_off_the_card(monkeypatch, tmp_path):
+    monkeypatch.setattr(post.nba_paper, "load_ledger", ledger)
+    monkeypatch.setattr(post, "fingerprint", lambda: "abcdef0123456789ffff")
+    pages = []
+    post.run(out=tmp_path, render_fn=lambda page, png: pages.append(page))
+    assert (tmp_path / "2026-11-16-reply.txt").exists() and "abcdef0123456789" in pages[0]
+    line = post.run(out=tmp_path, render_fn=lambda page, png: pages.append(page), published=False)
+    assert "reply held" in line and not (tmp_path / "2026-11-16-reply.txt").exists()
+    assert "fingerprint" not in pages[1] and "$" not in pages[1]
+
+
 def test_the_feed_preview_shows_the_caption_link_and_card(tmp_path):
     (tmp_path / "2026-11-16.txt").write_text(f"Daily record <b>\n{post.VERIFY_URL}", encoding="utf-8")
     (tmp_path / "2026-11-16.png").write_bytes(b"png")

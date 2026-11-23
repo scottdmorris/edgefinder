@@ -208,7 +208,8 @@ def card_html(f: dict, digest: str | None, slips: list[dict], logo_svg: str) -> 
         lead_count=played, season_record=record_text(lead["season"]),
         season_units=units_text(lead["season"]["units"]), season_tone=tone(lead["season"]["units"]),
         first_day=short_date(f["first_day"]), days=f["days"], rows=model_rows(f),
-        trials=trial_chips(slips), digest=(digest or "")[:16], verify=VERIFY_URL, handle=HANDLE)
+        trials=trial_chips(slips), verify=VERIFY_URL, handle=HANDLE,
+        fingerprint=f" · fingerprint <code>{digest[:16]}</code>" if digest else "")
 
 
 def find_edge() -> Path | None:
@@ -269,20 +270,28 @@ def preview(stem: str, out: Path = POSTS, render_fn=None) -> Path:
     return (render_fn or (lambda p, png: render(p, png, size=size)))(page, out / f"{stem}-preview.png")
 
 
-def run(today: dt.date | None = None, day: str | None = None, out: Path = POSTS, render_fn=render) -> str:
+def run(today: dt.date | None = None, day: str | None = None, out: Path = POSTS, render_fn=render,
+        published: bool = True) -> str:
     """Write <day>.png, <day>.txt and <day>-reply.txt for the last graded night. Returns one
-    line for the log."""
+    line for the log. When `published` is False the record did not reach GitHub, so nobody
+    could check today's fingerprint: the card leaves it off and the reply is held back."""
     f = facts(nba_paper.load_ledger(), day)
     if f is None:
         return "Daily post: no graded picks for that day, so nothing to post."
-    digest = fingerprint()
+    digest = fingerprint() if published else None
     out.mkdir(parents=True, exist_ok=True)
     png_path = out / f"{f['day']}.png"
+    reply_path = out / f"{f['day']}-reply.txt"
     (out / f"{f['day']}.txt").write_text(caption(f), encoding="utf-8")
-    (out / f"{f['day']}-reply.txt").write_text(reply(digest), encoding="utf-8")
+    if published:
+        reply_path.write_text(reply(digest), encoding="utf-8")
+    else:
+        reply_path.unlink(missing_ok=True)     # an earlier reply may name an unpublished fingerprint
     page = card_html(f, digest, trial_slips(f["day"]), LOGO.read_text(encoding="utf-8"))
     render_fn(page, png_path)
-    return f"Daily post ready: {png_path.relative_to(ROOT) if png_path.is_relative_to(ROOT) else png_path}"
+    shown = png_path.relative_to(ROOT) if png_path.is_relative_to(ROOT) else png_path
+    held = "" if published else " (reply held: the record was not published, so the fingerprint is off the card)"
+    return f"Daily post ready: {shown}{held}"
 
 
 def main() -> None:

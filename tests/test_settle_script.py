@@ -15,7 +15,7 @@ def script(tmp_path, monkeypatch):
     monkeypatch.setattr(module.job_health, "HEARTBEAT_PATH", tmp_path / "heartbeat.json")
     monkeypatch.setattr(module.sys, "argv", ["nba_props_settle.py"])
     real_post_line = module.post_line
-    monkeypatch.setattr(module, "post_line", lambda today: "Daily post ready: stub")  # no Edge in tests
+    monkeypatch.setattr(module, "post_line", lambda today, published=True: "Daily post ready: stub")  # no Edge in tests
     module.real_post_line = real_post_line
     return module
 
@@ -24,16 +24,16 @@ def test_a_good_run_makes_the_daily_post_after_publishing(script, monkeypatch, t
     order = []
     monkeypatch.setattr(script, "build_report", lambda today: "Ledger: 41 lines")
     monkeypatch.setattr(script, "publish_line", lambda today: order.append("publish") or "Record published")
-    monkeypatch.setattr(script, "post_line", lambda today: order.append("post") or "Daily post ready: x.png")
+    monkeypatch.setattr(script, "post_line", lambda today, published: order.append(("post", published)) or "Daily post ready: x.png")
     log = tmp_path / "jobs.log"
     monkeypatch.setattr(script.sys, "argv", ["nba_props_settle.py", "--publish", "--log-file", str(log)])
     script.main()
-    assert order == ["publish", "post"] and "Daily post ready: x.png" in log.read_text(encoding="utf-8")
+    assert order == ["publish", ("post", True)] and "Daily post ready: x.png" in log.read_text(encoding="utf-8")
 
 
 def test_a_failed_grading_run_makes_no_post(script, monkeypatch):
     monkeypatch.setattr(script, "build_report", lambda today: (_ for _ in ()).throw(RuntimeError("no logs")))
-    monkeypatch.setattr(script, "post_line", lambda today: pytest.fail("posted after a failed settle"))
+    monkeypatch.setattr(script, "post_line", lambda *a: pytest.fail("posted after a failed settle"))
     with pytest.raises(SystemExit):
         script.main()
 
@@ -41,7 +41,7 @@ def test_a_failed_grading_run_makes_no_post(script, monkeypatch):
 def test_a_post_failure_is_reported_but_never_fails_the_settle(script, monkeypatch):
     import daily_post
 
-    def broken(today):
+    def broken(today, **kwargs):
         raise FileNotFoundError("Microsoft Edge was not found")
     monkeypatch.setattr(daily_post, "run", broken)
     assert script.real_post_line(None) == "Daily post not made: FileNotFoundError: Microsoft Edge was not found"
@@ -83,6 +83,16 @@ def test_a_publishing_failure_is_reported_but_never_fails_the_settle(script, mon
 
     monkeypatch.setattr(publish_record, "run", rejected)
     assert script.publish_line(None) == "Record not published: RuntimeError: push rejected"
+
+
+def test_a_failed_publish_holds_the_reply(script, monkeypatch):
+    seen = []
+    monkeypatch.setattr(script, "build_report", lambda today: "Ledger: 41 lines")
+    monkeypatch.setattr(script, "publish_line", lambda today: "Record not published: CalledProcessError: killed")
+    monkeypatch.setattr(script, "post_line", lambda today, published: seen.append(published) or "Daily post ready")
+    monkeypatch.setattr(script.sys, "argv", ["nba_props_settle.py", "--publish"])
+    script.main()
+    assert seen == [False]
 
 
 def test_without_publish_nothing_is_published(script, monkeypatch):

@@ -158,12 +158,13 @@ def publish_line(today: dt.date) -> str:
         return f"Record not published: {type(exc).__name__}: {str(detail).strip()[:200]}"
 
 
-def post_line(today: dt.date) -> str:
-    """Make the morning's X card and caption; a failure is reported but never fails the settle."""
+def post_line(today: dt.date, published: bool = True) -> str:
+    """Make the morning's X card and caption; a failure is reported but never fails the settle.
+    Without a published record the fingerprint cannot be checked, so the reply is held."""
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import daily_post
-        return daily_post.run(today)
+        return daily_post.run(today, published=published)
     except Exception as exc:       # noqa: BLE001 - see docstring
         return f"Daily post not made: {type(exc).__name__}: {str(exc)[:200]}"
 
@@ -181,10 +182,13 @@ def main() -> None:
         failed = True
     else:
         failed = False
+    published = False
     if args.publish and not failed:
-        report += "\n\n" + publish_line(today)
+        line = publish_line(today)
+        published = line.startswith("Record published")
+        report += "\n\n" + line
     if not failed:                 # after publishing, so the card carries the new fingerprint
-        report += "\n" + post_line(today)
+        report += "\n" + post_line(today, published)
     print(report)  # a no-op under pythonw, where there is no console
     if args.log_file is not None:
         args.log_file.parent.mkdir(parents=True, exist_ok=True)

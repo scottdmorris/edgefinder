@@ -4,6 +4,15 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### The morning post holds its fingerprint until the record is published
+- On Nov 22 the 9:00 publish was cut off mid-commit, but the morning post still named that
+  day's fingerprint, which nobody could find on GitHub yet. Now, when the record does not
+  publish, the card leaves the fingerprint off and `<day>-reply.txt` is not written (an
+  earlier one for that day is removed). The log line says the reply was held.
+- That day's record was published by hand from exactly what the job had staged, so the
+  fingerprint in its reply matches GitHub.
+- Validation: 1,471 tests pass (27 for posts and settle), ruff clean.
+
 ### Faster Parlay quote enrichment
 - Index ledger rows, price snapshots and player history once per request instead
   of scanning whole tables for each leg. Refresh prices and check eligibility
