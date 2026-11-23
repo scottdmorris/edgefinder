@@ -25,12 +25,12 @@ at a flat 1 unit):
 <!-- record:start -->
 | Model | Graded picks | Record | Units | Beat the closing price |
 |---|---:|---:|---:|---:|
-| Smartest (`context-v1`) | 250 | 124-126 | -15.18 | 50% of 185 |
-| Sharpest (`context-v2`) | 186 | 94-92 | -8.15 | 51% of 135 |
-| Simple (`ewma-v1`) | 318 | 163-155 | -10.28 | 49% of 240 |
-| Smarter (`minutes-v1`) | 232 | 123-109 | +0.74 | 50% of 176 |
+| Smartest (`context-v1`) | 267 | 136-131 | -9.73 | 52% of 200 |
+| Sharpest (`context-v2`) | 198 | 102-96 | -5.10 | 52% of 145 |
+| Simple (`ewma-v1`) | 340 | 176-164 | -7.97 | 49% of 259 |
+| Smarter (`minutes-v1`) | 243 | 130-113 | +2.71 | 51% of 184 |
 
-18 game days graded (2026-11-04 to 2026-11-21), as of 2026-11-22.
+19 game days graded (2026-11-04 to 2026-11-22), as of 2026-11-23.
 <!-- record:end -->
 
 That is still
@@ -173,7 +173,10 @@ The full explanation, with a worked example and the limits, is in
   inside 90 minutes (a closing-price proxy). A reserve of 50 requests stops it before the quota
   runs out. Kalshi costs nothing, so it is recorded alongside, and so are PropLine's
   FanDuel and DraftKings lines for all four stats (one request a run, archived in
-  `data/nba_propline_lines.csv`; not yet priced into the ledger).
+  `data/nba_propline_lines.csv`). FanDuel's rebounds, assists and threes lines are priced
+  into the ledger by the rolling-average model, graded and closed like points, and shown
+  on the board and in the record's by-book table. The published record, the X posts and
+  the slip trials stay FanDuel points only.
 - **A projection becomes a chance** through a negative binomial whose spread
   depends on the size of the projection: a 6-point projection is far noisier,
   relative to its size, than a 25-point one. That change improved the log score
