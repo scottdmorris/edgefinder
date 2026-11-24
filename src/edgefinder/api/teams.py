@@ -234,7 +234,8 @@ def _injuries(team: str) -> tuple[list[nba_injuries.Injury], bool]:
 
 def _slate(team: str) -> pd.DataFrame:
     """The team's FanDuel rows on the latest slate (empty when it isn't playing)."""
-    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK)
+    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK,
+                           stat=nba_paper.DEFAULT_STAT)
     if ledger.empty:
         return ledger
     latest = ledger[ledger["game_date"] == ledger["game_date"].max()]

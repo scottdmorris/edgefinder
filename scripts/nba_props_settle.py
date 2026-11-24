@@ -22,7 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from edgefinder.data import job_health, nba_props, nba_snapshot_plan, nba_stats  # noqa: E402
+from edgefinder.data import (  # noqa: E402
+    job_health, nba_props, nba_snapshot_plan, nba_stats, propline)
 from edgefinder.tracking import (  # noqa: E402
     book_gaps, gap_log, nba_alt, nba_kalshi_ledger, nba_paper)
 
@@ -34,7 +35,8 @@ def build_report(today: dt.date) -> str:
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
     fanduel_close, other_close = nba_props.load_snapshots(), nba_props.load_book_snapshots()
     settled = nba_paper.settle(ledger, games, fanduel_close, today,
-                               nba_kalshi_ledger.load_snapshots(), other_close)
+                               nba_kalshi_ledger.load_snapshots(), other_close,
+                               propline.load_snapshots())
     logged = nba_paper.log_settlements(ledger, settled)
     nba_paper.save_ledger(settled)
 

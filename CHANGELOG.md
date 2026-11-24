@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### FanDuel rebounds, assists and threes picks
+- The early snapshot now prices FanDuel's rebounds, assists and threes main lines from
+  PropLine into the ledger (book `fanduel`, their own stat). The rolling-average model
+  (Simple) prices them, since it is the one model that projects every stat. Points still
+  come only from The Odds API.
+- They are graded from the box scores and closed from PropLine's last pregame line, with
+  the fair close averaged across FanDuel and DraftKings, the same way points are.
+- They show on the board and in the record's by-book table. The Picks screen, player and
+  team pages, nightly review and per-model record stay FanDuel points (that screen's table
+  has no stat column yet). The README record, fingerprint, X posts and slip trials are
+  unchanged: they already read FanDuel points or context-v2 only.
+- Validation: 1,488 tests pass (4 new), ruff clean. A live pricing run into a scratch
+  ledger priced 161 lines across the next day's 5 listed games, 12 of them picks.
+
 ### PropLine archived as a second source for all four stats
 - The Odds API's free quota only covers FanDuel points. Each snapshot run now also makes one
   PropLine request (free plan: 1,000 a day) and saves FanDuel and DraftKings main lines for

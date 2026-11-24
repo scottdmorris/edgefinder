@@ -236,12 +236,14 @@ def settle(
     today: dt.date,
     kalshi_snapshots: pd.DataFrame | None = None,
     book_snapshots: pd.DataFrame | None = None,
+    propline_snapshots: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Return a copy of the ledger with finished games settled and closing
     information attached. `games` needs player_id, game_date and pts.
     `kalshi_snapshots` are the saved late Kalshi prices that close Kalshi rows;
     `book_snapshots` the other sportsbooks' late lines, averaged with FanDuel's into the
-    fair close that `clv_novig_pct` is measured against."""
+    fair close that `clv_novig_pct` is measured against; `propline_snapshots` PropLine's
+    lines, which close FanDuel's other stats (never points, which The Odds API closes)."""
     out = ledger.astype({c: object for c in _TEXT_COLUMNS}).copy()
     values = _stat_values(out, games)
     complete = settlement.completed_games(games)
@@ -260,9 +262,41 @@ def settle(
 
     _attach_closing(out, snapshots)
     _attach_kalshi_closing(out, kalshi_snapshots)
-    _attach_fair_close(out, closing.fair_closes(snapshots, book_snapshots, events=out),
+    other_stats = _other_stats_by_book(propline_snapshots)
+    _attach_other_stat_closing(out, other_stats.get(DEFAULT_BOOK))
+    _attach_fair_close(out, closing.fair_closes(snapshots, book_snapshots, *other_stats.values(),
+                                                events=out),
                        closing.fair_closes(kalshi_snapshots, events=out))
     return out
+
+
+def _other_stats_by_book(snapshots: pd.DataFrame | None) -> dict[str, pd.DataFrame]:
+    """PropLine's non-points lines, one table per book (each book closes on its own number)."""
+    if snapshots is None or snapshots.empty:
+        return {}
+    other = snapshots[snapshots["stat"] != DEFAULT_STAT]
+    return {book: group for book, group in other.groupby("book")}
+
+
+def _attach_other_stat_closing(out: pd.DataFrame, snapshots: pd.DataFrame | None) -> None:
+    """Close FanDuel's rebounds, assists and threes rows from PropLine's last late line,
+    the same way points rows are closed from The Odds API's."""
+    if snapshots is None or snapshots.empty:
+        return
+    late = closing.before_tip(snapshots, out)
+    late = late[late["phase"] == "late"].sort_values("fetched_at")
+    if late.empty:
+        return
+    keys = ["event_id", "player", "stat"]
+    closes = late.groupby(keys).tail(1).set_index(keys)
+    closable = (out["status"] != "pending") & (out["stat"] != DEFAULT_STAT) \
+        & (out["book"] == DEFAULT_BOOK)
+    for index in out.index[closable]:
+        row = out.loc[index]
+        key = (row["event_id"], row["player"], row["stat"])
+        if key in closes.index:
+            snap = closes.loc[key]
+            _apply_closing(out, index, row, snap["line"], snap["over_odds"], snap["under_odds"])
 
 
 def _attach_fair_close(out: pd.DataFrame, sportsbooks: dict, kalshi: dict) -> None:

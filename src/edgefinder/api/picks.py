@@ -8,7 +8,8 @@ from . import service
 
 
 def _fanduel() -> pd.DataFrame:
-    return nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK)
+    return nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK,
+                           stat=nba_paper.DEFAULT_STAT)
 
 
 def picks(date: str | None = None) -> dict:

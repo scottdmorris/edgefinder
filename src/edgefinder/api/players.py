@@ -34,7 +34,8 @@ def players() -> list[dict]:
 
 def _tonight(player_id: int) -> dict | None:
     """The player's points line on the latest FanDuel slate, with each model's projection."""
-    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK)
+    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK,
+                           stat=nba_paper.DEFAULT_STAT)
     if ledger.empty:
         return None
     rows = ledger[(ledger["player_id"] == player_id)

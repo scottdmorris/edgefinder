@@ -97,7 +97,8 @@ def review(date: str | None = None) -> dict:
         if chosen not in dates:
             raise service.NotFound(f"no graded picks on {chosen}")
         night = ledger[ledger["game_date"] == chosen]
-        fanduel = _picks(nba_paper.scope(night, book=nba_paper.DEFAULT_BOOK))
+        fanduel = _picks(nba_paper.scope(night, book=nba_paper.DEFAULT_BOOK,
+                           stat=nba_paper.DEFAULT_STAT))
         games = service.load_games()
         played, usual = _minutes(games, chosen)
         logs_in = bool(played)

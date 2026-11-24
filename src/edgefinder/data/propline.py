@@ -4,8 +4,9 @@ second source.
 The Odds API's free plan only stretches to FanDuel's points lines. PropLine's free plan
 (1,000 requests a day, reset at 00:00 UTC) returns every NBA game's points, rebounds,
 assists and threes lines from both books in one request, so the snapshot job makes one
-call per run. The lines are kept in their own file; picks, the ledger and the published
-record are unchanged.
+call per run. The lines are kept in their own file. FanDuel's rebounds, assists and
+threes lines are also priced into the ledger (book "fanduel" with their own stat); points
+stay with The Odds API, so the published FanDuel points record is unchanged.
 
 Checked against the live API on 2026-11-22: its FanDuel points lines matched The Odds
 API's exactly on all 14 players of a game pulled at the same moment.
@@ -19,6 +20,7 @@ import datetime as dt
 import os
 from pathlib import Path
 
+import pandas as pd
 import requests
 
 DATA = Path(__file__).resolve().parents[3] / "data"
@@ -26,7 +28,8 @@ KEY_PATH = DATA / "propline_key.txt"
 LINES_PATH = DATA / "nba_propline_lines.csv"
 BASE = "https://api.prop-line.com/v1"
 SPORT_KEY = "basketball_nba"
-BOOKS = ("fanduel", "draftkings")
+FANDUEL = "fanduel"
+BOOKS = (FANDUEL, "draftkings")
 MARKETS = {"player_points": "points", "player_rebounds": "rebounds",
            "player_assists": "assists", "player_threes": "threes"}
 REQUEST_TIMEOUT = 60
@@ -96,6 +99,26 @@ def parse_lines(game: dict) -> list[dict]:
                 row["changed_at"] = max(filter(None, (row["changed_at"],
                                                       outcome.get("last_change_at"))), default=None)
     return list(rows.values())
+
+
+def new_fanduel_lines(game: dict) -> dict[str, list[dict]]:
+    """FanDuel's main lines for the stats The Odds API does not give us (everything but
+    points), by stat, in the shape the ledger prices. Lines missing a side are left out.
+    Points stay with The Odds API, so the published FanDuel points record is unchanged."""
+    by_stat: dict[str, list[dict]] = {}
+    for row in parse_lines(game):
+        if (row["book"] == FANDUEL and row["stat"] != "points"
+                and None not in (row["over_odds"], row["under_odds"])):
+            by_stat.setdefault(row["stat"], []).append(
+                {key: row[key] for key in ("player", "line", "over_odds", "under_odds")})
+    return by_stat
+
+
+def load_snapshots(path: Path | None = None) -> pd.DataFrame:
+    path = path or LINES_PATH
+    if not path.exists():
+        return pd.DataFrame(columns=COLUMNS)
+    return pd.read_csv(path)
 
 
 def _when(text: str) -> dt.datetime:

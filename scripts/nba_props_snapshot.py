@@ -11,7 +11,8 @@ requests and its failure never stops the FanDuel work.
 The FanDuel request also returns DraftKings' lines at no extra cost. DraftKings snapshots
 are archived separately, and early lines are priced into the ledger under their own book.
 PropLine's FanDuel and DraftKings lines for all four stats are archived at the same moment
-(one request a run, its own file), when a key is configured.
+(one request a run, its own file), when a key is configured, and FanDuel's rebounds,
+assists and threes are priced into the ledger by the rolling-average model.
 FanDuel's "X+ points" lines are no longer fetched: the request each one cost now pays for
 two more games a night (nba_snapshot_plan.DEFAULT_MAX_GAMES). Kalshi still prices X+ rungs.
 
@@ -305,9 +306,10 @@ def plan_kalshi_only(events: list[dict], now: dt.datetime) -> list[nba_snapshot_
         return []
 
 
-def archive_propline(due: list[nba_snapshot_plan.SnapshotTask]) -> None:
+def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) -> None:
     """Save PropLine's FanDuel and DraftKings lines (all four stats) for the games due this
-    run. One request; skipped without a key, and nothing it raises may fail the run."""
+    run, and price FanDuel's rebounds, assists and threes for the early ones. One request;
+    skipped without a key, and nothing it raises may fail the run."""
     if not propline.get_api_key():
         return
     try:
@@ -317,6 +319,38 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask]) -> None:
         log.info("PropLine lines saved: %d (%s requests left today)", saved, left)
     except Exception:
         log.exception("PropLine snapshot failed; the FanDuel snapshot is unaffected")
+        return
+    early = [task.event for task in due if task.phase == "early"]
+    if early:
+        try:
+            log.info("FanDuel rebounds/assists/threes ledger: %d new rows",
+                     record_propline(games, early, models))
+        except Exception:
+            log.exception("Pricing PropLine lines failed; the FanDuel snapshot is unaffected")
+
+
+def record_propline(games: list[dict], events: list[dict], models: Models,
+                    path: Path | None = None) -> int:
+    """Price FanDuel's rebounds, assists and threes lines from PropLine into the ledger.
+    The rolling average (the one model that projects every stat) prices them; the
+    points-only models do not. Returns the new rows."""
+    recorded_at = dt.datetime.now(dt.timezone.utc).isoformat()
+    added = 0
+    for event in events:
+        game = propline.match_game(event, games)
+        if game is None or game.get("live"):
+            continue
+        for stat, lines in propline.new_fanduel_lines(game).items():
+            model = models.kalshi_models()[0]       # built only once there are lines to price
+            if stat not in model.dispersions:
+                continue
+            projections = model.project(event, stat, [line["player"] for line in lines])
+            rows = nba_paper.build_ledger_rows(
+                event, lines, projections, recorded_at, nba_snapshot_plan.tip_date(event),
+                model_version=model.version, dispersion=model.dispersions[stat],
+                stat=stat, book=propline.FANDUEL)
+            added += nba_paper.append_rows(rows, path=path)
+    return added
 
 
 def retry_publish() -> None:
@@ -394,7 +428,7 @@ def main() -> None:
                  task.phase, task.event["away"], task.event["home"], len(lines), recorded)
         archived += 1
     log.info("Odds API requests remaining: %s", nba_props.requests_remaining())
-    archive_propline(tasks + kalshi_only)
+    archive_propline(tasks + kalshi_only, models)
     early_events = [task.event for task in tasks if task.phase == "early"]
     kalshi_early = [task.event for task in kalshi_only if task.phase == "early"]
     if early_events or kalshi_early:

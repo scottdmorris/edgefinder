@@ -128,7 +128,8 @@ def _log(locked: pd.DataFrame) -> list[dict]:
 def record() -> dict:
     def build() -> dict:
         everything = service.load_ledger()
-        ledger = nba_paper.scope(everything, book=nba_paper.DEFAULT_BOOK)
+        ledger = nba_paper.scope(everything, book=nba_paper.DEFAULT_BOOK,
+                           stat=nba_paper.DEFAULT_STAT)
         if everything.empty:
             return {"empty": True}
         locked = nba_record.locked_picks(ledger)
