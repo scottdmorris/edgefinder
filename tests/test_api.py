@@ -352,6 +352,27 @@ def test_a_player_profile_has_averages_and_games_newest_first(logs):
     assert body["tonight"] is None              # the made-up ledger has no line for 77
 
 
+def test_a_player_on_the_slate_gets_every_stat_line_with_his_averages(logs, monkeypatch):
+    event = GAMES[0]
+    rows = []
+    for stat, line, mean in (("rebounds", 7.5, 8.6), ("points", 25.5, 27.0)):
+        rows += nba_paper.build_ledger_rows(
+            event, [{"player": "Luka Dončić", "line": line, "over_odds": -110, "under_odds": -110}],
+            {"Luka Dončić": {"player_id": 77, "mean": mean}}, WHEN, DAY,
+            model_version="ewma-v1", dispersion=2.0, stat=stat)
+    ledger = pd.concat([_ledger(), pd.DataFrame(rows, columns=nba_paper.COLUMNS)], ignore_index=True)
+    monkeypatch.setattr(service, "load_ledger", lambda: ledger)
+
+    tonight = logs.get("/api/players/77").json()["tonight"]
+    assert tonight["game"] == f"{event['away']} @ {event['home']}"
+    assert [line["stat"] for line in tonight["lines"]] == ["points", "rebounds"]   # points first
+    points, rebounds = tonight["lines"]
+    assert points["season_avg"] == 26.5 and points["last10_avg"] == 27.5
+    assert (rebounds["label"], rebounds["line"], rebounds["season_avg"], rebounds["last10_avg"]) \
+        == ("Rebounds", 7.5, 8.0, 8.0)
+    assert rebounds["projections"] == [{"model": service.model_short("ewma-v1"), "mean": 8.6}]
+
+
 def test_an_unknown_player_is_a_404(logs):
     assert logs.get("/api/players/999").status_code == 404
 

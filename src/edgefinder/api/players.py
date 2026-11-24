@@ -6,12 +6,14 @@ import datetime as dt
 import pandas as pd
 
 from ..data import nba_live, nba_stats
+from ..models import nba_stat_model
 from ..tracking import nba_paper, nba_parlay
 from ..tracking import nba_player_lookup as lookup
 from ..data import team_colors
 from . import service
 
 GAMES_SENT = 82              # a season's worth, newest first; enough for "this season" early on
+RECENT_GAMES = 10            # the "last 10" average beside each line on the slate
 
 
 def _history() -> pd.DataFrame:
@@ -32,24 +34,39 @@ def players() -> list[dict]:
             for pid in options if pid in latest.index]
 
 
-def _tonight(player_id: int) -> dict | None:
-    """The player's points line on the latest FanDuel slate, with each model's projection."""
-    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK,
-                           stat=nba_paper.DEFAULT_STAT)
+def _average(games: pd.DataFrame, column: str) -> float | None:
+    return service._num(games[column].mean(), 1) if not games.empty else None
+
+
+def _stat_line(rows: pd.DataFrame, stat: str, season: pd.DataFrame,
+               recent: pd.DataFrame) -> dict:
+    """One stat's FanDuel line beside the player's own averages and each model's projection."""
+    first = rows.iloc[0]
+    column = nba_stat_model.STATS[stat].column
+    return {"stat": stat, "label": nba_stat_model.STATS[stat].label,
+            "line": float(first["line"]), "over": int(first["over_odds"]),
+            "under": int(first["under_odds"]),
+            "season_avg": _average(season, column), "last10_avg": _average(recent, column),
+            "projections": [{"model": service.model_short(r["model_version"]),
+                             "mean": service._num(r["model_mean"], 1)}
+                            for _, r in rows.drop_duplicates("model_version").iterrows()]}
+
+
+def _tonight(player_id: int, season: pd.DataFrame, recent: pd.DataFrame) -> dict | None:
+    """Every FanDuel line the player has on the latest slate, points first, each with his
+    season and last-10 averages for that stat."""
+    ledger = nba_paper.scope(service.load_ledger(), book=nba_paper.DEFAULT_BOOK)
     if ledger.empty:
         return None
     rows = ledger[(ledger["player_id"] == player_id)
                   & (ledger["game_date"] == ledger["game_date"].max())]
     if rows.empty:
         return None
+    stats = rows["stat"].fillna(nba_paper.DEFAULT_STAT)
     first = rows.iloc[0]
-    projections = rows.drop_duplicates("model_version")
     return {"date": first["game_date"], "game": f"{first['away']} @ {first['home']}",
-            "line": float(first["line"]), "over": int(first["over_odds"]),
-            "under": int(first["under_odds"]),
-            "projections": [{"model": service.model_short(r["model_version"]),
-                             "mean": service._num(r["model_mean"], 1)}
-                            for _, r in projections.iterrows()]}
+            "lines": [_stat_line(rows[stats == stat], stat, season, recent)
+                      for stat in nba_stat_model.STATS if (stats == stat).any()]}
 
 
 def profile(player_id: int) -> dict:
@@ -69,7 +86,7 @@ def profile(player_id: int) -> dict:
         "season_games": int(averages.get("games", len(season))),
         "averages": {k: service._num(averages.get(k), 1)
                      for k in ("pts", "reb", "ast", "fg3m", "minutes")},
-        "tonight": _tonight(player_id),
+        "tonight": _tonight(player_id, season, games.head(RECENT_GAMES)),
         "games": [{"date": pd.Timestamp(r["game_date"]).strftime("%Y-%m-%d"),
                    "opponent": r["opponent"], "home": bool(r["is_home"]), "result": r["wl"],
                    "season": r["season"], "minutes": round(float(r["minutes"])),

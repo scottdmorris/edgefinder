@@ -157,17 +157,40 @@ function Profile({ id, onTeam }: { id: number; onTeam: (code: string) => void })
           { value: a.ast?.toFixed(1), label: 'assists' }, { value: a.fg3m?.toFixed(1), label: '3-pointers' },
         ]} />
       </div>
-      {player.tonight && (
-        <div className="mt-3 rounded-2xl border border-line bg-raised p-4 text-sm">
-          <div className="font-bold">On the slate: {player.tonight.game}</div>
-          <div className="mt-1 text-muted">
-            Points line <b className="text-text">{player.tonight.line}</b> (over {american(player.tonight.over)}, under {american(player.tonight.under)}).
-            Projected: {player.tonight.projections.map((p) => `${p.model} ${p.mean}`).join(' · ')}
-          </div>
-        </div>
-      )}
+      {player.tonight && <OnTheSlate tonight={player.tonight} />}
       <HitRate player={player} />
       <Recent games={player.games} />
+    </div>
+  )
+}
+
+const oneDecimal = (value: number | null) => (value == null ? '–' : value.toFixed(1))
+
+function OnTheSlate({ tonight }: { tonight: NonNullable<PlayerProfile['tonight']> }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-line bg-raised p-4 text-sm">
+      <div className="font-bold">On the slate: {tonight.game}</div>
+      <div className="mt-2 overflow-x-auto">
+        <table aria-label="Lines on the slate" className="w-full tabular-nums">
+          <thead><tr className="text-xs text-muted">
+            {['Stat', 'Line', 'Odds (o/u)', 'Season avg', 'Last 10 avg', 'Projected'].map((h, i) => (
+              <th key={h} className={`py-1.5 pr-3 font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {tonight.lines.map((l) => (
+              <tr key={l.stat} className="border-t border-line">
+                <td className="py-1.5 pr-3 font-semibold">{l.label}</td>
+                <td className="py-1.5 pr-3 text-right font-black">{l.line}</td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right text-muted">{american(l.over)} / {american(l.under)}</td>
+                <td className="py-1.5 pr-3 text-right">{oneDecimal(l.season_avg)}</td>
+                <td className="py-1.5 pr-3 text-right">{oneDecimal(l.last10_avg)}</td>
+                <td className="whitespace-nowrap py-1.5 text-right text-muted">{l.projections.map((p) => `${p.model} ${p.mean}`).join(' · ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

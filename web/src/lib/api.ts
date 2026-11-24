@@ -337,6 +337,18 @@ export type PlayerGame = {
   fg3m: number
 }
 
+/** One stat's FanDuel line for a player on the slate, beside his own averages for it. */
+export type SlateLine = {
+  stat: string
+  label: string
+  line: number
+  over: number
+  under: number
+  season_avg: number | null
+  last10_avg: number | null
+  projections: { model: string; mean: number }[]
+}
+
 export type PlayerProfile = {
   id: number
   name: string
@@ -350,10 +362,7 @@ export type PlayerProfile = {
   tonight: null | {
     date: string
     game: string
-    line: number
-    over: number
-    under: number
-    projections: { model: string; mean: number }[]
+    lines: SlateLine[]
   }
   games: PlayerGame[]
 }

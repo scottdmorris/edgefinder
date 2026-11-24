@@ -49,6 +49,19 @@ it('exposes the active search option and still searches teams when players fail'
   expect(await screen.findByRole('option', { name: /Jayson Tatum/ })).toBeTruthy()
   expect(screen.queryByRole('alert')).toBeNull()
 })
+it('lists every line on the slate beside the player\'s season and last-10 averages', async () => {
+  const line = (stat: string, label: string, value: number, season: number, last10: number) => ({
+    stat, label, line: value, over: -110, under: -110, season_avg: season, last10_avg: last10,
+    projections: [{ model: 'Simple', mean: value + 1 }] })
+  vi.mocked(api.player).mockResolvedValue({ ...profile, tonight: { date: '2026-11-15', game: 'BOS @ NYK',
+    lines: [line('points', 'Points', 26.5, 25, 27.2), line('rebounds', 'Rebounds', 7.5, 8.1, 6.4)] } })
+  navigate('#/players?id=1')
+  render(<Players />)
+  const table = await screen.findByRole('table', { name: 'Lines on the slate' })
+  const rows = table.querySelectorAll('tbody tr')
+  expect([...rows].map((row) => row.textContent)).toEqual([
+    expect.stringMatching(/Points.*26\.5.*25\.0.*27\.2/), expect.stringMatching(/Rebounds.*7\.5.*8\.1.*6\.4/)])
+})
 it('makes individual chart values available by focus/tap and names the result column', async () => {
   navigate('#/players?id=1')
   render(<Players />)

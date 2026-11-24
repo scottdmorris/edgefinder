@@ -4,6 +4,13 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Every prop on a player's page, with his averages
+- A player's "On the slate" box now lists each FanDuel line he has (points, rebounds,
+  assists, 3-pointers) in a table beside his season and last-10 averages for that stat
+  and each model's projection, instead of the points line alone.
+- Validation: 1,489 Python tests pass (1 new), 80 web tests pass (1 new), ruff and the
+  TypeScript check are clean; checked on the rebuilt app with the live 2026-11-23 slate.
+
 ### FanDuel rebounds, assists and threes picks
 - The early snapshot now prices FanDuel's rebounds, assists and threes main lines from
   PropLine into the ledger (book `fanduel`, their own stat). The rolling-average model
