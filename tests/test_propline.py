@@ -197,7 +197,8 @@ def test_fanduels_x_plus_rungs_for_other_stats_are_read_from_the_milestone_marke
     assert propline.milestone_fanduel_lines(game) == {
         "rebounds": [{"player": "Miller", "line": 5.5, "over_odds": -150},
                      {"player": "Edey", "line": 5.5, "over_odds": -900}],
-        "threes": [{"player": "Miller", "line": 1.5, "over_odds": 140}]}
+        "threes": [{"player": "Miller", "line": 1.5, "over_odds": 140}],
+        "points": [{"player": "Miller", "line": 19.5, "over_odds": -130}]}
 
 
 def test_x_plus_rungs_are_priced_into_their_own_trial_ledger(tmp_path):
@@ -210,6 +211,29 @@ def test_x_plus_rungs_are_priced_into_their_own_trial_ledger(tmp_path):
     row = nba_alt_stats.load_ledger(path).iloc[0]
     assert (row["stat"], row["threshold"], row["model_version"]) == ("rebounds", 6, "ewma-v1")
     assert script.record_propline_milestones([game], [FUTURE], models, path=path) == 0
+
+
+class FakePointsModel:
+    version, dispersion = "context-v2", 7.8
+
+    def project(self, event, names):
+        return {name: {"player_id": 9, "mean": 21.0} for name in names}
+
+
+def test_fanduels_points_x_plus_rungs_go_back_into_the_points_x_plus_ledger(tmp_path):
+    from edgefinder.tracking import nba_alt, nba_alt_stats
+    script, models = load_snapshot_script(), FakeModels()
+    models.get = lambda: [FakePointsModel()]
+    trial, points = tmp_path / "alt_stats.csv", tmp_path / "alt.csv"
+    game = FUTURE_GAME | {"bookmakers": [{"key": "fanduel", "markets": [
+        market("player_points", [outcome("20+ Points", "Miller", -130, None),
+                                 outcome("25+ Points", "Miller", 210, None)], "milestone")]}]}
+    assert script.record_propline_milestones([game], [FUTURE], models, path=trial, points_path=points) == 2
+    rows = nba_alt.load_ledger(points)
+    assert sorted(rows["threshold"]) == [20, 25] and set(rows["model_version"]) == {"context-v2"}
+    assert set(rows["event_id"]) == {"oa1"}                # the Odds API event, as before
+    assert nba_alt_stats.load_ledger(trial).empty           # points never enter the trial
+    assert models.asked == []                               # the rolling average is not needed
 
 
 def test_only_early_games_are_priced_and_a_pricing_failure_never_stops_the_run(monkeypatch):

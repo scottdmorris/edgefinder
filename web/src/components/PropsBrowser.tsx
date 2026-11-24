@@ -9,12 +9,14 @@ const MODEL_AGREES = 2     // percentage points within which the model and the p
 const SHOWN = 6     // players listed before "Show all"; the biggest names come first
 export const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
-export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false, other }: {
+export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false, other, searchOnly = false }: {
   legs: Leg[]; selected: number[]; toggle: (id: number) => void; kalshi: boolean
   /** list everyone from the start (one game is chosen, so the list is already short) */
   expanded?: boolean
   /** another price source to offer when this one has no lines for the chosen stat */
   other?: { name: string; go: () => void }
+  /** list nothing until a name is typed (or "On my slip" is ticked): a finder, not a list */
+  searchOnly?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [stat, setStat] = useState('points')
@@ -25,6 +27,7 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
     && normalize(row.player).includes(normalize(query))
     && (!onlySelected || row.steps.some((step) => selected.includes(step.yes.id) || (step.no && selected.includes(step.no.id)))))
   const open = all || expanded || query !== '' || onlySelected
+  const idle = searchOnly && query === '' && !onlySelected
   return <section aria-label="Player props">
     <div className="flex flex-wrap items-center gap-2">
       <Pills value={stat} onChange={setStat} options={Object.entries(STATS).map(([id, label]) => ({ id, label }))} />
@@ -34,7 +37,7 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
         <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} className="size-4 accent-accent" />On my slip
       </label>
     </div>
-    {!hasLines ? <div className="mt-3 rounded-2xl border border-dashed border-line px-5 py-6 text-center">
+    {idle ? null : !hasLines ? <div className="mt-3 rounded-2xl border border-dashed border-line px-5 py-6 text-center">
       <div className="font-bold">No {STATS[stat]} lines from this price source</div>
       {other && <button type="button" onClick={other.go} className="mt-3 min-h-10 rounded-full bg-button px-4 text-sm font-bold text-button-text">See {other.name} lines</button>}
     </div> : rows.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another game or player." /></div> : <>
@@ -47,8 +50,10 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
 }
 
 /** `compact` is for a row under its player's own heading: no photo, the stat named instead. */
-export function PropRow({ row, slip, toggle, kalshi, compact = false }: {
+export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false }: {
   row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean; compact?: boolean
+  /** on a game's own page: the game is already named above, so it is left off the row */
+  inGame?: boolean
 }) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
   const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
@@ -96,7 +101,7 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false }: {
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 text-sm font-bold leading-tight">{compact ? label : row.player}</div>
         <div className="mt-0.5 text-xs leading-snug tabular-nums text-muted">
-          {!compact && <span>{row.game_short}{average ? ' · ' : ''}</span>}
+          {!compact && !inGame && <span>{row.game_short}{average ? ' · ' : ''}</span>}
           {average && <span>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></span>}
         </div>
       </div>

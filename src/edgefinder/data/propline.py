@@ -119,17 +119,16 @@ def new_fanduel_lines(game: dict) -> dict[str, list[dict]]:
 
 
 def milestone_fanduel_lines(game: dict) -> dict[str, list[dict]]:
-    """FanDuel's "X+" rungs for rebounds, assists and threes, by stat, as {player, line,
-    over_odds} with line half a point under the rung (6+ is 5.5). These markets list one
-    side only and name the rung in the outcome ("6+ Rebounds"). Points X+ come from The
-    Odds API, so they are left out here."""
+    """FanDuel's "X+" rungs for every stat, by stat, as {player, line, over_odds} with line
+    half a point under the rung (6+ is 5.5). These markets list one side only and name the
+    rung in the outcome ("6+ Rebounds")."""
     by_stat: dict[str, list[dict]] = {}
     for listing in game.get("bookmakers", []):
         if listing.get("key") != FANDUEL:
             continue
         for market in listing.get("markets", []):
             stat = MARKETS.get(market.get("key"))
-            if stat in (None, "points") or market.get("line_type") != "milestone":
+            if stat is None or market.get("line_type") != "milestone":
                 continue
             for outcome in market.get("outcomes", []):
                 rung = RUNG.match(str(outcome.get("name") or ""))

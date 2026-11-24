@@ -10,13 +10,15 @@ const game: BoardGame = { game: 'Memphis Grizzlies @ Charlotte Hornets', short: 
   tip: '2026-11-24T00:00:00Z', away: 'MEM', home: 'CHA', away_logo: '', home_logo: '', players: 2 }
 const base = { photo: '', game: game.game, game_short: game.short, stat_label: 'Points', odds: -110,
   market_pct: 52, model_pct: 55, chance_pct: 53, average: null } as const
-const leg = (id: number, player: string, player_id: number, team: string, stat: string, side: string, line: number) =>
-  ({ ...base, id, player, player_id, team, stat, side, line, bet: `${side} ${line} ${stat}` }) as Leg
+const leg = (id: number, player: string, player_id: number, team: string, stat: string, side: string, line: number, odds = -110) =>
+  ({ ...base, id, player, player_id, team, stat, side, line, odds, bet: `${side} ${line} ${stat}` }) as Leg
 const legs = [
   leg(1, 'Coby White', 1, 'CHA', 'points', 'Over', 17.5), leg(2, 'Coby White', 1, 'CHA', 'points', 'Under', 17.5),
   leg(3, 'Coby White', 1, 'CHA', 'threes', 'Over', 1.5), leg(4, 'Coby White', 1, 'CHA', 'threes', 'Under', 1.5),
   leg(5, 'Ja Morant', 2, 'MEM', 'points', 'Over', 24.5), leg(6, 'Ja Morant', 2, 'MEM', 'points', 'Under', 24.5),
 ]
+const rungs = [leg(7, 'Ja Morant', 2, 'MEM', 'points', '20+', 19.5, -250), leg(8, 'Ja Morant', 2, 'MEM', 'points', '30+', 29.5, 260),
+  leg(9, 'Ja Morant', 2, 'MEM', 'points', '25+', 24.5, 110)]
 
 it('lists games as cards in the order given, with a choice for every game', () => {
   const choose = vi.fn()
@@ -30,37 +32,44 @@ it('lists games as cards in the order given, with a choice for every game', () =
   expect(choose).toHaveBeenCalledWith('Bulls @ Knicks')
 })
 
-it("groups a game's players under their team, away side first, one line each until opened", () => {
-  render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} />)
+it('lays the games out as a list to choose from, with no "All games" card', () => {
+  render(<GameCards games={[game]} value="" onChange={vi.fn()} layout="list" />)
+  expect(screen.queryByRole('button', { name: 'All games' })).toBeNull()
+  expect(screen.getByRole('button', { name: /^MEM @ CHA/ })).toBeTruthy()
+})
+
+it("opens on the game's first stat with each team's players, away side first, and a way back", () => {
+  const back = vi.fn()
+  render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} onBack={back} />)
+  expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Points', '3PM'])   // only stats it has
   const [away, home] = screen.getAllByRole('region', { name: /^[A-Z]{3} props$/ })
   expect(away.getAttribute('aria-label')).toBe('MEM props')
-  expect(within(away).getByText('Ja Morant')).toBeTruthy()
-  const white = within(home).getByRole('button', { name: /Coby White/ })
-  expect(white.getAttribute('aria-expanded')).toBe('false')
-  expect(white.textContent).toContain('PTS 17.5')
-  expect(white.textContent).toContain('3PM 1.5')
-  expect(screen.queryByRole('button', { name: 'Over Coby White 17.5 Points' })).toBeNull()
-  fireEvent.click(white)
+  expect(within(away).getByRole('button', { name: 'Over Ja Morant 24.5 Points' }).textContent).toBe('O 24.5-110')
   expect(within(home).getByRole('button', { name: 'Over Coby White 17.5 Points' })).toBeTruthy()
-  expect(within(home).getByRole('button', { name: 'Over Coby White 1.5 3PM' })).toBeTruthy()
-})
-
-it('opens a player who is already on the slip', () => {
-  render(<GameProps game={game} legs={legs} selected={[3]} toggle={vi.fn()} kalshi={false} />)
-  expect(screen.getByRole('button', { name: 'Over Coby White 1.5 3PM' }).getAttribute('aria-pressed')).toBe('true')
-})
-
-it('narrows by stat and by player name, and adds a bet from the game view', () => {
-  const toggle = vi.fn()
-  render(<GameProps game={game} legs={legs} selected={[]} toggle={toggle} kalshi={false} />)
+  expect(screen.queryByRole('button', { name: 'Over Coby White 1.5 3PM' })).toBeNull()
   fireEvent.click(screen.getByRole('radio', { name: '3PM' }))
+  expect(screen.getByRole('button', { name: 'Over Coby White 1.5 3PM' })).toBeTruthy()
   expect(screen.queryByText('Ja Morant')).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Over Coby White 17.5 Points' })).toBeNull()
-  fireEvent.click(screen.getByRole('radio', { name: 'All' }))
-  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'morant' } })
-  expect(screen.queryByText('Coby White')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Under Ja Morant 24.5 Points' }))
-  expect(toggle).toHaveBeenCalledWith(6)
+  fireEvent.click(screen.getByRole('button', { name: '‹ All games' }))
+  expect(back).toHaveBeenCalled()
+})
+
+it('switches a stat between its Over / Under lines and its X+ ladder, lowest rung first', () => {
+  const toggle = vi.fn()
+  render(<GameProps game={game} legs={[...legs, ...rungs]} selected={[9]} toggle={toggle} kalshi={false} />)
+  expect(screen.queryByRole('button', { name: /^At least/ })).toBeNull()
+  fireEvent.click(screen.getByRole('radio', { name: 'Points X+' }))
+  const ladder = screen.getAllByRole('button', { name: /^At least Ja Morant/ })
+  expect(ladder.map((b) => b.textContent)).toEqual(['20+-250', '25++110', '30++260'])
+  expect(ladder[1].getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(ladder[2])
+  expect(toggle).toHaveBeenCalledWith(8)
+  expect(screen.queryByText('Coby White')).toBeNull()                 // he has no ladder
+})
+
+it('offers no market switch when a stat has only one kind of line', () => {
+  render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.queryByRole('radio', { name: 'Points X+' })).toBeNull()
 })
 
 const priced: BoardGame = { ...game, moneyline: { book: 'fanduel', away_odds: 128, home_odds: -150,

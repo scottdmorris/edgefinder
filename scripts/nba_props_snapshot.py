@@ -335,7 +335,7 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) 
     except Exception:
         log.exception("Pricing PropLine lines failed; the FanDuel snapshot is unaffected")
     try:
-        log.info("X+ trial (rebounds/assists/threes): %d new rows",
+        log.info("FanDuel X+ rungs (points ledger and other-stat trial): %d new rows",
                  record_propline_milestones(games, early, models))
     except Exception:
         log.exception("Pricing PropLine X+ lines failed; the FanDuel snapshot is unaffected")
@@ -366,21 +366,27 @@ def record_propline(games: list[dict], events: list[dict], models: Models,
 
 
 def record_propline_milestones(games: list[dict], events: list[dict], models: Models,
-                               path: Path | None = None) -> int:
-    """Price FanDuel's X+ rungs for rebounds, assists and threes into their own paper-trial
-    ledger (tracking/nba_alt_stats.py) with the rolling average. Returns the new rows."""
+                               path: Path | None = None, points_path: Path | None = None) -> int:
+    """Price FanDuel's X+ rungs from PropLine. Points go into the points X+ ledger, priced by
+    every points model as The Odds API's copy was until it stopped being fetched to save
+    requests; rebounds, assists and threes go into their own paper-trial ledger
+    (tracking/nba_alt_stats.py), priced by the rolling average. Returns the new rows."""
     recorded_at = dt.datetime.now(dt.timezone.utc).isoformat()
     added = 0
     for event in events:
         game = propline.match_game(event, games)
         if game is None or game.get("live"):
             continue
+        game_date = nba_snapshot_plan.tip_date(event)
         for stat, lines in propline.milestone_fanduel_lines(game).items():
+            if stat == "points":
+                added += sum(nba_alt.record_event(event, lines, models.get(), recorded_at,
+                                                  game_date, path=points_path).values())
+                continue
             model = models.kalshi_models()[0]       # built only once there are lines to price
             names = sorted({line["player"] for line in lines})
             projections = model.project(event, stat, names)
-            rows = nba_alt_stats.build_rows(event, lines, projections, recorded_at,
-                                            nba_snapshot_plan.tip_date(event),
+            rows = nba_alt_stats.build_rows(event, lines, projections, recorded_at, game_date,
                                             model_version=model.version, stat=stat)
             added += nba_alt_stats.append_rows(rows, path=path)
     return added

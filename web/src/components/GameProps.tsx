@@ -1,103 +1,130 @@
-// One game's props the way a sportsbook shows them: each team in turn, each player once, with
-// every stat he has a line for underneath. A stat filter and a name search narrow it down.
+// One game's betting options, laid out like a sportsbook's game page: the matchup on top, a tab
+// per stat, then each team's players. Where a stat has both, "Over / Under" lines and "X+"
+// ladders (10+, 15+, 20+) are two markets to switch between.
 import { useState } from 'react'
 import type { BoardGame, Leg } from '../lib/api'
-import { defaultStep, ladderRows, type Row } from '../lib/ladder'
-import { sidePrice, type SidePrice } from './GameCards'
-import { PropRow, STATS, normalize } from './PropsBrowser'
+import { american, ladderRows } from '../lib/ladder'
+import { sidePrice, tipTime, type SidePrice } from './GameCards'
+import { PropRow, STATS } from './PropsBrowser'
 import { Empty, Photo, Pills } from './ui'
 
-const ALL_STATS = 'all'
 const STAT_ORDER = Object.keys(STATS)
+type Market = 'lines' | 'ladder'
 
-type Player = { id: number; name: string; photo: string; rows: Row[] }
+const isRung = (leg: Leg) => leg.side.endsWith('+')
+const rung = (leg: Leg) => parseInt(leg.side, 10)
 
-function playersOf(rows: Row[]): Player[] {
-  const players = new Map<number, Player>()
-  for (const row of rows) {   // rows come biggest names first, so players keep that order
-    const player = players.get(row.player_id) ?? { id: row.player_id, name: row.player, photo: row.photo, rows: [] }
-    players.set(row.player_id, { ...player, rows: [...player.rows, row] })
+type LadderPlayer = { id: number; name: string; photo: string; average: Leg['average']; rungs: Leg[] }
+
+function ladderPlayers(legs: Leg[]): LadderPlayer[] {
+  const players = new Map<number, LadderPlayer>()
+  for (const leg of legs) {
+    const player = players.get(leg.player_id)
+      ?? { id: leg.player_id, name: leg.player, photo: leg.photo, average: leg.average, rungs: [] }
+    players.set(leg.player_id, { ...player, rungs: [...player.rungs, leg] })
   }
-  return [...players.values()].map((p) => ({
-    ...p, rows: [...p.rows].sort((a, b) => STAT_ORDER.indexOf(a.stat) - STAT_ORDER.indexOf(b.stat)) }))
+  // the biggest names first: the highest rung a player is offered
+  return [...players.values()].map((p) => ({ ...p, rungs: [...p.rungs].sort((a, b) => rung(a) - rung(b)) }))
+    .sort((a, b) => rung(b.rungs[b.rungs.length - 1]) - rung(a.rungs[a.rungs.length - 1]))
 }
 
-const SHORT: Record<string, string> = { points: 'PTS', rebounds: 'REB', assists: 'AST', threes: '3PM' }
-
-const onSlip = (row: Row, slip: number[]) =>
-  row.steps.some((s) => slip.includes(s.yes.id) || (s.no !== null && slip.includes(s.no.id)))
-
-/** A folded player's one line: the main number for each stat he has. */
-function summary(player: Player): string {
-  return player.rows.map((row) => {
-    const step = defaultStep(row)
-    const number = step.yes.side.endsWith('+') ? `${step.threshold}+` : step.yes.line
-    return `${SHORT[row.stat] ?? row.stat} ${number}`
-  }).join(' · ')
+function Average({ average }: { average: Leg['average'] }) {
+  if (!average || (average.season == null && average.last10 == null)) return null
+  return <span>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></span>
 }
 
-export function GameProps({ game, legs, selected, toggle, kalshi }: {
-  game: BoardGame; legs: Leg[]; selected: number[]; toggle: (id: number) => void; kalshi: boolean
+/** A player's "at least" rungs as a row of price buttons, like a sportsbook's alt-line market. */
+function LadderRow({ player, label, selected, toggle }: {
+  player: LadderPlayer; label: string; selected: number[]; toggle: (id: number) => void
 }) {
-  const [stat, setStat] = useState(ALL_STATS)
-  const [query, setQuery] = useState('')
-  const [opened, setOpened] = useState<number[]>([])     // players tapped away from how they start
-  // with every stat showing, players start folded to one line to keep the page short
-  const folding = stat === ALL_STATS && query === ''
-  const flip = (id: number) => setOpened((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+  return <div className="px-3 py-2">
+    <div className="flex items-center gap-2">
+      <Photo src={player.photo} size={32} />
+      <div className="min-w-0">
+        <div className="text-sm font-bold leading-tight">{player.name}</div>
+        <div className="text-xs tabular-nums text-muted"><Average average={player.average} /></div>
+      </div>
+    </div>
+    <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+      {player.rungs.map((leg) => {
+        const on = selected.includes(leg.id)
+        return <button key={leg.id} type="button" aria-pressed={on} onClick={() => toggle(leg.id)}
+          aria-label={`At least ${player.name} ${rung(leg)}+ ${label}`}
+          className={`flex h-12 w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-lg border leading-tight ${on ? 'border-button bg-button text-button-text' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+          <span className={`text-[11px] font-semibold ${on ? '' : 'text-muted'}`}>{rung(leg)}+</span>
+          <span className={`text-sm font-black tabular-nums ${on ? '' : 'text-accent'}`}>{american(leg.odds)}</span>
+        </button>
+      })}
+    </div>
+  </div>
+}
+
+export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
+  game: BoardGame; legs: Leg[]; selected: number[]; toggle: (id: number) => void; kalshi: boolean
+  onBack?: () => void
+}) {
+  const stats = STAT_ORDER.filter((s) => legs.some((l) => l.stat === s))
+  const [stat, setStat] = useState(stats[0] ?? 'points')
+  const [market, setMarket] = useState<Market>('lines')
+  const label = STATS[stat] ?? stat
+  const statLegs = legs.filter((l) => l.stat === stat)
+  // Kalshi lists only ladders, shown as Yes/No rows; a sportsbook can list both markets
+  const lineLegs = kalshi ? statLegs : statLegs.filter((l) => !isRung(l))
+  const rungLegs = kalshi ? [] : statLegs.filter(isRung)
+  const both = lineLegs.length > 0 && rungLegs.length > 0
+  const shown: Market = rungLegs.length && (market === 'ladder' || !lineLegs.length) ? 'ladder' : 'lines'
+
   const teamOf = new Map(legs.map((l) => [l.player_id, l.team ?? null]))
-  const rows = ladderRows(legs).filter((row) => (stat === ALL_STATS || row.stat === stat)
-    && normalize(row.player).includes(normalize(query)))
   const sides = [game.away, game.home].filter((t): t is string => !!t)
+  const sideOf = (id: number) => {   // a team that is neither side (a late trade) goes last
+    const team = teamOf.get(id)
+    return team && sides.includes(team) ? team : null
+  }
   const logos: Record<string, string | undefined> = { [game.away ?? '']: game.away_logo, [game.home ?? '']: game.home_logo }
   const prices: Record<string, SidePrice | null> = {
     [game.away ?? '']: sidePrice(game.moneyline, 'away'), [game.home ?? '']: sidePrice(game.moneyline, 'home') }
   const bookName = game.moneyline?.book === 'draftkings' ? 'DraftKings' : 'FanDuel'
-  // a player whose team is neither side (a trade the logs haven't caught up with) goes last
-  const sideOf = (row: Row) => {
-    const team = teamOf.get(row.player_id)
-    return team && sides.includes(team) ? team : null
-  }
-  const groups = [...sides, null].map((team) => ({ team, players: playersOf(rows.filter((r) => sideOf(r) === team)) }))
-    .filter((g) => g.players.length)
+  const lineRows = ladderRows(lineLegs)
+  const ladder = ladderPlayers(rungLegs)
+  const groups = [...sides, null].map((team) => ({
+    team,
+    rows: lineRows.filter((r) => sideOf(r.player_id) === team),
+    rungs: ladder.filter((p) => sideOf(p.id) === team),
+  })).filter((g) => (shown === 'lines' ? g.rows.length : g.rungs.length))
 
   return <section aria-label={`${game.short} player props`}>
-    <div className="flex flex-wrap items-center gap-2">
-      <Pills value={stat} onChange={setStat}
-        options={[{ id: ALL_STATS, label: 'All' }, ...Object.entries(STATS).map(([id, label]) => ({ id, label }))]} />
-      <input aria-label="Find a player in this game" type="search" placeholder="Search players" value={query}
-        onChange={(e) => setQuery(e.target.value)} className="min-h-10 min-w-40 flex-1 rounded-full border border-line bg-raised px-4 text-sm" />
+    <div className="flex items-center gap-3">
+      {onBack && <button type="button" onClick={onBack}
+        className="min-h-10 shrink-0 rounded-full border border-line px-3 text-sm font-semibold hover:border-line-strong">‹ All games</button>}
+      <div className="min-w-0">
+        <h2 className="flex items-center gap-1.5 text-lg font-black">
+          {game.away_logo && <img src={game.away_logo} alt="" className="size-6" />}{game.away ?? game.short}
+          <span className="text-muted">@</span>
+          {game.home_logo && <img src={game.home_logo} alt="" className="size-6" />}{game.home}
+        </h2>
+        <div className="text-xs text-muted">{tipTime(game.tip)}{game.moneyline ? ` · win chances from the ${bookName} moneyline, vig removed` : ''}</div>
+      </div>
     </div>
-    {game.moneyline && <p className="mt-2 text-xs text-muted">
-      Win chances are the {bookName} moneyline, vig removed: the market’s view, not a model’s.</p>}
-    {groups.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another stat or player." /></div>
-      : groups.map(({ team, players }) => (
+
+    <div className="mt-3 space-y-2">
+      <Pills value={stat} onChange={(s) => { setStat(s); setMarket('lines') }}
+        options={stats.map((s) => ({ id: s, label: STATS[s] }))} />
+      {both && <Pills value={shown} onChange={setMarket}
+        options={[{ id: 'lines', label: 'Over / Under' }, { id: 'ladder', label: `${label} X+` }]} />}
+    </div>
+
+    {groups.length === 0 ? <div className="mt-3"><Empty title="No props for this game yet" hint="Lines appear after the next snapshot." /></div>
+      : groups.map(({ team, rows, rungs }) => (
         <section key={team ?? 'other'} aria-label={`${team ?? 'Other'} props`} className="mt-4">
           <h3 className="mb-2 flex items-center gap-2 text-sm font-black">
             {team && logos[team] && <img src={logos[team]} alt="" className="size-6" />}{team ?? 'Other players'}
             {team && prices[team] && <span className="text-xs font-bold tabular-nums text-muted">
               {prices[team]?.odds} · {prices[team]?.pct} to win</span>}
           </h3>
-          <div className="space-y-1.5">
-            {players.map((p) => {
-              // folded players open with a tap; one already on the slip starts open instead
-              const startsOpen = p.rows.some((r) => onSlip(r, selected))
-              const shown = !folding || startsOpen !== opened.includes(p.id)
-              return <div key={p.id} className="overflow-hidden rounded-2xl border border-line bg-raised">
-                <button type="button" aria-expanded={shown} onClick={() => flip(p.id)}
-                  className={`flex w-full items-center gap-2 px-3 pt-1.5 text-left hover:bg-raised-2 ${shown ? 'border-b border-line' : ''}`}>
-                  <Photo src={p.photo} size={32} />
-                  <span className="min-w-0 flex-1 pb-1.5">
-                    <span className="block truncate font-bold">{p.name}</span>
-                    {!shown && <span className="block truncate text-xs tabular-nums text-muted">{summary(p)}</span>}
-                  </span>
-                  <span aria-hidden className="pb-1.5 text-muted">{shown ? '–' : '+'}</span>
-                </button>
-                {shown && <div className="divide-y divide-line">
-                  {p.rows.map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} compact />)}
-                </div>}
-              </div>
-            })}
+          <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
+            {shown === 'lines'
+              ? rows.map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} inGame />)
+              : rungs.map((p) => <LadderRow key={p.id} player={p} label={label} selected={selected} toggle={toggle} />)}
           </div>
         </section>
       ))}

@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Parlay works like a sportsbook: pick a game, then bet
+- The Parlay screen opens on a list of the day's games. Tapping one opens that game's own
+  page (`#/parlay?game=...`, so Back returns to the list): the matchup with tip time and
+  moneylines, a tab per stat it has, then each team's players with Over/Under price buttons.
+  The "All props" list is gone; a "Find a player" search finds anyone's props across games.
+  The suggested slip and quick adds sit under the games (or under the game).
+- Where a stat has both, a switch moves between its Over / Under lines and its X+ ladder
+  ("Points X+"), shown as a row of rung buttons (20+ · 25+ · 30+ with prices).
+- FanDuel's points X+ rungs are recorded again. They stopped on 2026-11-17 when The Odds
+  API's extra request for them was dropped to save its quota; they now come free from
+  PropLine's existing request, priced by every points model into the same X+ ledger as
+  before, so they reappear on the board from the next early snapshot.
+- Validation: 1,514 Python tests pass (1 new) and ruff is clean; 90 web tests pass (game
+  page tests rewritten) and the TypeScript check is clean. Checked in the rebuilt app:
+  games list, a game's page, and the browser Back button. The X+ switch is covered by
+  tests only until the first FanDuel rungs are recorded.
+
 ### Moneylines and win chances on the game cards
 - Each game card on the Parlay screen shows both teams' moneyline and the market's win
   chance with the book's margin removed ("MEM +150 39%"). When you open a game, each team's

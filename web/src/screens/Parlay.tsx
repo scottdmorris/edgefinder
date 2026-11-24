@@ -18,12 +18,27 @@ const ALL = '__all__'
 const PICKS_SHOWN = 6
 const GAPS_SHOWN = 6
 
+function gameFromHash(): string {
+  return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('game') ?? ALL
+}
+
 export function Parlay() {
   const [market, setMarket] = useState<Market>({})
   const [board, setBoard] = useState<Board | null>(null)
   const [boardRevision, setBoardRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [game, setGame] = useState(ALL)
+  // the chosen game lives in the address (#/parlay?game=...), so Back returns to the games list
+  const [game, setGameState] = useState(gameFromHash)
+  useEffect(() => {
+    const sync = () => setGameState(gameFromHash())
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  const setGame = (next: string) => {
+    window.location.hash = next === ALL ? '/parlay' : `/parlay?game=${encodeURIComponent(next)}`
+    setGameState(next)
+    window.scrollTo({ top: 0 })                // a new page, like a sportsbook's game screen
+  }
   const [style, setStyle] = useState('Higher hit rate')
   const [ideas, setIdeas] = useState<Idea[] | null>(null)
   const [refresh, setRefresh] = useState(0)
@@ -68,14 +83,15 @@ export function Parlay() {
   if (error && !board) return <Empty title="Couldn't load the lines" hint={error} />
   if (!board) return <Loading />
 
-  const shown = board.legs.filter((l) => game === ALL || l.game === game)
+  // a game from an old link that is not on this day's board falls back to the games list
   const chosenGame = board.games.find((g) => g.game === game)
+  const shown = board.legs.filter((l) => !chosenGame || l.game === chosenGame.game)
   const gameShort = chosenGame?.short
   const otherBook = board.books.find((b) => b.id === 'kalshi' && b.id !== board.book)
     ?? board.books.find((b) => b.id !== board.book)
   const model = board.models.find((m) => m.id === board.model)
   const bookName = board.books.find((b) => b.id === board.book)?.name ?? board.book
-  const quick = quickAdds(board, picks, game, gameShort, shown, bookName)
+  const quick = quickAdds(board, picks, chosenGame ? game : ALL, gameShort, shown, bookName)
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8">
@@ -136,7 +152,24 @@ export function Parlay() {
           Price moved since you added: {slip.moved.map((m) => `${m.player} ${american(m.was)} → ${american(m.now)}`).join(' · ')}. The slip uses the new price.
         </p>}
 
-        <SuggestedSlip key={`${marketKey}|${game}|${style}`} ideas={ideas} legs={legsById} sameGame={game !== ALL}
+        {chosenGame ? (
+          <div className="mt-6">
+            <GameProps key={chosenGame.game} game={chosenGame} legs={shown} selected={slip.legs} toggle={slip.toggle}
+              kalshi={board.book === 'kalshi'} onBack={() => setGame(ALL)} />
+          </div>
+        ) : (
+          <>
+            <Section title="Games" aside="Tap a game for its props">
+              <GameCards games={board.games} value={game} onChange={setGame} layout="list" />
+            </Section>
+            <Section title="Find a player" aside="Recorded prices, not live quotes">
+              <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} searchOnly
+                other={otherBook && { name: otherBook.name, go: () => setMarket({ date: board.date, book: otherBook.id }) }} />
+            </Section>
+          </>
+        )}
+
+        <SuggestedSlip key={`${marketKey}|${game}|${style}`} ideas={ideas} legs={legsById} sameGame={!!chosenGame}
           styles={board.styles} style={style} onStyle={setStyle} inUse={slip.legs} onUse={slip.set} />
 
         {quick.length > 0 && (
@@ -144,18 +177,6 @@ export function Parlay() {
             <QuickAdds items={quick} selected={slip.legs} toggle={slip.toggle} />
           </Section>
         )}
-
-        <Section title={chosenGame ? `${chosenGame.short} props` : 'All props'} aside="Recorded prices, not live quotes">
-          {/* the games sit right above the props and stay pinned while scrolling them, so switching
-              is one tap; the choice also narrows the suggested slip and the quick adds */}
-          <div className="sticky top-0 z-20 -mx-1 mb-3 bg-ink/95 px-1 py-2 backdrop-blur">
-            <GameCards games={board.games} value={game} all={ALL} onChange={setGame} />
-          </div>
-          {chosenGame
-            ? <GameProps key={chosenGame.game} game={chosenGame} legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} />
-            : <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'}
-              other={otherBook && { name: otherBook.name, go: () => setMarket({ date: board.date, book: otherBook.id }) }} />}
-        </Section>
 
         <SlipImageReview market={chosen} legs={legsById} onApply={slip.set} />
       </div>

@@ -31,15 +31,17 @@ function Side({ code, logo, price }: { code?: string; logo?: string; price: Side
   </span>
 }
 
-export function GameCards({ games, value, all, onChange }: {
-  games: BoardGame[]; value: string; all: string; onChange: (game: string) => void
+/** `list` lays the games out as a grid to choose from (the Parlay home); `row` is one sideways
+ * strip. With `all`, the first card clears the choice. */
+export function GameCards({ games, value, all, onChange, layout = 'row' }: {
+  games: BoardGame[]; value: string; all?: string; onChange: (game: string) => void; layout?: 'row' | 'list'
 }) {
-  const card = 'min-h-11 shrink-0 rounded-2xl border px-3 py-2 text-left text-sm transition-colors'
+  const card = `min-h-11 shrink-0 rounded-2xl border px-3 py-2 text-left text-sm transition-colors ${layout === 'list' ? 'w-full' : ''}`
   const tone = (on: boolean) => (on ? 'border-text bg-raised-2' : 'border-line bg-raised hover:border-line-strong')
-  return <ScrollRow label="Games">
-    <button type="button" aria-pressed={value === all} onClick={() => onChange(all)} className={`${card} ${tone(value === all)} font-bold`}>
+  const cards = <>
+    {all !== undefined && <button type="button" aria-pressed={value === all} onClick={() => onChange(all)} className={`${card} ${tone(value === all)} font-bold`}>
       All games
-    </button>
+    </button>}
     {games.map((g) => {
       const on = value === g.game
       const players = `${g.players ?? 0} player${g.players === 1 ? '' : 's'}`
@@ -59,5 +61,8 @@ export function GameCards({ games, value, all, onChange }: {
         <div className="mt-1.5 text-[11px] text-muted">{tipTime(g.tip)} · {players}</div>
       </button>
     })}
-  </ScrollRow>
+  </>
+  return layout === 'list'
+    ? <div role="group" aria-label="Games" className="grid gap-2 sm:grid-cols-2">{cards}</div>
+    : <ScrollRow label="Games">{cards}</ScrollRow>
 }
