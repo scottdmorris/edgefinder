@@ -112,25 +112,30 @@ class Models:
             self._models = build_models(self._today, self.games())
         return self._models
 
-    def kalshi_models(self) -> list[nba_kalshi_ledger.KalshiModel]:
-        """The rolling average prices all four Kalshi stats; the points-only
-        challengers price Kalshi points alongside it."""
+    def rolling_average(self) -> nba_kalshi_ledger.KalshiModel:
+        """The rolling average, which prices every stat from history alone, so it works
+        even when the points models fail to build."""
         season = nba_stats.current_season(self._today)
         recent = self.games()[self.games()["season"].isin(
             nba_stats.recent_seasons(self._today, 2))]
 
-        def rolling_average(event: dict, stat: str, names: list[str]) -> dict[str, dict]:
+        def project(event: dict, stat: str, names: list[str]) -> dict[str, dict]:
             return nba_stat_model.project_event(
                 nba_stat_model.STATS[stat], event, names, recent, season=season,
                 game_date=nba_snapshot_plan.tip_date(event))
 
+        return nba_kalshi_ledger.KalshiModel(
+            nba_points.MODEL_VERSION,
+            {key: stat.dispersion for key, stat in nba_stat_model.STATS.items()},
+            project)
+
+    def kalshi_models(self) -> list[nba_kalshi_ledger.KalshiModel]:
+        """The rolling average prices all four Kalshi stats; the points-only
+        challengers price Kalshi points alongside it."""
         def points_only(model: nba_recording.RegisteredModel):
             return lambda event, stat, names: model.project(event, names)
 
-        models = [nba_kalshi_ledger.KalshiModel(
-            nba_points.MODEL_VERSION,
-            {key: stat.dispersion for key, stat in nba_stat_model.STATS.items()},
-            rolling_average)]
+        models = [self.rolling_average()]
         models += [
             nba_kalshi_ledger.KalshiModel(m.version, {"points": m.dispersion}, points_only(m))
             for m in self.get() if m.version != nba_points.MODEL_VERSION]
@@ -353,7 +358,7 @@ def record_propline(games: list[dict], events: list[dict], models: Models,
         if game is None or game.get("live"):
             continue
         for stat, lines in propline.new_fanduel_lines(game).items():
-            model = models.kalshi_models()[0]       # built only once there are lines to price
+            model = models.rolling_average()        # built only once there are lines to price
             if stat not in model.dispersions:
                 continue
             projections = model.project(event, stat, [line["player"] for line in lines])
@@ -380,10 +385,14 @@ def record_propline_milestones(games: list[dict], events: list[dict], models: Mo
         game_date = nba_snapshot_plan.tip_date(event)
         for stat, lines in propline.milestone_fanduel_lines(game).items():
             if stat == "points":
-                added += sum(nba_alt.record_event(event, lines, models.get(), recorded_at,
-                                                  game_date, path=points_path).values())
+                try:   # the points models failing never stops the other stats' trial
+                    added += sum(nba_alt.record_event(event, lines, models.get(), recorded_at,
+                                                      game_date, path=points_path).values())
+                except Exception:
+                    log.exception("Pricing FanDuel points X+ rungs failed for %s @ %s",
+                                  event.get("away"), event.get("home"))
                 continue
-            model = models.kalshi_models()[0]       # built only once there are lines to price
+            model = models.rolling_average()        # built only once there are lines to price
             names = sorted({line["player"] for line in lines})
             projections = model.project(event, stat, names)
             rows = nba_alt_stats.build_rows(event, lines, projections, recorded_at, game_date,

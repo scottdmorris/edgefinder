@@ -156,12 +156,18 @@ class FakeModels:
     def __init__(self):
         self.asked = []
 
-    def kalshi_models(self):
+    def get(self):
+        return []
+
+    def rolling_average(self):
         def project(event, stat, names):
             self.asked.append((stat, names))
             return {name: {"player_id": 7, "mean": 14.0} for name in names}
-        return [nba_kalshi_ledger.KalshiModel(
-            "ewma-v1", {s: stat.dispersion for s, stat in nba_stat_model.STATS.items()}, project)]
+        return nba_kalshi_ledger.KalshiModel(
+            "ewma-v1", {s: stat.dispersion for s, stat in nba_stat_model.STATS.items()}, project)
+
+    def kalshi_models(self):           # like the real one, it needs the points models built
+        return [self.rolling_average(), *self.get()]
 
 
 def test_only_fanduels_non_points_lines_with_both_sides_are_priced():
@@ -234,6 +240,21 @@ def test_fanduels_points_x_plus_rungs_go_back_into_the_points_x_plus_ledger(tmp_
     assert set(rows["event_id"]) == {"oa1"}                # the Odds API event, as before
     assert nba_alt_stats.load_ledger(trial).empty           # points never enter the trial
     assert models.asked == []                               # the rolling average is not needed
+
+
+def test_the_points_models_failing_never_stops_the_other_stats_x_plus_trial(tmp_path):
+    from edgefinder.tracking import nba_alt_stats
+    script, models = load_snapshot_script(), FakeModels()
+
+    def broken():
+        raise RuntimeError("no minutes feed")
+    models.get = broken
+    trial, points = tmp_path / "alt_stats.csv", tmp_path / "alt.csv"
+    game = FUTURE_GAME | {"bookmakers": [{"key": "fanduel", "markets": [
+        market("player_points", [outcome("20+ Points", "Miller", -130, None)], "milestone"),
+        market("player_rebounds", [outcome("6+ Rebounds", "Edey", -400, None)], "milestone")]}]}
+    assert script.record_propline_milestones([game], [FUTURE], models, path=trial, points_path=points) == 1
+    assert list(nba_alt_stats.load_ledger(trial)["stat"]) == ["rebounds"]
 
 
 def test_only_early_games_are_priced_and_a_pricing_failure_never_stops_the_run(monkeypatch):

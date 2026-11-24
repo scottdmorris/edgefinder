@@ -37,10 +37,11 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
         <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} className="size-4 accent-accent" />On my slip
       </label>
     </div>
-    {idle ? null : !hasLines ? <div className="mt-3 rounded-2xl border border-dashed border-line px-5 py-6 text-center">
+    {/* the way to another price source shows even before a search, so a day without lines isn't a dead end */}
+    {!hasLines ? <div className="mt-3 rounded-2xl border border-dashed border-line px-5 py-6 text-center">
       <div className="font-bold">No {STATS[stat]} lines from this price source</div>
       {other && <button type="button" onClick={other.go} className="mt-3 min-h-10 rounded-full bg-button px-4 text-sm font-bold text-button-text">See {other.name} lines</button>}
-    </div> : rows.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another game or player." /></div> : <>
+    </div> : idle ? null : rows.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another game or player." /></div> : <>
       <p className="mt-3 text-xs text-muted">Tap a price to add it to your slip. ⓘ shows other lines and the numbers behind a prop.</p>
       <div className="mt-2 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">{(open ? rows : rows.slice(0, SHOWN)).map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} />)}</div>
       {!open && rows.length > SHOWN && <button type="button" onClick={() => setAll(true)}

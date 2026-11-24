@@ -64,8 +64,12 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
   onBack?: () => void
 }) {
   const stats = STAT_ORDER.filter((s) => legs.some((l) => l.stat === s))
-  const [stat, setStat] = useState(stats[0] ?? 'points')
-  const [market, setMarket] = useState<Market>('lines')
+  const [picked, setStat] = useState(stats[0] ?? 'points')
+  // after a switch of book or day the picked stat may be gone from this game: fall back to its first
+  const fellBack = !stats.includes(picked)
+  const stat = fellBack ? stats[0] ?? picked : picked
+  const [chosenMarket, setMarket] = useState<Market>('lines')
+  const market: Market = fellBack ? 'lines' : chosenMarket   // a stat not chosen opens on its lines, like a tap
   const label = STATS[stat] ?? stat
   const statLegs = legs.filter((l) => l.stat === stat)
   // Kalshi lists only ladders, shown as Yes/No rows; a sportsbook can list both markets

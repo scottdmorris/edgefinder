@@ -60,16 +60,18 @@ export function Parlay() {
   const marketKey = board ? `${board.date}|${board.book}|${board.model}` : null
   const legsById = useMemo(() => new Map((board?.legs ?? []).map((l) => [l.id, l])), [board])
   const slip = useSlip(marketKey, legsById)
+  // a game from an old link that is not on this day's board falls back to the games list
+  const activeGame = board?.games.some((g) => g.game === game) ? game : ALL
 
   useEffect(() => {
     if (!board) return
     let live = true
     setIdeas(null)
-    api.ideas(chosen, style, game === ALL ? undefined : game).then((i) => live && setIdeas(i))
+    api.ideas(chosen, style, activeGame === ALL ? undefined : activeGame).then((i) => live && setIdeas(i))
       .catch(() => live && setIdeas([]))
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, style, game])
+  }, [board, style, activeGame])
 
   // what the models would bet on this day (FanDuel points lines); none recorded is not an error
   const day = board?.date
@@ -83,15 +85,14 @@ export function Parlay() {
   if (error && !board) return <Empty title="Couldn't load the lines" hint={error} />
   if (!board) return <Loading />
 
-  // a game from an old link that is not on this day's board falls back to the games list
-  const chosenGame = board.games.find((g) => g.game === game)
+  const chosenGame = board.games.find((g) => g.game === activeGame)
   const shown = board.legs.filter((l) => !chosenGame || l.game === chosenGame.game)
   const gameShort = chosenGame?.short
   const otherBook = board.books.find((b) => b.id === 'kalshi' && b.id !== board.book)
     ?? board.books.find((b) => b.id !== board.book)
   const model = board.models.find((m) => m.id === board.model)
   const bookName = board.books.find((b) => b.id === board.book)?.name ?? board.book
-  const quick = quickAdds(board, picks, chosenGame ? game : ALL, gameShort, shown, bookName)
+  const quick = quickAdds(board, picks, activeGame, gameShort, shown, bookName)
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8">
@@ -169,7 +170,7 @@ export function Parlay() {
           </>
         )}
 
-        <SuggestedSlip key={`${marketKey}|${game}|${style}`} ideas={ideas} legs={legsById} sameGame={!!chosenGame}
+        <SuggestedSlip key={`${marketKey}|${activeGame}|${style}`} ideas={ideas} legs={legsById} sameGame={!!chosenGame}
           styles={board.styles} style={style} onStyle={setStyle} inUse={slip.legs} onUse={slip.set} />
 
         {quick.length > 0 && (

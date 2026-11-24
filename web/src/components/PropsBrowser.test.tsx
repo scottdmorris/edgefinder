@@ -71,6 +71,18 @@ it('always offers all four stats and points to another source when one has no li
   expect(go).toHaveBeenCalled()
 })
 
+it('as a finder lists nobody until a name is typed, but still points to another source with no lines', () => {
+  const go = vi.fn()
+  const view = render(<PropsBrowser legs={[over, under]} selected={[]} toggle={vi.fn()} kalshi={false} searchOnly other={{ name: 'Kalshi', go }} />)
+  expect(screen.queryByText('Nikola Jokić')).toBeNull()
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'joki' } })
+  expect(screen.getByText('Nikola Jokić')).toBeTruthy()
+  view.unmount()
+  render(<PropsBrowser legs={[]} selected={[]} toggle={vi.fn()} kalshi={false} searchOnly other={{ name: 'Kalshi', go }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'See Kalshi lines' }))
+  expect(go).toHaveBeenCalled()
+})
+
 it('lists a few players until asked for all, and everyone once a game is chosen', () => {
   const many = Array.from({ length: 9 }, (_, i) => ({ ...over, id: 100 + i, player: `Player ${i}`, player_id: 100 + i }))
   const view = render(<PropsBrowser legs={many} selected={[]} toggle={vi.fn()} kalshi={false} />)

@@ -67,6 +67,17 @@ it('switches a stat between its Over / Under lines and its X+ ladder, lowest run
   expect(screen.queryByText('Coby White')).toBeNull()                 // he has no ladder
 })
 
+it('falls back to the first stat when the chosen one is gone after a switch of book or day', () => {
+  const props = { game, selected: [], toggle: vi.fn(), kalshi: false }
+  const threesRung = leg(10, 'Coby White', 1, 'CHA', 'threes', '2+', 1.5, 120)
+  const { rerender } = render(<GameProps {...props} legs={[...legs, ...rungs, threesRung]} />)
+  fireEvent.click(screen.getByRole('radio', { name: '3PM' }))
+  fireEvent.click(screen.getByRole('radio', { name: '3PM X+' }))
+  rerender(<GameProps {...props} legs={[...legs, ...rungs].filter((l) => l.stat === 'points')} />)
+  expect(screen.getByRole('radio', { name: 'Points' }).getAttribute('aria-checked')).toBe('true')
+  expect(screen.getByRole('button', { name: 'Over Ja Morant 24.5 Points' })).toBeTruthy()   // its lines, not its ladder
+})
+
 it('offers no market switch when a stat has only one kind of line', () => {
   render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} />)
   expect(screen.queryByRole('radio', { name: 'Points X+' })).toBeNull()

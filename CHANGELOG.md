@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Fixes to the Parlay game pages and the X+ recording
+
+- An old `?game=` link for a game not on the board no longer empties the suggested slip; the
+  page treats it as the games list throughout.
+- A game's page whose chosen stat tab disappears after a switch of book or day now opens its
+  first stat, on its Over / Under lines, instead of saying it has no props.
+- The Parlay home shows "See … lines" for another price source when this one has no lines,
+  without first typing a name.
+- If the points models fail to build during a snapshot, PropLine's rebounds, assists and threes
+  lines and their X+ rungs are still priced by the rolling average, which needs only history.
+- Validation: `pytest` 1,515 passed; `ruff check` clean; `vitest` 92 passed; `npm run build`
+  (tsc and vite) succeeded.
+
 ### Parlay works like a sportsbook: pick a game, then bet
 - The Parlay screen opens on a list of the day's games. Tapping one opens that game's own
   page (`#/parlay?game=...`, so Back returns to the list): the matchup with tip time and
