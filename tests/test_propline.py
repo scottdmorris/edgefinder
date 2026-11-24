@@ -68,7 +68,7 @@ def test_one_request_carries_the_key_in_a_header_and_reports_what_is_left(key):
     url, kw = calls[0]
     assert "secret-key" not in url and kw["headers"] == {"X-API-Key": "secret-key"}
     assert kw["params"]["bookmakers"] == "fanduel,draftkings"
-    assert kw["params"]["markets"].split(",") == list(propline.MARKETS)
+    assert kw["params"]["markets"].split(",") == [*propline.MARKETS, *propline.GAME_MARKETS]
     assert propline.fetch_slate(get=lambda *a, **k: Response([], remaining=None))[1] is None
 
 
@@ -120,6 +120,7 @@ def test_the_snapshot_job_saves_due_games_and_survives_a_propline_failure(monkey
     spec.loader.exec_module(script)
     task = type("Task", (), {"event": EVENT, "phase": "early"})()
     monkeypatch.setattr(script, "record_propline", lambda *args: 0)   # never the real ledger
+    monkeypatch.setattr(script, "record_propline_milestones", lambda *args: 0)
     script.archive_propline([task], None)                 # no key: nothing happens
     monkeypatch.setenv("PROPLINE_API_KEY", "k")
     monkeypatch.setattr(propline, "fetch_slate", lambda: ([GAME], 900))
@@ -184,22 +185,53 @@ def test_fanduel_rebounds_are_priced_into_the_ledger_under_their_own_stat(tmp_pa
     assert untouched.asked == []
 
 
+def test_fanduels_x_plus_rungs_for_other_stats_are_read_from_the_milestone_markets():
+    game = GAME | {"bookmakers": [{"key": "fanduel", "markets": [
+        market("player_rebounds", [outcome("6+ Rebounds", "Miller", -150, None),
+                                   outcome("6+ Rebounds", "Edey", -900, None)], "milestone"),
+        market("player_threes", [outcome("2+ Made Threes", "Miller", 140, None)], "milestone"),
+        market("player_points", [outcome("20+ Points", "Miller", -130, None)], "milestone"),
+        market("player_rebounds", [outcome("Over", "Edey", -105, 11.5)])]},
+        {"key": "draftkings", "markets": [
+            market("player_assists", [outcome("4+ Assists", "Miller", 120, None)], "milestone")]}]}
+    assert propline.milestone_fanduel_lines(game) == {
+        "rebounds": [{"player": "Miller", "line": 5.5, "over_odds": -150},
+                     {"player": "Edey", "line": 5.5, "over_odds": -900}],
+        "threes": [{"player": "Miller", "line": 1.5, "over_odds": 140}]}
+
+
+def test_x_plus_rungs_are_priced_into_their_own_trial_ledger(tmp_path):
+    from edgefinder.tracking import nba_alt_stats
+    script, models, path = load_snapshot_script(), FakeModels(), tmp_path / "alt_stats.csv"
+    game = FUTURE_GAME | {"bookmakers": [{"key": "fanduel", "markets": [
+        market("player_rebounds", [outcome("6+ Rebounds", "Edey", -400, None)], "milestone")]}]}
+    assert script.record_propline_milestones([game], [FUTURE], models, path=path) == 1
+    assert models.asked == [("rebounds", ["Edey"])]
+    row = nba_alt_stats.load_ledger(path).iloc[0]
+    assert (row["stat"], row["threshold"], row["model_version"]) == ("rebounds", 6, "ewma-v1")
+    assert script.record_propline_milestones([game], [FUTURE], models, path=path) == 0
+
+
 def test_only_early_games_are_priced_and_a_pricing_failure_never_stops_the_run(monkeypatch):
     script = load_snapshot_script()
     monkeypatch.setenv("PROPLINE_API_KEY", "k")
     monkeypatch.setattr(propline, "fetch_slate", lambda: ([FUTURE_GAME], 900))
     priced = []
     monkeypatch.setattr(script, "record_propline", lambda games, events, models: priced.append(events) or 1)
+    monkeypatch.setattr(script, "record_propline_milestones",
+                        lambda games, events, models: priced.append(("x+", events)) or 1)
     task = lambda phase: type("Task", (), {"event": FUTURE, "phase": phase})()  # noqa: E731
     script.archive_propline([task("late")], FakeModels())
     assert priced == []
     script.archive_propline([task("early"), task("late")], FakeModels())
-    assert priced == [[FUTURE]]
+    assert priced == [[FUTURE], ("x+", [FUTURE])]
 
     def broken(*args):
         raise RuntimeError("model failed")
     monkeypatch.setattr(script, "record_propline", broken)
+    priced.clear()
     script.archive_propline([task("early")], FakeModels())       # logged, not raised
+    assert priced == [("x+", [FUTURE])]                           # the trial still runs
 
 
 # ---- grading and closing them ---------------------------------------------------------------

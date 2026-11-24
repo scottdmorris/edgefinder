@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from edgefinder.data import (  # noqa: E402
     job_health, nba_props, nba_snapshot_plan, nba_stats, propline)
 from edgefinder.tracking import (  # noqa: E402
-    book_gaps, gap_log, nba_alt, nba_kalshi_ledger, nba_paper)
+    book_gaps, gap_log, miss_report, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper)
 
 
 def build_report(today: dt.date) -> str:
@@ -59,6 +59,7 @@ def build_report(today: dt.date) -> str:
         else:
             lines += ["Head to head on the lines every model priced (Brier, lower is better):",
                       comparison.round({"brier_model": 4, "brier_market": 4}).to_string()]
+    lines += miss_report.report_lines(settled)
     from edgefinder.tracking import suggested_record
     try:
         graded_slips = suggested_record.grade(games, today)
@@ -66,6 +67,7 @@ def build_report(today: dt.date) -> str:
     except (OSError, sqlite3.Error, ValueError) as error:
         lines.append(f"Suggested slips waiting: {type(error).__name__}; other ledgers continue.")
     lines += alt_block(games, today)
+    lines += alt_stats_block(games, today)
     lines += gap_block(games, today, (fanduel_close, other_close))
     lines += book_gap_block(games, today, (fanduel_close, other_close))
     return "\n".join(lines)
@@ -85,6 +87,16 @@ def alt_block(games, today: dt.date) -> list[str]:
         lines.append(f"[{version}] X+ picks: {s['picks']} made, {s['settled']} settled, "
                      f"record {s['record']}, {s['units']:+.2f} units ({s['roi_pct']:+.1f}% ROI)")
     return lines
+
+
+def alt_stats_block(games, today: dt.date) -> list[str]:
+    """Settle the rebounds/assists/threes X+ paper trial and report it by stat."""
+    trial = nba_alt_stats.load_ledger()
+    if trial.empty:
+        return []
+    settled = nba_alt_stats.settle(trial, games, today)
+    nba_alt_stats.save_ledger(settled)
+    return nba_alt_stats.report_lines(settled)
 
 
 def fair_close_text(facts: dict) -> str:

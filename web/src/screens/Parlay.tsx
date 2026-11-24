@@ -8,6 +8,8 @@ import { Empty, Pills, Section } from '../components/ui'
 import { BookBadge } from '../components/BookBadge'
 import { SlipPanel } from '../components/SlipPanel'
 import { PropsBrowser } from '../components/PropsBrowser'
+import { GameCards } from '../components/GameCards'
+import { GameProps } from '../components/GameProps'
 import { SlipImageReview } from '../components/SlipImageReview'
 import { QuickAdds, type QuickAdd } from '../components/QuickAdds'
 import { SuggestedSlip } from '../components/SuggestedSlip'
@@ -67,7 +69,8 @@ export function Parlay() {
   if (!board) return <Loading />
 
   const shown = board.legs.filter((l) => game === ALL || l.game === game)
-  const gameShort = board.games.find((g) => g.game === game)?.short
+  const chosenGame = board.games.find((g) => g.game === game)
+  const gameShort = chosenGame?.short
   const otherBook = board.books.find((b) => b.id === 'kalshi' && b.id !== board.book)
     ?? board.books.find((b) => b.id !== board.book)
   const model = board.models.find((m) => m.id === board.model)
@@ -117,11 +120,6 @@ export function Parlay() {
           </div>
         )}
 
-        {/* the game filter is always in reach: it narrows the suggestion, the quick adds and the props */}
-        <div className="mt-3">
-          <Pills value={game} onChange={setGame}
-            options={[{ id: ALL, label: 'All games' }, ...board.games.map((g) => ({ id: g.game, label: g.short }))]} />
-        </div>
 
         {slip.unavailable.length > 0 && <section className="my-4 rounded-2xl border border-warn/50 bg-warn/5 p-4">
           <h2 className="font-bold text-warn">Review saved selections</h2>
@@ -147,10 +145,16 @@ export function Parlay() {
           </Section>
         )}
 
-        <Section title="All props" aside="Recorded prices, not live quotes">
-          <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'}
-            expanded={game !== ALL}
-            other={otherBook && { name: otherBook.name, go: () => setMarket({ date: board.date, book: otherBook.id }) }} />
+        <Section title={chosenGame ? `${chosenGame.short} props` : 'All props'} aside="Recorded prices, not live quotes">
+          {/* the games sit right above the props and stay pinned while scrolling them, so switching
+              is one tap; the choice also narrows the suggested slip and the quick adds */}
+          <div className="sticky top-0 z-20 -mx-1 mb-3 bg-ink/95 px-1 py-2 backdrop-blur">
+            <GameCards games={board.games} value={game} all={ALL} onChange={setGame} />
+          </div>
+          {chosenGame
+            ? <GameProps key={chosenGame.game} game={chosenGame} legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} />
+            : <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'}
+              other={otherBook && { name: otherBook.name, go: () => setMarket({ date: board.date, book: otherBook.id }) }} />}
         </Section>
 
         <SlipImageReview market={chosen} legs={legsById} onApply={slip.set} />

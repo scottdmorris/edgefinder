@@ -4,6 +4,72 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Moneylines and win chances on the game cards
+- Each game card on the Parlay screen shows both teams' moneyline and the market's win
+  chance with the book's margin removed ("MEM +150 39%"). When you open a game, each team's
+  heading shows the same numbers, with a note that they come from the FanDuel (or DraftKings)
+  moneyline and are the market's view, not a model's. A game with no archived moneyline
+  shows no odds.
+- Source: PropLine. The snapshot job's single bulk request now also asks for `h2h`, so
+  FanDuel's and DraftKings' moneylines arrive with no extra request and no Odds API credits.
+  They are archived for each due game before tip-off in `data/nba_moneylines.csv`, and a
+  failure there is logged without affecting the props archive or the snapshot.
+- Display only: moneylines never enter the published record, the X posts or the slip trials.
+  No model win estimate was added.
+- Validation: new pytest tests (parsing, no-vig math, archive, book choice, snapshot
+  failure) and API tests pass with the full suite (1,513 passed), along with ruff, 3 new
+  vitest tests plus the full web suite (89 passed), `npx tsc --noEmit` and `npm run build`.
+  Parsing was checked against today's live PropLine payload. The cards and game view were
+  checked in the rebuilt app using sample prices, because tonight's games had already tipped
+  and none had been archived.
+
+### Simpler, sportsbook-style prop rows
+- Each prop row now reads like a sportsbook: the player, the game and their season and
+  last-10 average, then two price buttons with the line on top and the price underneath
+  ("O 24.5 / -110"). The implied chance, the model's view and projection, hit rates, the
+  other book's price, quote warnings and the alternate lines moved behind an ⓘ button,
+  and the help text above the list is one line.
+- On a phone the buttons are narrower so names and averages fit instead of being cut off.
+- Validation: the 9 prop-list tests were rewritten for the new layout and pass with the
+  other web tests and the TypeScript check on these files; checked in the rebuilt app at
+  desktop and phone width (375px, no sideways scroll).
+
+### Paper trial: X+ lines for rebounds, assists and threes
+- The early snapshot reads FanDuel's "X+" rungs for rebounds, assists and threes from
+  PropLine's milestone markets (same request as before) and prices them with the Simple
+  model into their own ledger, `data/nba_alt_stats_log.csv`. The settle job grades them
+  from box scores and reports each stat's picks, record and units in its log.
+- It is a trial only: the board, Record screen, X posts and slip trials never read it, and
+  the points X+ ledger is untouched. Its pick rule is the points X+ rule without the ban
+  on the Simple model, since that ban was measured on points only.
+- Validation: 1,504 Python tests pass (7 new) and ruff is clean. A live dry run into a
+  scratch file priced 159 rungs on the one game not yet started, 11 of them picks.
+
+### Sportsbook-style games on the Parlay screen
+- The game filter is now a row of game cards in tip-off order, each with both teams'
+  logos, the tip time and how many players have props, with scroll arrows on desktop. It
+  sits right above the props and stays pinned while scrolling them.
+- Every prop row shows the player's season and last-10 average for that stat (it was only
+  in a hover tooltip before).
+- Choosing a game lists its props by team, away side first, each player once with every
+  stat he has a line for. Players start folded to one line ("PTS 17.5 · REB 2.5 · ...")
+  to keep the page short and open with a tap; a player already on the slip starts open.
+  A stat filter and a player search narrow it.
+- The board API now sends each game's tip time, team codes, logos and player count, and
+  each leg's team.
+- Validation: 1,497 Python tests pass (1 new), 85 web tests pass (5 new), ruff and the
+  TypeScript check are clean, and the screen was checked in the rebuilt app on the
+  2026-11-23 slate.
+
+### What the misses say, in the nightly settle report
+- The settle log gains a section per model for FanDuel points: picks split by over and
+  under (win rate, units, and how far the actual score landed from the projection), split
+  by price, and how much of the model's disagreement with the line came true across every
+  settled line. It is read-only: a lesson from it becomes a new model version, never a
+  change to the models being graded.
+- Validation: 1,496 Python tests pass (7 new) and ruff is clean; the section was printed
+  from the real ledger and matches a separate scratch analysis.
+
 ### Every prop on a player's page, with his averages
 - A player's "On the slate" box now lists each FanDuel line he has (points, rebounds,
   assists, 3-pointers) in a table beside his season and last-10 averages for that stat

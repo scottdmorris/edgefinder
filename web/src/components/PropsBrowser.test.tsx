@@ -11,6 +11,7 @@ const over = { id: 1, player: 'Nikola Jokić', player_id: 7, photo: '', game: 'D
 const under = { ...over, id: 2, side: 'Under', bet: 'Under 24.5 points', market_pct: 48, model_pct: 40, chance_pct: 46 }
 const rebound = { ...over, id: 3, stat: 'rebounds', side: '10+', line: 9.5, bet: '10+ rebounds' }
 const other = { ...over, id: 4, player: 'Jaylen Brown', player_id: 8 }
+const details = (name = 'Details for Nikola Jokić Points') => fireEvent.click(screen.getByRole('button', { name }))
 
 it('combines accent-insensitive search, stat and selected filters', () => {
   render(<PropsBrowser legs={[over, under, rebound, other]} selected={[3]} toggle={vi.fn()} kalshi={false} />)
@@ -23,11 +24,20 @@ it('combines accent-insensitive search, stat and selected filters', () => {
   expect(screen.getByText('No matching props')).toBeTruthy()
 })
 
+it('shows a prop like a sportsbook: the line and price on each button, the numbers behind it on request', () => {
+  render(<PropsBrowser legs={[over, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByRole('button', { name: 'Over Nikola Jokić 24.5 Points' }).textContent).toBe('O 24.5-110')
+  expect(screen.getByRole('button', { name: 'Under Nikola Jokić 24.5 Points' }).textContent).toBe('U 24.5-110')
+  expect(screen.queryByText(/Price implies/)).toBeNull()             // no percentages until asked
+  details()
+  expect(screen.getByText(/Price implies/).textContent).toBe('Price implies 52% · model 60%')
+})
+
 it("shows the under side's chances when the under is selected and exposes pressed state", () => {
   const toggle = vi.fn()
   render(<PropsBrowser legs={[over, under]} selected={[2]} toggle={toggle} kalshi={false} />)
-  expect(screen.getByText('48%')).toBeTruthy()
-  expect(screen.getByText('model 40%')).toBeTruthy()
+  details()
+  expect(screen.getByText(/Price implies/).textContent).toBe('Price implies 48% · model 40%')
   const button = screen.getByRole('button', { name: 'Under Nikola Jokić 24.5 Points' })
   expect(button.getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(button)
@@ -39,10 +49,12 @@ it('brings a newly selected ladder step into view even when another step is the 
   const view = render(<PropsBrowser legs={[over, under, low]} selected={[]} toggle={vi.fn()} kalshi={true} />)
   expect(screen.getByRole('button', { name: 'Yes Nikola Jokić 25+ Points' })).toBeTruthy()
   view.rerender(<PropsBrowser legs={[over, under, low]} selected={[9]} toggle={vi.fn()} kalshi={true} />)
-  expect(screen.getByRole('button', { name: 'Yes Nikola Jokić 10+ Points' }).getAttribute('aria-pressed')).toBe('true')
-  expect(screen.getByText('90%')).toBeTruthy()
+  const yes = screen.getByRole('button', { name: 'Yes Nikola Jokić 10+ Points' })
+  expect(yes.getAttribute('aria-pressed')).toBe('true')
+  expect(yes.textContent).toMatch(/^Yes 10\+\d+¢$/)
+  details()
+  expect(screen.getByText(/Price implies/).textContent).toContain('90%')
 })
-
 
 it('always offers all four stats and points to another source when one has no lines', () => {
   const three = { ...over, id: 5, stat: 'threes', line: 2.5, bet: 'Over 2.5 threes' }
@@ -70,24 +82,31 @@ it('lists a few players until asked for all, and everyone once a game is chosen'
   expect(screen.getAllByText(/^Player \d/)).toHaveLength(9)
 })
 
-it('changes an alternate line without selecting it until its price is clicked', () => {
+it('changes to an alternate line from the details without selecting it until its price is clicked', () => {
   const toggle = vi.fn()
   const alt = { ...over, id: 9, side: '10+', line: 9.5 }
   render(<PropsBrowser legs={[over, under, alt]} selected={[]} toggle={toggle} kalshi={false} />)
+  details()
   fireEvent.click(screen.getByRole('button', { name: '10+' }))
   expect(toggle).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'At least Nikola Jokić 10+ Points' }))
   expect(toggle).toHaveBeenCalledWith(9)
 })
 
+it("shows the player's season and last-10 average for the stat on each row", () => {
+  render(<PropsBrowser legs={[{ ...over, average: { season: 26.4, last10: 29 } }, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/^avg/).textContent).toBe('avg 26.4 · L10 29.0')
+})
 
-it('shows both recorded prices without calling different numbers a better price', () => {
+it('keeps the other book and quote warnings in the details', () => {
   const compared = { ...over, comparisons: [{ book: 'DraftKings', line: 25.5, odds: 120,
     fetched_at: '2026-11-15T20:00:00Z', stale: false, same_line: false, better_payout: false }],
     quality: { eligible: false, warnings: ['Minutes have been unstable'], history_games: 20,
       recent_hit_pct: 65, historical_low: 10, historical_high: 30, price_at: '2026-11-15T20:00:00Z',
       price_age_minutes: 5, injuries: 'Injury status is not verified' } }
   render(<PropsBrowser legs={[compared, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.queryByText('· other number')).toBeNull()
+  details()
   expect(screen.getByText('· other number').parentElement?.textContent).toContain('DraftKings Over 25.5')
   expect(screen.queryByText(/pays more there/)).toBeNull()
   expect(screen.getByText(/Minutes have been unstable/)).toBeTruthy()

@@ -175,8 +175,10 @@ The full explanation, with a worked example and the limits, is in
   FanDuel and DraftKings lines for all four stats (one request a run, archived in
   `data/nba_propline_lines.csv`). FanDuel's rebounds, assists and threes lines are priced
   into the ledger by the rolling-average model, graded and closed like points, and shown
-  on the board and in the record's by-book table. The published record, the X posts and
-  the slip trials stay FanDuel points only.
+  on the board and in the record's by-book table. FanDuel's "X+" rungs for those stats
+  (6+ rebounds and so on) go into a separate paper trial (`data/nba_alt_stats_log.csv`),
+  graded nightly and reported only in the settle log; nothing suggests them. The
+  published record, the X posts and the slip trials stay FanDuel points only.
 - **A projection becomes a chance** through a negative binomial whose spread
   depends on the size of the projection: a 6-point projection is far noisier,
   relative to its size, than a 25-point one. That change improved the log score

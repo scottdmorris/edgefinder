@@ -18,6 +18,7 @@ in a header, never the URL, and error messages never include it.
 import csv
 import datetime as dt
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -32,6 +33,8 @@ FANDUEL = "fanduel"
 BOOKS = (FANDUEL, "draftkings")
 MARKETS = {"player_points": "points", "player_rebounds": "rebounds",
            "player_assists": "assists", "player_threes": "threes"}
+GAME_MARKETS = ("h2h",)   # moneylines ride along in the same request (see nba_moneylines)
+RUNG = re.compile(r"^\s*(\d+)\+")      # "6+ Rebounds" -> 6
 REQUEST_TIMEOUT = 60
 SAME_GAME_HOURS = 6   # PropLine and The Odds API may list a tip time a little differently
 
@@ -61,7 +64,8 @@ def fetch_slate(get=requests.get) -> tuple[list[dict], int | None]:
         raise PropLineError("No PropLine key configured")
     try:
         response = get(f"{BASE}/sports/{SPORT_KEY}/odds", headers={"X-API-Key": key},
-                       params={"markets": ",".join(MARKETS), "bookmakers": ",".join(BOOKS)},
+                       params={"markets": ",".join([*MARKETS, *GAME_MARKETS]),
+                               "bookmakers": ",".join(BOOKS)},
                        timeout=REQUEST_TIMEOUT)
     except requests.RequestException as exc:
         raise PropLineError(f"PropLine request failed ({type(exc).__name__})") from None
@@ -111,6 +115,28 @@ def new_fanduel_lines(game: dict) -> dict[str, list[dict]]:
                 and None not in (row["over_odds"], row["under_odds"])):
             by_stat.setdefault(row["stat"], []).append(
                 {key: row[key] for key in ("player", "line", "over_odds", "under_odds")})
+    return by_stat
+
+
+def milestone_fanduel_lines(game: dict) -> dict[str, list[dict]]:
+    """FanDuel's "X+" rungs for rebounds, assists and threes, by stat, as {player, line,
+    over_odds} with line half a point under the rung (6+ is 5.5). These markets list one
+    side only and name the rung in the outcome ("6+ Rebounds"). Points X+ come from The
+    Odds API, so they are left out here."""
+    by_stat: dict[str, list[dict]] = {}
+    for listing in game.get("bookmakers", []):
+        if listing.get("key") != FANDUEL:
+            continue
+        for market in listing.get("markets", []):
+            stat = MARKETS.get(market.get("key"))
+            if stat in (None, "points") or market.get("line_type") != "milestone":
+                continue
+            for outcome in market.get("outcomes", []):
+                rung = RUNG.match(str(outcome.get("name") or ""))
+                player, price = outcome.get("description"), outcome.get("price")
+                if rung and player and price is not None:
+                    by_stat.setdefault(stat, []).append(
+                        {"player": player, "line": int(rung.group(1)) - 0.5, "over_odds": price})
     return by_stat
 
 

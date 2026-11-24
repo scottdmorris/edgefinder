@@ -80,6 +80,35 @@ def test_board_defaults_to_the_latest_day_and_lists_every_leg(client):
     assert board["default_style"] in board["styles"]
 
 
+def test_board_games_carry_tip_time_teams_and_logos_in_tip_order(client, monkeypatch):
+    monkeypatch.setattr(service, "_teams", lambda: {1: "BOS", 2: "NYK"})
+    board = client.get("/api/board").json()
+    assert [(g["short"], g["tip"], g["away"], g["home"], g["players"]) for g in board["games"]] == [
+        ("MIL @ BOS", "2026-11-05T00:00:00Z", "MIL", "BOS", 1),
+        ("CHI @ NYK", "2026-11-05T00:30:00Z", "CHI", "NYK", 1)]
+    assert all(g["away_logo"].startswith("http") and g["home_logo"] for g in board["games"])
+    teams = {leg["player"]: leg["team"] for leg in board["legs"]}
+    assert teams == {"Jaylen Brown": "BOS", "Jalen Brunson": "NYK"}
+
+
+def test_board_games_carry_each_sides_moneyline_and_no_vig_win_chance(client, monkeypatch):
+    from edgefinder.data import nba_moneylines
+    rows = [{"fetched_at": WHEN, "phase": "early", "event_id": "e1", "propline_event_id": 1,
+             "commence_time": GAMES[0]["commence_time"], "home": GAMES[0]["home"],
+             "away": GAMES[0]["away"], "book": "fanduel", "away_odds": 128, "home_odds": -150,
+             "changed_at": WHEN}]
+    monkeypatch.setattr(service, "load_moneylines", lambda: pd.DataFrame(rows, columns=nba_moneylines.COLUMNS))
+    games = {g["short"]: g for g in client.get("/api/board").json()["games"]}
+    line = games["MIL @ BOS"]["moneyline"]
+    assert (line["book"], line["away_odds"], line["home_odds"]) == ("fanduel", 128, -150)
+    assert line["home_pct"] > line["away_pct"] and line["away_pct"] + line["home_pct"] == pytest.approx(100)
+    assert games["CHI @ NYK"]["moneyline"] is None            # no price yet: nothing invented
+
+
+def test_board_games_have_no_moneyline_when_none_are_archived(client):
+    assert all(g["moneyline"] is None for g in client.get("/api/board").json()["games"])
+
+
 def test_board_switches_to_draftkings_and_compares_the_matching_fanduel_price(client, monkeypatch):
     from edgefinder.data import nba_props
 

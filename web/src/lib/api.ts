@@ -17,6 +17,8 @@ export type Leg = {
   id: number
   player: string
   player_id: number
+  /** the player's team code from the game logs; null when he has none yet */
+  team?: string | null
   photo: string
   game: string
   game_short: string
@@ -68,6 +70,20 @@ export type Steady = {
   price_pct: number
 }
 
+/** A game on the board, listed like a sportsbook: tip-off time (UTC ISO), each side's code
+ * and logo, and how many players have props. */
+export type BoardGame = {
+  game: string; short: string; tip?: string | null
+  away?: string; home?: string; away_logo?: string; home_logo?: string; players?: number
+  /** the latest moneyline, null until one is archived; display only, never in the record */
+  moneyline?: Moneyline | null
+}
+
+/** A game's moneyline; the win chances are the market's, with the book's margin removed. */
+export type Moneyline = {
+  book: string; away_odds: number; home_odds: number; away_pct: number; home_pct: number; as_of: string
+}
+
 export type Board = {
   date: string
   day_label: string
@@ -78,7 +94,7 @@ export type Board = {
   /** the recommended model first; `record` is its graded points record on this price source */
   models: { id: string; short: string; name: string; record?: string | null; settled?: number; recommended?: boolean }[]
   summary: { games: number; props: number; gaps: number }
-  games: { game: string; short: string }[]
+  games: BoardGame[]
   legs: Leg[]
   gaps: Gap[]
   steady: Steady[]

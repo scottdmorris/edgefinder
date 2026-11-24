@@ -37,11 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from edgefinder.api.suggestion_service import capture_nightly  # noqa: E402
 
 from edgefinder.data import (  # noqa: E402
-    job_health, nba_injuries, nba_props, nba_snapshot_plan, nba_stats, propline)
+    job_health, nba_injuries, nba_moneylines, nba_props, nba_snapshot_plan, nba_stats, propline)
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import (  # noqa: E402
-    book_gaps, gap_log, nba_alt, nba_kalshi_ledger, nba_paper, nba_recording, price_gaps)
+    book_gaps, gap_log, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper, nba_recording,
+    price_gaps)
 
 log = logging.getLogger("nba_props_snapshot")
 
@@ -314,19 +315,30 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) 
         return
     try:
         games, left = propline.fetch_slate()
-        saved = propline.archive(games, [(task.event, task.phase) for task in due],
-                                 dt.datetime.now(dt.timezone.utc).isoformat())
+        fetched_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        saved = propline.archive(games, [(task.event, task.phase) for task in due], fetched_at)
         log.info("PropLine lines saved: %d (%s requests left today)", saved, left)
     except Exception:
         log.exception("PropLine snapshot failed; the FanDuel snapshot is unaffected")
         return
+    try:
+        log.info("Moneylines saved: %d", nba_moneylines.archive(
+            games, [(task.event, task.phase) for task in due], fetched_at))
+    except Exception:
+        log.exception("Moneyline snapshot failed; the FanDuel snapshot is unaffected")
     early = [task.event for task in due if task.phase == "early"]
-    if early:
-        try:
-            log.info("FanDuel rebounds/assists/threes ledger: %d new rows",
-                     record_propline(games, early, models))
-        except Exception:
-            log.exception("Pricing PropLine lines failed; the FanDuel snapshot is unaffected")
+    if not early:
+        return
+    try:
+        log.info("FanDuel rebounds/assists/threes ledger: %d new rows",
+                 record_propline(games, early, models))
+    except Exception:
+        log.exception("Pricing PropLine lines failed; the FanDuel snapshot is unaffected")
+    try:
+        log.info("X+ trial (rebounds/assists/threes): %d new rows",
+                 record_propline_milestones(games, early, models))
+    except Exception:
+        log.exception("Pricing PropLine X+ lines failed; the FanDuel snapshot is unaffected")
 
 
 def record_propline(games: list[dict], events: list[dict], models: Models,
@@ -350,6 +362,27 @@ def record_propline(games: list[dict], events: list[dict], models: Models,
                 model_version=model.version, dispersion=model.dispersions[stat],
                 stat=stat, book=propline.FANDUEL)
             added += nba_paper.append_rows(rows, path=path)
+    return added
+
+
+def record_propline_milestones(games: list[dict], events: list[dict], models: Models,
+                               path: Path | None = None) -> int:
+    """Price FanDuel's X+ rungs for rebounds, assists and threes into their own paper-trial
+    ledger (tracking/nba_alt_stats.py) with the rolling average. Returns the new rows."""
+    recorded_at = dt.datetime.now(dt.timezone.utc).isoformat()
+    added = 0
+    for event in events:
+        game = propline.match_game(event, games)
+        if game is None or game.get("live"):
+            continue
+        for stat, lines in propline.milestone_fanduel_lines(game).items():
+            model = models.kalshi_models()[0]       # built only once there are lines to price
+            names = sorted({line["player"] for line in lines})
+            projections = model.project(event, stat, names)
+            rows = nba_alt_stats.build_rows(event, lines, projections, recorded_at,
+                                            nba_snapshot_plan.tip_date(event),
+                                            model_version=model.version, stat=stat)
+            added += nba_alt_stats.append_rows(rows, path=path)
     return added
 
 

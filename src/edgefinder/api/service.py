@@ -16,7 +16,7 @@ from collections.abc import Callable
 import pandas as pd
 
 from ..betting import correlated, odds_math
-from ..data import job_health, nba_stats
+from ..data import job_health, nba_live, nba_moneylines, nba_players, nba_stats
 from ..data.nba_snapshot_plan import EASTERN
 from ..models import nba_stat_model
 from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
@@ -59,6 +59,10 @@ def load_alt() -> pd.DataFrame:
     return cached(("alt",), nba_alt.load_ledger)
 
 
+def load_moneylines() -> pd.DataFrame:
+    return cached(("moneylines",), nba_moneylines.load)
+
+
 def load_games() -> pd.DataFrame:
     """Two seasons of game logs, so "last 10" still means ten games early in a season."""
     def read() -> pd.DataFrame:
@@ -99,7 +103,7 @@ def _minutes() -> dict[int, float]:
 
 def _teams() -> dict[int, str]:
     games = load_games()
-    return nba_parlay.player_teams(games) if not games.empty else {}
+    return nba_parlay.player_teams(games) if "team" in games.columns and not games.empty else {}
 
 
 def _short(game: str) -> str:
@@ -197,12 +201,13 @@ def candidates(date: str | None, book: str | None, model: str | None) -> tuple[p
     return table, {"date": date, "book": book, "model": model, "found": found}
 
 
-def _leg(index: int, row: pd.Series, averages: dict) -> dict:
+def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> dict:
     stat = row["stat_key"]
     pair = averages.get(int(row["player_id"]), {}).get(nba_stat_model.STATS[stat].column)
     return {
         "quality": row.get("quality"), "comparisons": row.get("comparisons", []),
         "id": int(index), "player": row["Player"], "player_id": int(row["player_id"]),
+        "team": teams.get(int(row["player_id"])),
         "photo": nba_parlay.headshot_url(row["player_id"]), "game": row["Game"],
         "game_short": _short(row["Game"]), "stat": stat, "stat_label": row["Stat"],
         "side": row["Side"], "line": _num(row["line"], 1),
@@ -216,13 +221,45 @@ def _leg(index: int, row: pd.Series, averages: dict) -> dict:
     }
 
 
+def _tips() -> dict[str, str]:
+    """Each event's tip-off time, from whichever recorded prices carry it."""
+    tips: dict[str, str] = {}
+    for frame in (load_alt(), load_ledger()):
+        if not frame.empty and {"event_id", "commence_time"} <= set(frame.columns):
+            known = frame.dropna(subset=["commence_time"]).drop_duplicates("event_id")
+            tips.update(zip(known["event_id"].astype(str), known["commence_time"].astype(str)))
+    return tips
+
+
+def _games(table: pd.DataFrame, book: str = "fanduel") -> list[dict]:
+    """The day's games like a sportsbook lists them: tip-off order, each side's code and logo,
+    how many players have props, and the latest moneyline with each side's no-vig win chance
+    (the chosen book's when it has one; None before any is archived). Display only."""
+    tips = _tips()
+    lines = nba_moneylines.latest(load_moneylines(), book)
+    games = []
+    for game, rows in table.groupby("Game"):
+        away, _, home = str(game).partition(" @ ")
+        codes = [nba_players.team_abbreviation(name) or name for name in (away, home)]
+        tip = min((tips[str(e)] for e in rows["event_id"].unique() if str(e) in tips), default=None)
+        games.append({"game": game, "short": _short(game), "tip": tip,
+                      "away": codes[0], "home": codes[1],
+                      "away_logo": nba_live.logo_url(codes[0]),
+                      "home_logo": nba_live.logo_url(codes[1]),
+                      "players": int(rows["player_id"].nunique()),
+                      "moneyline": next((lines[str(e)] for e in rows["event_id"].unique()
+                                         if str(e) in lines), None)})
+    return sorted(games, key=lambda g: (g["tip"] or "~", g["game"]))
+
+
 def board(date: str | None = None, book: str | None = None, model: str | None = None) -> dict:
     """Everything the Parlay screen opens with."""
     table, chosen = candidates(date, book, model)
     found = chosen["found"]
     averages = _averages()
-    legs = [_leg(i, row, averages) for i, row in table.iterrows()]
-    games = [{"game": g, "short": _short(g)} for g in sorted(table["Game"].unique())]
+    teams = _teams()
+    legs = [_leg(i, row, averages, teams) for i, row in table.iterrows()]
+    games = _games(table, chosen["book"])
     gaps = gaps_for(chosen["date"], chosen["book"], table)
     return {
         "date": chosen["date"], "day_label": nba_view.day_label(chosen["date"], today()),

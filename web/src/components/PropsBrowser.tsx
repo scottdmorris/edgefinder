@@ -4,10 +4,10 @@ import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/l
 import { QuoteNotes } from './QuoteNotes'
 import { Empty, Photo, Pills } from './ui'
 
-const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
+export const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
 const MODEL_AGREES = 2     // percentage points within which the model and the price are called level
 const SHOWN = 6     // players listed before "Show all"; the biggest names come first
-const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+export const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
 export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false, other }: {
   legs: Leg[]; selected: number[]; toggle: (id: number) => void; kalshi: boolean
@@ -38,11 +38,7 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
       <div className="font-bold">No {STATS[stat]} lines from this price source</div>
       {other && <button type="button" onClick={other.go} className="mt-3 min-h-10 rounded-full bg-button px-4 text-sm font-bold text-button-text">See {other.name} lines</button>}
     </div> : rows.length === 0 ? <div className="mt-3"><Empty title="No matching props" hint="Try another game or player." /></div> : <>
-      <p className="mt-3 text-xs text-muted">
-        {kalshi ? 'Tap a number to change the line, then Yes or No to add it.' : 'Tap a number to change the line, then Over or Under to add it.'} The
-        big % is the chance the price implies; "model" is the chosen model's view, green when it rates the bet higher and red when lower.
-        Hit rates come from past games, not forecasts, and injury news isn't checked.
-      </p>
+      <p className="mt-3 text-xs text-muted">Tap a price to add it to your slip. ⓘ shows other lines and the numbers behind a prop.</p>
       <div className="mt-2 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">{(open ? rows : rows.slice(0, SHOWN)).map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} />)}</div>
       {!open && rows.length > SHOWN && <button type="button" onClick={() => setAll(true)}
         className="mt-3 min-h-11 w-full rounded-full border border-line text-sm font-semibold hover:border-line-strong">Show all {rows.length} players</button>}
@@ -50,7 +46,10 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
   </section>
 }
 
-export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean }) {
+/** `compact` is for a row under its player's own heading: no photo, the stat named instead. */
+export function PropRow({ row, slip, toggle, kalshi, compact = false }: {
+  row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean; compact?: boolean
+}) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
   const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
   // the step being looked at; a new selection (from an idea, say) brings its own step into view
@@ -62,53 +61,73 @@ export function PropRow({ row, slip, toggle, kalshi }: { row: Row; slip: number[
   const stepText = (s: Step) => (kalshi || s.yes.side.endsWith('+') ? `${s.threshold}+` : String(s.yes.line))
 
   const strip = useRef<HTMLDivElement>(null)
-  // keep the chosen number in the middle of the strip (scrolls only the strip, never the page)
+  const [open, setOpen] = useState(false)
+  // the other lines live in the details; keep the chosen one in the middle of their strip
   useEffect(() => {
     const box = strip.current
     const on = box?.querySelector<HTMLElement>('[data-on]')
     if (box && on) box.scrollLeft = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2
-  }, [step.threshold])
+  }, [step.threshold, open])
 
+  // a sportsbook price button: the bet on top, the price underneath
   const button = (leg: Leg, no = false) => {
     const on = slip.includes(leg.id)
     const plus = kalshi || leg.side.endsWith('+')
     const word = plus ? (no ? 'No' : 'Yes') : (no ? 'Under' : 'Over')
     const name = kalshi ? word : leg.side.endsWith('+') ? 'At least' : word
+    const top = kalshi ? `${word} ${stepText(step)}` : plus ? stepText(step) : `${no ? 'U' : 'O'} ${leg.line}`
     const price = kalshi ? `${Math.round(100 / (leg.odds > 0 ? leg.odds / 100 + 1 : 100 / -leg.odds + 1))}¢` : american(leg.odds)
     return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}`} onClick={() => toggle(leg.id)}
-      className={`min-h-10 min-w-24 flex-1 rounded-full px-3 text-sm font-bold transition-colors sm:flex-none ${on ? 'bg-button text-button-text' : 'border border-line hover:border-line-strong'}`}>
-      {on ? '✓ ' : ''}{word} <span className="tabular-nums">{price}</span>
+      className={`flex h-12 w-[4.25rem] shrink-0 sm:w-[5.25rem] flex-col items-center justify-center rounded-lg border leading-tight transition-colors ${on ? 'border-button bg-button text-button-text' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+      <span className={`text-[11px] font-semibold ${on ? '' : 'text-muted'}`}>{top}</span>
+      <span className={`text-sm font-black tabular-nums ${on ? '' : 'text-accent'}`}>{price}</span>
     </button>
   }
 
   // the model's view against the price: green when it rates this side higher, red when lower
   const lean = (compared.model_pct ?? 0) - (compared.market_pct ?? 0)
-  const leanTone = compared.model_pct == null || Math.abs(lean) < MODEL_AGREES ? 'text-muted' : lean > 0 ? 'text-good' : 'text-bad'
+  const leanTone = compared.model_pct == null || Math.abs(lean) < MODEL_AGREES ? 'text-text' : lean > 0 ? 'text-good' : 'text-bad'
+  const average = row.average && (row.average.season != null || row.average.last10 != null) ? row.average : null
 
-  // one line per player: who and what, the other numbers to step through, the chance, the prices
-  return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-    <div className="hidden sm:block"><Photo src={row.photo} size={36} /></div>
-    <div className="min-w-0 flex-1 basis-44">
-      <div className="truncate text-sm font-bold">{row.player} <span className="font-semibold text-accent">{stepText(step)} {row.stat}</span></div>
-      {row.steps.length > 1 ? (
-        <div ref={strip} className="no-scrollbar -mx-1 flex gap-0.5 overflow-x-auto px-1">
+  // like a sportsbook: who, their averages, two prices; everything else behind the details button
+  return <div className="px-3 py-2">
+    <div className="flex items-center gap-2 sm:gap-2.5">
+      {!compact && <div className="hidden sm:block"><Photo src={row.photo} size={36} /></div>}
+      <div className="min-w-0 flex-1">
+        <div className="line-clamp-2 text-sm font-bold leading-tight">{compact ? label : row.player}</div>
+        <div className="mt-0.5 text-xs leading-snug tabular-nums text-muted">
+          {!compact && <span>{row.game_short}{average ? ' · ' : ''}</span>}
+          {average && <span>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></span>}
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-1 sm:gap-1.5">{button(step.yes)}{step.no && button(step.no, true)}</div>
+      <button type="button" aria-expanded={open} aria-label={`Details for ${row.player} ${label}`} onClick={() => setOpen((v) => !v)}
+        className={`grid size-7 shrink-0 place-items-center sm:size-8 rounded-full text-sm ${open ? 'bg-raised-2 text-text' : 'text-muted hover:text-text'}`}>
+        {open ? '✕' : 'ⓘ'}
+      </button>
+    </div>
+    {open && <div className="mt-2 space-y-2 rounded-xl bg-raised-2/60 p-3 text-xs text-muted">
+      {row.steps.length > 1 && <div>
+        <div className="mb-1">Other lines</div>
+        <div ref={strip} className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
           {row.steps.map((s) => {
             const on = s.threshold === step.threshold
             const picked = slip.includes(s.yes.id) || (s.no !== null && slip.includes(s.no.id))
             return <button key={s.threshold} type="button" data-on={on || undefined} aria-current={on || undefined}
               onClick={() => setChoice({ threshold: s.threshold, selection })}
-              className={`min-h-8 shrink-0 rounded-full px-2 text-xs font-semibold tabular-nums ${on ? 'bg-raised-2 text-text ring-1 ring-line-strong' : picked ? 'text-accent' : 'text-muted hover:text-text'}`}>
+              className={`min-h-8 shrink-0 rounded-full px-2.5 font-semibold tabular-nums ${on ? 'bg-button text-button-text' : picked ? 'text-accent ring-1 ring-line' : 'ring-1 ring-line hover:text-text'}`}>
               {stepText(s)}
             </button>
           })}
         </div>
-      ) : <div className="truncate text-xs text-muted">{row.game_short}</div>}
-    </div>
-    <div className="w-20 shrink-0 text-center" title={`${row.game_short}${row.average?.season != null ? ` · averages ${row.average.season}` : ''}${compared.projection != null ? ` · projected ${compared.projection.toFixed(1)}` : ''} · blended ${compared.chance_pct?.toFixed(1) ?? '–'}%`}>
-      <div className="text-xl font-black tabular-nums leading-tight">{compared.market_pct?.toFixed(0) ?? '–'}%</div>
-      <div className={`text-[11px] font-semibold tabular-nums ${leanTone}`}>model {compared.model_pct?.toFixed(0) ?? '–'}%</div>
-    </div>
-    <div className="flex basis-full gap-1.5 sm:basis-auto">{button(step.yes)}{step.no && button(step.no, true)}</div>
-    <QuoteNotes quality={compared.quality} comparisons={compared.comparisons} side={compared.side} />
+      </div>}
+      <div>
+        Price implies <b className="text-text">{compared.market_pct?.toFixed(0) ?? '–'}%</b>
+        {' · '}model <b className={leanTone}>{compared.model_pct?.toFixed(0) ?? '–'}%</b>
+        {compared.projection != null && <> · projects <b className="text-text">{compared.projection.toFixed(1)}</b></>}
+      </div>
+      <QuoteNotes quality={compared.quality} comparisons={compared.comparisons} side={compared.side} />
+      <div>Hit rates are past games, not forecasts. Injury news isn't checked.</div>
+    </div>}
   </div>
 }
