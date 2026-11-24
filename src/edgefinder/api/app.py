@@ -22,6 +22,8 @@ from . import live, picks, players, record, review, service, slip_review, teams
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
 MAX_STAKE = 100_000
+MAX_IMAGES_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_BYTES = MAX_IMAGES_BYTES + 64 * 1024      # room for the form's part headers
 
 app = FastAPI(title="Ball Knowledge", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -77,13 +79,26 @@ def _review(call):
         raise HTTPException(status_code=error.status, detail=str(error)) from None
 
 
+def _upload_size_error(content_length: str | None) -> HTTPException | None:
+    """Refuse an upload by its declared size before any of it is received: parsing the form
+    writes every file to disk first, so the per-image limits alone come too late."""
+    if content_length is None or not content_length.isdigit():
+        return HTTPException(411, "Send the images as a normal file upload.")
+    if int(content_length) > MAX_UPLOAD_BYTES:
+        return HTTPException(413, "Images must total no more than 20 MB.")
+    return None
+
+
 @app.post("/api/slip/read")
 async def read_slip_images(request: Request) -> dict:
+    refused = _upload_size_error(request.headers.get("content-length"))
+    if refused:
+        raise refused
     async with request.form(max_files=5, max_fields=0) as form:
         files = [value for _, value in form.multi_items() if isinstance(value, UploadFile)]
         if not 1 <= len(files) <= 5:
             raise HTTPException(422, "Choose between one and five images.")
-        if sum(file.size or 0 for file in files) > 20 * 1024 * 1024:
+        if sum(file.size or 0 for file in files) > MAX_IMAGES_BYTES:
             raise HTTPException(413, "Images must total no more than 20 MB.")
         outputs = []
         for file in files:

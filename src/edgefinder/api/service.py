@@ -23,6 +23,7 @@ from ..tracking import nba_alt, nba_paper, nba_parlay, nba_view, price_gaps
 from . import suggestion_service
 
 CACHE_SECONDS = 60
+CACHE_MAX_ENTRIES = 256
 IDEAS_SHOWN = 3
 STEADY_GAMES = 20             # the same window the season backtest measured
 STEADY_MIN_RATE = 0.9
@@ -37,11 +38,18 @@ class NotFound(ValueError):
 
 
 def cached(key: tuple, compute: Callable, seconds: float = CACHE_SECONDS):
+    """`compute()`, reused for `seconds`. Entries past their time are dropped on each write and
+    the cache never holds more than CACHE_MAX_ENTRIES, so odd requests can't grow it for good."""
+    now = time.monotonic()
     hit = _cache.get(key)
-    if hit and time.monotonic() - hit[0] < seconds:
+    if hit and now < hit[0]:
         return hit[1]
     value = compute()
-    _cache[key] = (time.monotonic(), value)
+    for stale in [k for k, (expires, _) in _cache.items() if expires <= now]:
+        del _cache[stale]
+    while len(_cache) >= CACHE_MAX_ENTRIES:
+        del _cache[min(_cache, key=lambda k: _cache[k][0])]     # the one closest to expiring
+    _cache[key] = (now + seconds, value)
     return value
 
 
@@ -66,10 +74,10 @@ def load_moneylines() -> pd.DataFrame:
 def load_games() -> pd.DataFrame:
     """Two seasons of game logs, so "last 10" still means ten games early in a season."""
     def read() -> pd.DataFrame:
-        today = dt.date.today()
+        day = today()                  # Eastern, like the board's days, not this machine's clock
         try:
-            return pd.concat([nba_stats.load_season(s, today=today)
-                              for s in nba_stats.recent_seasons(today, 2)], ignore_index=True)
+            return pd.concat([nba_stats.load_season(s, today=day)
+                              for s in nba_stats.recent_seasons(day, 2)], ignore_index=True)
         except nba_stats.NbaDataError:
             return pd.DataFrame()
     return cached(("games",), read, 600)
@@ -354,6 +362,8 @@ def ideas(date: str | None, book: str | None, model: str | None, style: str,
     if style not in nba_parlay.STYLES:
         raise NotFound(f"unknown style {style}")
     table, chosen = candidates(date, book, model)
+    if game and not (table["Game"] == game).any():
+        raise NotFound(f"no game {game[:80]!r} on this board")
     pool = table if not game else table[table["Game"] == game]
     if style in (suggestion_service.STYLE, nba_parlay.LONG_SHOT):
         pool = pool[pool["quality"].map(lambda q: q["eligible"])]

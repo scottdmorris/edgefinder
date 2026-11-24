@@ -76,6 +76,11 @@ def rows_to_log(gaps: pd.DataFrame, ledger: pd.DataFrame, game_date: str,
 def append(rows: list[dict], path: Path | None = None) -> int:
     """Add gaps not already logged for the same bet. Returns how many were new."""
     path = path or LOG_PATH
+    with safe_write.locked(path):     # never while a settle is rewriting the file
+        return _append_unlocked(rows, path)
+
+
+def _append_unlocked(rows: list[dict], path: Path) -> int:
     seen = {_key(r) for r in load(path).to_dict("records")}
     fresh = []
     for row in rows:

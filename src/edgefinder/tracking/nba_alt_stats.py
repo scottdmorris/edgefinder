@@ -19,6 +19,7 @@ import pandas as pd
 
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, implied_prob
+from ..data import safe_write
 from ..models import nba_stat_model
 from . import nba_alt, settlement
 from .nba_paper import MAX_DISAGREEMENT, MIN_EV_TO_RECORD, MIN_MODEL_P, MODEL_WEIGHT, tipped_off
@@ -89,6 +90,11 @@ def _key(row) -> tuple:
 def append_rows(rows: list[dict], path: Path | None = None) -> int:
     """Add rows not already recorded for the same game, player, stat, rung and model."""
     path = path or LEDGER_PATH
+    with safe_write.locked(path):     # never while a settle is rewriting the file
+        return _append_rows_unlocked(rows, path)
+
+
+def _append_rows_unlocked(rows: list[dict], path: Path) -> int:
     seen = {_key(row) for row in load_ledger(path).to_dict("records")}
     fresh = []
     for row in rows:
@@ -119,6 +125,8 @@ def settle(ledger: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.Data
         box = played.get((int(row["player_id"]), str(row["game_date"])))
         if box is not None:
             actual = float(box[nba_stat_model.STATS[row["stat"]].column])
+            if math.isnan(actual):
+                continue                 # the box score isn't filled in yet: grade it next run
             won = actual >= float(row["threshold"])
             out.loc[index, "status"] = "settled"
             out.loc[index, "actual"] = actual

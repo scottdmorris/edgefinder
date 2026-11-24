@@ -150,6 +150,11 @@ def append_rows(rows: list[dict], path: Path | None = None) -> int:
     """Add rows not already recorded for the same game, player, total and
     model. Returns how many were new."""
     path = path or LEDGER_PATH
+    with safe_write.locked(path):     # never while a settle is rewriting the file
+        return _append_rows_unlocked(rows, path)
+
+
+def _append_rows_unlocked(rows: list[dict], path: Path) -> int:
     existing = load_ledger(path)
     seen = set(zip(existing["event_id"], existing["player"],
                    existing["threshold"], existing["model_version"]))
@@ -209,10 +214,12 @@ def settle(ledger: pd.DataFrame, games: pd.DataFrame, today: dt.date) -> pd.Data
         key = (int(row["player_id"]), str(row["game_date"]))
         if key in points:
             actual = points[key]
+            if math.isnan(actual):
+                continue                 # the box score isn't filled in yet: grade it next run
             won = actual >= float(row["threshold"])
             out.loc[index, "status"] = "settled"
             out.loc[index, "actual"] = actual
-            if row["is_pick"]:
+            if str(row["is_pick"]) == "True":   # as text: one blank cell makes the column text
                 out.loc[index, "result"] = "win" if won else "loss"
                 out.loc[index, "pnl_units"] = (
                     american_to_decimal(float(row["over_odds"])) - 1.0 if won else -1.0)

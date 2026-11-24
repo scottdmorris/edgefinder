@@ -171,6 +171,11 @@ def append_rows(rows: list[dict], path: Path | None = None) -> int:
     """Add rows not already recorded for the same game, player, line, model,
     stat and book. Returns how many were new."""
     path = path or LEDGER_PATH
+    with safe_write.locked(path):     # never while a settle is rewriting the file
+        return _append_rows_unlocked(rows, path)
+
+
+def _append_rows_unlocked(rows: list[dict], path: Path) -> int:
     existing = load_ledger(path)
     seen = set(map(_row_key, existing.to_dict("records")))
     fresh = []

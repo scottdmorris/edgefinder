@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Safer ledgers, grading and uploads
+
+- The snapshot and settle jobs now take turns with each ledger (a `.lock` file beside it), so
+  a settle rewriting a ledger can no longer drop rows a snapshot appended at the same moment.
+  A job waits up to two minutes for its turn; a lock older than 15 minutes is cleared.
+- A player whose box score is listed but not filled in yet stays pending in both X+ ledgers
+  instead of being graded a loss.
+- The points X+ ledger only grades rows that are picks, even if the pick column is read back as
+  text.
+- The API's short-term cache drops expired entries and holds at most 256; suggested slips for a
+  game not on the board are refused instead of cached.
+- Slip-image uploads larger than 20 MB are refused by their declared size before any of the
+  upload is written to disk.
+- The game history behind averages picks its seasons by the Eastern date, like the rest of the
+  app.
+- Validation: `pytest` 1,525 passed; `ruff check` clean. The web app was not changed.
+
 ### Fixes to the Parlay game pages and the X+ recording
 
 - An old `?game=` link for a game not on the board no longer empties the suggested slip; the

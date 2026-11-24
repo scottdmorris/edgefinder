@@ -23,22 +23,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import (  # noqa: E402
-    job_health, nba_props, nba_snapshot_plan, nba_stats, propline)
+    job_health, nba_props, nba_snapshot_plan, nba_stats, propline, safe_write)
 from edgefinder.tracking import (  # noqa: E402
     book_gaps, gap_log, miss_report, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper)
 
 
 def build_report(today: dt.date) -> str:
-    ledger = nba_paper.load_ledger()
-    if ledger.empty:
+    if nba_paper.load_ledger().empty:
         return "The ledger is empty: run scripts/nba_props_snapshot.py first."
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
     fanduel_close, other_close = nba_props.load_snapshots(), nba_props.load_book_snapshots()
-    settled = nba_paper.settle(ledger, games, fanduel_close, today,
-                               nba_kalshi_ledger.load_snapshots(), other_close,
-                               propline.load_snapshots())
-    logged = nba_paper.log_settlements(ledger, settled)
-    nba_paper.save_ledger(settled)
+    kalshi_close, propline_close = nba_kalshi_ledger.load_snapshots(), propline.load_snapshots()
+    # read, grade and write back as one step, so a snapshot's new rows can't be overwritten
+    with safe_write.locked(nba_paper.LEDGER_PATH):
+        ledger = nba_paper.load_ledger()
+        settled = nba_paper.settle(ledger, games, fanduel_close, today, kalshi_close,
+                                   other_close, propline_close)
+        logged = nba_paper.log_settlements(ledger, settled)
+        nba_paper.save_ledger(settled)
 
     lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"
              f"  ({logged} results added to the pick chain)"]
@@ -75,11 +77,12 @@ def build_report(today: dt.date) -> str:
 
 def alt_block(games, today: dt.date) -> list[str]:
     """Settle the X+ points ledger and report each model's picks."""
-    alt = nba_alt.load_ledger()
-    if alt.empty:
-        return []
-    settled = nba_alt.settle(alt, games, today)
-    nba_alt.save_ledger(settled)
+    with safe_write.locked(nba_alt.LEDGER_PATH):
+        alt = nba_alt.load_ledger()
+        if alt.empty:
+            return []
+        settled = nba_alt.settle(alt, games, today)
+        nba_alt.save_ledger(settled)
     lines = ["", f"X+ points ledger: {len(settled)} prices  "
                   f"{settled['status'].value_counts().to_dict()}"]
     for version in sorted(settled["model_version"].dropna().unique()):
@@ -91,11 +94,12 @@ def alt_block(games, today: dt.date) -> list[str]:
 
 def alt_stats_block(games, today: dt.date) -> list[str]:
     """Settle the rebounds/assists/threes X+ paper trial and report it by stat."""
-    trial = nba_alt_stats.load_ledger()
-    if trial.empty:
-        return []
-    settled = nba_alt_stats.settle(trial, games, today)
-    nba_alt_stats.save_ledger(settled)
+    with safe_write.locked(nba_alt_stats.LEDGER_PATH):
+        trial = nba_alt_stats.load_ledger()
+        if trial.empty:
+            return []
+        settled = nba_alt_stats.settle(trial, games, today)
+        nba_alt_stats.save_ledger(settled)
     return nba_alt_stats.report_lines(settled)
 
 
@@ -109,11 +113,12 @@ def fair_close_text(facts: dict) -> str:
 
 def gap_block(games, today: dt.date, closes=()) -> list[str]:
     """Grade the FanDuel-vs-Kalshi price gaps and report how betting them would have done."""
-    log = gap_log.load()
-    if log.empty:
-        return []
-    settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
-    gap_log.save(settled)
+    with safe_write.locked(gap_log.LOG_PATH):
+        log = gap_log.load()
+        if log.empty:
+            return []
+        settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
+        gap_log.save(settled)
     s = gap_log.summary(settled)
     lines = ["", f"Price gaps: {s['all']['logged']} logged, {s['all']['graded']} graded"]
     for part in ("all", "exact", "estimated"):
@@ -125,11 +130,12 @@ def gap_block(games, today: dt.date, closes=()) -> list[str]:
 
 def book_gap_block(games, today: dt.date, closes=()) -> list[str]:
     """Grade the FanDuel-vs-DraftKings gaps the same way."""
-    log = gap_log.load(book_gaps.LOG_PATH)
-    if log.empty:
-        return []
-    settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
-    gap_log.save(settled, book_gaps.LOG_PATH)
+    with safe_write.locked(book_gaps.LOG_PATH):
+        log = gap_log.load(book_gaps.LOG_PATH)
+        if log.empty:
+            return []
+        settled = gap_log.attach_closing(gap_log.settle(log, games, today), *closes)
+        gap_log.save(settled, book_gaps.LOG_PATH)
     s = gap_log.summary(settled, splits=book_gaps.HOW)
     lines = ["", f"DraftKings gaps: {s['all']['logged']} logged, {s['all']['graded']} graded"]
     for part, label in (("all", "all"), ("price", "better price"), ("number", "other number")):

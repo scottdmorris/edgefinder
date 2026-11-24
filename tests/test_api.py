@@ -485,3 +485,31 @@ def test_a_live_game_takes_its_period_from_the_latest_play_not_the_lagging_score
     game = nba_live.LiveGame("1", nba_live.LIVE, "Q1", 1, "0:00", "MIL", "BOS", 0, 0)
     assert live.freshest(game, _detail()).period == 2
     assert live._period_number("OT2") == 6
+
+
+def test_ideas_for_a_game_not_on_the_board_are_refused_not_cached(client):
+    response = client.get("/api/ideas", params={"style": "Higher hit rate", "game": "Nobody @ Nowhere"})
+    assert response.status_code == 404
+    assert not any(key[0] == "ideas" for key in service._cache)
+
+
+def test_the_cache_drops_expired_entries_and_never_grows_past_its_limit(monkeypatch):
+    service.clear_cache()
+    monkeypatch.setattr(service, "CACHE_MAX_ENTRIES", 3)
+    for n in range(10):
+        service.cached(("k", n), lambda n=n: n)
+    assert len(service._cache) == 3
+    service.cached(("gone",), lambda: 1, seconds=-1)              # already expired
+    service.cached(("new",), lambda: 2)
+    assert ("gone",) not in service._cache and len(service._cache) <= 3
+    assert service.cached(("new",), lambda: 99) == 2              # still served from the cache
+    service.clear_cache()
+
+
+def test_an_upload_too_big_by_its_declared_size_is_refused_before_it_is_read(client):
+    big = str(api_app.MAX_UPLOAD_BYTES + 1)
+    response = client.post("/api/slip/read", content=b"x", headers={
+        "content-type": "multipart/form-data; boundary=b", "content-length": big})
+    assert response.status_code == 413
+    assert api_app._upload_size_error(None).status_code == 411
+    assert api_app._upload_size_error("1024") is None

@@ -68,3 +68,8 @@ def test_the_summary_is_split_by_stat():
     assert any(line.strip().startswith("rebounds") and "1-0" in line for line in lines)
     assert any(line.strip().startswith("assists") and "0-1" in line for line in lines)
     assert nba_alt_stats.report_lines(pd.DataFrame(columns=nba_alt_stats.COLUMNS)) == []
+
+
+def test_a_blank_box_score_leaves_a_rung_pending():
+    settled = nba_alt_stats.settle(pd.DataFrame(_rows()), _games(reb=float("nan")), dt.date(2099, 11, 24))
+    assert (settled["status"] == "pending").all() and settled["result"].isna().all()

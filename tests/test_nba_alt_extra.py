@@ -324,3 +324,15 @@ def test_suggestions_are_capped_at_top():
     table = nba_alt.suggestions(ledger, "2026-11-04", top=3)
     assert len(table) == 3
     assert table["EV %"].tolist() == sorted(table["EV %"].tolist(), reverse=True)
+
+
+def test_a_blank_box_score_leaves_the_row_pending_rather_than_a_loss():
+    out = nba_alt.settle(frame(row()), games(float("nan")), TODAY)
+    assert out.loc[0, "status"] == "pending" and pd.isna(out.loc[0, "result"])
+
+
+def test_a_non_pick_read_back_as_text_is_never_graded():
+    ledger = frame(row(is_pick=False, pick_ev=None)).astype({"is_pick": object})
+    ledger.loc[0, "is_pick"] = "False"              # one blank cell elsewhere makes the column text
+    out = nba_alt.settle(ledger, games(30), TODAY)
+    assert out.loc[0, "status"] == "settled" and pd.isna(out.loc[0, "result"])
