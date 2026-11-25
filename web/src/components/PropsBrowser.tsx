@@ -56,12 +56,14 @@ export function PickStar({ on = false }: { on?: boolean }) {
 }
 
 /** `compact` is for a row under its player's own heading: no photo, the stat named instead. */
-export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false, team }: {
+export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false, team, locked = false }: {
   row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean; compact?: boolean
   /** on a game's own page: the game is already named above, so it is left off the row */
   inGame?: boolean
   /** the player's team code, shown first on a game's page where both teams share one list */
   team?: string
+  /** the game has started: its pregame prices can't be added, only taken off the slip */
+  locked?: boolean
 }) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
   const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
@@ -92,14 +94,15 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
     const name = kalshi ? word : leg.side.endsWith('+') ? 'At least' : word
     const top = kalshi ? `${word} ${stepText(step)}` : plus ? stepText(step) : `${no ? 'U' : 'O'} ${leg.line}`
     const price = kalshi ? `${Math.round(100 / (leg.odds > 0 ? leg.odds / 100 + 1 : 100 / -leg.odds + 1))}¢` : american(leg.odds)
-    return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}${leg.pick ? ', model pick' : ''}`} onClick={() => toggle(leg.id)}
-      className={`relative flex h-12 w-[4.25rem] shrink-0 sm:w-[5.25rem] flex-col items-center justify-center rounded-lg border leading-tight transition-colors ${on ? 'border-button bg-button text-button-text' : leg.pick ? 'border-good bg-raised-2 hover:border-good' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+    return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}${leg.pick ? ', model pick' : ''}`} onClick={() => toggle(leg.id)} disabled={locked && !on}
+      className={`relative flex h-12 disabled:cursor-not-allowed disabled:opacity-40 w-[4.25rem] shrink-0 sm:w-[5.25rem] flex-col items-center justify-center rounded-lg border leading-tight transition-colors ${on ? 'border-button bg-button text-button-text' : leg.pick ? 'border-good bg-raised-2 hover:border-good' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
       {leg.pick && <PickStar on={on} />}
       <span className={`text-[11px] font-semibold ${on ? '' : 'text-muted'}`}>{top}</span>
       <span className={`text-sm font-black tabular-nums ${on ? '' : 'text-accent'}`}>{price}</span>
     </button>
   }
   const picked = step.yes.pick ? step.yes : step.no?.pick ? step.no : null
+  const pickModel = picked?.projection_model || 'Model'
   const pickText = picked && (kalshi ? `${picked === step.no ? 'No' : 'Yes'} ${stepText(step)}`
     : picked.side.endsWith('+') ? stepText(step) : `${picked.side} ${picked.line}`)
   const projection = step.yes.projection ?? step.no?.projection
@@ -115,7 +118,7 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
       {!compact && <div className="hidden sm:block"><Photo src={row.photo} size={36} /></div>}
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 text-sm font-bold leading-tight">{compact ? label : row.player}</div>
-        {pickText && <div className="mt-0.5 text-xs font-bold text-good">★ Model pick: {pickText}</div>}
+        {pickText && <div className="mt-0.5 text-xs font-bold text-good">★ {pickModel} pick: {pickText}</div>}
         <div className="mt-0.5 text-xs leading-snug tabular-nums text-muted">
           {[!compact && (inGame ? team : row.game_short),
             average && <>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></>,

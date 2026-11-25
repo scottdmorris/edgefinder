@@ -26,6 +26,10 @@ DEFAULTS = {"stat": STAT, "book": BOOK}      # what an old ledger row without th
 COLUMNS = ["Leg", "Stat", "stat_key", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
            "away_abbr", "home_abbr", "projection", "projection_model", "model_pick"]
+# X+ picks are tracked but not marked on the board: on the rungs FanDuel offers (10+, 15+ ...)
+# every model's settled X+ picks had lost money to 2026-11-24 (context-v2 28-47, -20%; context-v1
+# -9%; the others -23% and worse). Over / Under picks are marked.
+MARK_X_PLUS_PICKS = False
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
 SAME_GAME_POOL = 10        # inside one game, fewer: every combination is priced with correlations
 # Different players' bets in one game move together only a little (the measured values
@@ -325,7 +329,7 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str,
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
                  row.over_odds, model_over(row, row.model_p) if model_over else row.model_p,
                  row.market_p, True, row.threshold - 0.5, STAT,
-                 str(getattr(row, "is_pick", "")) == "True")
+                 MARK_X_PLUS_PICKS and str(getattr(row, "is_pick", "")) == "True")
         for row in day.itertuples()
     ]
 

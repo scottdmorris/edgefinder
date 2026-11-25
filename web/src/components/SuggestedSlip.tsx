@@ -14,7 +14,9 @@ const STYLE_NOTES: Record<string, string> = {
   [LONG_SHOT]: 'Long shot stacks 8 to 10 of the likeliest legs worth betting, at most two players a game, for a big payout. Every leg adds the book’s cut again: on last season’s markets slips like this lost money at real prices. It is tracked on paper in the Record tab. Kalshi usually has enough legs; FanDuel and DraftKings rarely do.',
 }
 
-export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, inUse, onUse }: {
+export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, inUse, onUse, started = false }: {
+  /** the chosen game has tipped off: nothing in it can be suggested */
+  started?: boolean
   /** null while the suggestions load */
   ideas: Idea[] | null
   legs: Map<number, Leg>
@@ -43,10 +45,13 @@ export function SuggestedSlip({ ideas, legs, sameGame, styles, style, onStyle, i
       </div>
 
       {ideas === null && <div className="mt-3 h-32 animate-pulse rounded-2xl bg-raised-2" />}
-      {ideas?.length === 0 && <p className="mt-4 text-sm text-muted">{style === LONG_SHOT && sameGame
-        ? 'Long shot needs legs from several games; clear the game filter to see one.'
-        : 'No qualifying slip right now. Passing is part of this style; do not add legs just to get a suggestion.'}</p>}
-      {STYLE_NOTES[style] && <p className="mt-2 text-xs text-muted">{STYLE_NOTES[style]}</p>}
+      {ideas?.length === 0 && <p className="mt-3 text-sm text-muted">{started
+        ? 'This game has started, so there is nothing left to suggest in it.'
+        : style === LONG_SHOT && sameGame
+          ? 'Long shot needs legs from several games; clear the game filter to see one.'
+          : 'No qualifying slip in this style right now. Passing is part of it: don’t add legs just to get one.'}</p>}
+      {/* the style's explanation only when there is a slip for it to explain */}
+      {STYLE_NOTES[style] && !!ideas?.length && <p className="mt-2 text-xs text-muted">{STYLE_NOTES[style]}</p>}
       {idea && (
         <div key={idea.legs.join(',')} className="rise">
           <p className="mt-2 text-xs text-muted">

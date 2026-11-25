@@ -55,14 +55,14 @@ export function GameCards({ games, value, all, onChange, layout = 'row', picks =
       const odds = awayPrice && homePrice
         ? `, ${away} ${awayPrice.odds} ${awayPrice.pct} to win, ${home} ${homePrice.odds} ${homePrice.pct} to win` : ''
       return <button key={g.game} type="button" aria-pressed={on} onClick={() => onChange(g.game)}
-        aria-label={`${g.short}, ${tipTime(g.tip)}${odds}, ${players}${pickText ? `, ${pickText}` : ''}`}
+        aria-label={`${g.short}, ${g.started ? 'started, ' : ''}${tipTime(g.tip)}${odds}, ${players}${pickText ? `, ${pickText}` : ''}`}
         title={g.moneyline ? 'Moneyline and win chance with the book’s margin removed' : undefined}
-        className={`${card} ${tone(on)} ${g.moneyline ? 'min-w-48' : 'min-w-36'}`}>
+        className={`${card} ${tone(on)} ${g.moneyline ? 'min-w-48' : 'min-w-36'} ${g.started ? 'opacity-60' : ''}`}>
         <div className="flex flex-col gap-1">
           <Side code={away} logo={g.away_logo} price={awayPrice} />
           <Side code={home} logo={g.home_logo} price={homePrice} />
         </div>
-        <div className="mt-1.5 text-[11px] text-muted">{tipTime(g.tip)} · {players}
+        <div className="mt-1.5 text-[11px] text-muted">{g.started && <b className="text-warn">Started · </b>}{tipTime(g.tip)} · {players}
           {pickText && <> · <b className="text-good">★ {pickText}</b></>}</div>
       </button>
     })}

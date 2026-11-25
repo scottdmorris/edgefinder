@@ -144,3 +144,29 @@ it('counts several picked rungs of one ladder as one pick and shows their range'
   fireEvent.click(screen.getByRole('radio', { name: 'Points X+ · ★1' }))
   expect(screen.getByText('★ Model pick: 25+ to 30+')).toBeTruthy()
 })
+
+it("locks a started game's pregame prices but lets a leg already on the slip come off", () => {
+  const toggle = vi.fn()
+  render(<GameProps game={{ ...game, started: true }} legs={legs} selected={[6]} toggle={toggle} kalshi={false} />)
+  expect(screen.getByRole('status').textContent).toMatch(/This game has started/)
+  expect((screen.getByRole('button', { name: 'Over Ja Morant 24.5 Points' }) as HTMLButtonElement).disabled).toBe(true)
+  const onSlip = screen.getByRole('button', { name: 'Under Ja Morant 24.5 Points' }) as HTMLButtonElement
+  expect(onSlip.disabled).toBe(false)
+  fireEvent.click(onSlip)
+  expect(toggle).toHaveBeenCalledWith(6)
+})
+
+it("names the model behind a pick and when the page's prices were recorded", () => {
+  const priced = legs.map((l) => ({ ...l, quality: { price_at: '2026-11-23T22:02:00Z' } as Leg['quality'],
+    ...(l.id === 3 ? { pick: true, projection_model: 'Recent average' } : {}) }))
+  render(<GameProps game={game} legs={priced} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/prices recorded/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('radio', { name: '3PM · ★1' }))
+  expect(screen.getByText('★ Recent average pick: Over 1.5')).toBeTruthy()
+})
+
+it('shows a started game on its card and says so', () => {
+  render(<GameCards games={[{ ...game, started: true }]} value="" onChange={vi.fn()} layout="list" />)
+  const card = screen.getByRole('button', { name: /^MEM @ CHA, started/ })
+  expect(card.textContent).toContain('Started')
+})

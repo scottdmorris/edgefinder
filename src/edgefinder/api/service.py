@@ -87,6 +87,20 @@ def today() -> dt.date:
     return dt.datetime.now(EASTERN).date()
 
 
+def now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _started(tip: str | None) -> bool:
+    """Whether a game has tipped off: its pregame prices are gone from the sportsbook."""
+    if not tip:
+        return False
+    try:
+        return pd.Timestamp(tip) <= pd.Timestamp(now())
+    except (ValueError, TypeError):
+        return False
+
+
 # ---- helpers ---------------------------------------------------------------------------------
 
 def _num(value, digits: int = 2):
@@ -252,7 +266,7 @@ def _games(table: pd.DataFrame, book: str = "fanduel") -> list[dict]:
         away, _, home = str(game).partition(" @ ")
         codes = [nba_players.team_abbreviation(name) or name for name in (away, home)]
         tip = min((tips[str(e)] for e in rows["event_id"].unique() if str(e) in tips), default=None)
-        games.append({"game": game, "short": _short(game), "tip": tip,
+        games.append({"game": game, "short": _short(game), "tip": tip, "started": _started(tip),
                       "away": codes[0], "home": codes[1],
                       "away_logo": nba_live.logo_url(codes[0]),
                       "home_logo": nba_live.logo_url(codes[1]),
@@ -367,6 +381,13 @@ def ideas(date: str | None, book: str | None, model: str | None, style: str,
     if game and not (table["Game"] == game).any():
         raise NotFound(f"no game {game[:80]!r} on this board")
     pool = table if not game else table[table["Game"] == game]
+    # a game that has tipped off has no pregame prices left to bet: never suggest its legs
+    if "event_id" in pool.columns:
+        tips = _tips()
+        started = {e for e in pool["event_id"].astype(str).unique() if _started(tips.get(e))}
+        pool = pool[~pool["event_id"].astype(str).isin(started)]
+    if pool.empty:
+        return []
     if style in (suggestion_service.STYLE, nba_parlay.LONG_SHOT):
         pool = pool[pool["quality"].map(lambda q: q["eligible"])]
 

@@ -41,8 +41,14 @@ it('says when the suggestion is already the slip, and switches style', () => {
 
 it('explains an empty result instead of showing a blank card', () => {
   render(<SuggestedSlip {...base} ideas={[]} />)
-  expect(screen.getByText(/No qualifying slip right now/)).toBeTruthy()
+  expect(screen.getByText(/No qualifying slip in this style right now/)).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Use this slip' })).toBeNull()
+  expect(screen.queryByText(/uses at most two legs/)).toBeNull()      // no style note without a slip
+})
+
+it('says a started game has nothing left to suggest', () => {
+  render(<SuggestedSlip {...base} ideas={[]} sameGame started />)
+  expect(screen.getByText(/This game has started/)).toBeTruthy()
 })
 
 const quick = (kind: QuickAdd['kind'], player: string, legId: number | null): QuickAdd => ({

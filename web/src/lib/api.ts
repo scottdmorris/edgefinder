@@ -76,6 +76,8 @@ export type Steady = {
  * and logo, and how many players have props. */
 export type BoardGame = {
   game: string; short: string; tip?: string | null
+  /** tipped off: its pregame prices can no longer be bet */
+  started?: boolean
   away?: string; home?: string; away_logo?: string; home_logo?: string; players?: number
   /** the latest moneyline, null until one is archived; display only, never in the record */
   moneyline?: Moneyline | null

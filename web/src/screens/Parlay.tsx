@@ -92,7 +92,12 @@ export function Parlay() {
     ?? board.books.find((b) => b.id !== board.book)
   const model = board.models.find((m) => m.id === board.model)
   const bookName = board.books.find((b) => b.id === board.book)?.name ?? board.book
-  const quick = quickAdds(board, picks, activeGame, gameShort, shown, bookName)
+  // games that have tipped off: their pregame prices are gone, so nothing in them is offered
+  const startedShorts = new Set(board.games.filter((g) => g.started).map((g) => g.short))
+  const startedGames = new Set(board.games.filter((g) => g.started).map((g) => g.game))
+  const quick = quickAdds(board, picks, activeGame, gameShort, shown, bookName).filter((q) => !startedShorts.has(q.game))
+  const games = [...board.games].sort((a, b) => Number(!!a.started) - Number(!!b.started))   // open games first
+  const startedOnSlip = slip.legs.map((id) => legsById.get(id)).filter((l): l is Leg => !!l && startedGames.has(l.game))
   const picksByGame = Object.fromEntries(board.games.map((g) =>
     [g.game, countPicks(board.legs.filter((l) => l.game === g.game))]))
 
@@ -140,8 +145,11 @@ export function Parlay() {
         )}
 
 
-        {slip.unavailable.length > 0 && <section className="my-4 rounded-2xl border border-warn/50 bg-warn/5 p-4">
-          <h2 className="font-bold text-warn">Review saved selections</h2>
+        {slip.unavailable.length > 0 && <details className="my-4 rounded-2xl border border-warn/50 bg-warn/5 px-4 py-2">
+          <summary className="min-h-9 cursor-pointer py-1 text-sm font-bold text-warn">
+            {slip.unavailable.length} saved bet{slip.unavailable.length === 1 ? ' is' : 's are'} no longer on the board · Review
+          </summary>
+          <h2 className="sr-only">Review saved selections</h2>
           <p role="alert" className="mt-2 text-sm text-muted">These bets are no longer on the board. They stay here for review and are left out of the estimate.</p>
           {slip.unavailable.map(({ id, leg }) => <div key={id} className="mt-3 border-t border-line pt-3 text-sm">
             <div className="font-bold">{leg?.player ?? 'Saved selection'} · No longer on the board</div>
@@ -149,7 +157,11 @@ export function Parlay() {
             <button type="button" onClick={() => slip.toggle(id)} className="mt-2 min-h-11 text-sm font-bold text-accent">Remove {leg?.player ?? 'selection'}</button>
           </div>)}
           {slip.estimate && <p className="mt-3 text-xs text-muted">Original illustration: stake {money(slip.estimate.price.stake)}, estimated profit {money(slip.estimate.price.to_win)}. Saved {new Date(slip.estimate.recordedAt).toLocaleString()}. This is not the current payout.</p>}
-        </section>}
+        </details>}
+
+        {startedOnSlip.length > 0 && <p role="status" className="mt-4 text-xs text-warn">
+          {startedOnSlip.map((l) => l.player).join(', ')} {startedOnSlip.length === 1 ? 'is' : 'are'} on your slip from a game that has started: those were pregame prices, which can no longer be bet.
+        </p>}
 
         {slip.moved.length > 0 && <p className="mt-4 text-xs text-muted">
           Price moved since you added: {slip.moved.map((m) => `${m.player} ${american(m.was)} → ${american(m.now)}`).join(' · ')}. The slip uses the new price.
@@ -163,7 +175,7 @@ export function Parlay() {
         ) : (
           <>
             <Section title="Games" aside="Tap a game for its props">
-              <GameCards games={board.games} value={game} onChange={setGame} layout="list" picks={picksByGame} />
+              <GameCards games={games} value={game} onChange={setGame} layout="list" picks={picksByGame} />
             </Section>
             <Section title="Find a player" aside="Recorded prices, not live quotes">
               <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} searchOnly
@@ -173,6 +185,7 @@ export function Parlay() {
         )}
 
         <SuggestedSlip key={`${marketKey}|${activeGame}|${style}`} ideas={ideas} legs={legsById} sameGame={!!chosenGame}
+          started={!!chosenGame?.started}
           styles={board.styles} style={style} onStyle={setStyle} inUse={slip.legs} onUse={slip.set} />
 
         {quick.length > 0 && (

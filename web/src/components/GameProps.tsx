@@ -51,8 +51,9 @@ function Average({ average }: { average: Leg['average'] }) {
 }
 
 /** A player's "at least" rungs as a row of price buttons, like a sportsbook's alt-line market. */
-function LadderRow({ player, label, selected, toggle, team }: {
+function LadderRow({ player, label, selected, toggle, team, locked = false }: {
   player: LadderPlayer; label: string; selected: number[]; toggle: (id: number) => void; team?: string
+  locked?: boolean
 }) {
   const picks = player.rungs.filter((leg) => leg.pick)      // rungs come lowest first
   const projection = player.rungs[0]?.projection
@@ -62,7 +63,7 @@ function LadderRow({ player, label, selected, toggle, team }: {
       <div className="min-w-0">
         <div className="text-sm font-bold leading-tight">{player.name}</div>
         {picks.length > 0 && <div className="text-xs font-bold text-good">
-          ★ Model pick: {rung(picks[0])}+{picks.length > 1 && ` to ${rung(picks[picks.length - 1])}+`}</div>}
+          ★ {picks[0].projection_model || 'Model'} pick: {rung(picks[0])}+{picks.length > 1 && ` to ${rung(picks[picks.length - 1])}+`}</div>}
         <div className="text-xs tabular-nums text-muted">
           {team && <span>{team} · </span>}<Average average={player.average} />
           {projection != null && <span>{player.average ? ' · ' : ''}proj <b className="text-text">{projection.toFixed(1)}</b></span>}
@@ -72,9 +73,9 @@ function LadderRow({ player, label, selected, toggle, team }: {
     <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto pb-0.5 pt-1.5">
       {player.rungs.map((leg) => {
         const on = selected.includes(leg.id)
-        return <button key={leg.id} type="button" aria-pressed={on} onClick={() => toggle(leg.id)}
+        return <button key={leg.id} type="button" aria-pressed={on} onClick={() => toggle(leg.id)} disabled={locked && !on}
           aria-label={`At least ${player.name} ${rung(leg)}+ ${label}${leg.pick ? ', model pick' : ''}`}
-          className={`relative flex h-12 w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-lg border leading-tight ${on ? 'border-button bg-button text-button-text' : leg.pick ? 'border-good bg-raised-2' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+          className={`relative flex h-12 w-[4.25rem] shrink-0 disabled:cursor-not-allowed disabled:opacity-40 flex-col items-center justify-center rounded-lg border leading-tight ${on ? 'border-button bg-button text-button-text' : leg.pick ? 'border-good bg-raised-2' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
           {leg.pick && <PickStar on={on} />}
           <span className={`text-[11px] font-semibold ${on ? '' : 'text-muted'}`}>{rung(leg)}+</span>
           <span className={`text-sm font-black tabular-nums ${on ? '' : 'text-accent'}`}>{american(leg.odds)}</span>
@@ -115,6 +116,9 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
   const ladder = byAverage(ladderPlayers(rungLegs), (p) => p.average, (p) => rung(p.rungs[p.rungs.length - 1]))
     .filter((p) => !picksOnly || p.rungs.some((l) => l.pick))
   const empty = shown === 'lines' ? !lineRows.length : !ladder.length
+  const locked = !!game.started
+  // when the prices on this page were recorded: they are snapshots, not live quotes
+  const pricedAt = legs.map((l) => l.quality?.price_at).filter((t): t is string => !!t).sort().pop()
   const pickCount = countPicks
   const gamePicks = pickCount(legs)
 
@@ -128,7 +132,8 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
           <span className="text-muted">@</span>
           {game.home_logo && <img src={game.home_logo} alt="" className="size-6" />}{game.home}
         </h2>
-        <div className="text-xs text-muted">{tipTime(game.tip)}</div>
+        <div className="text-xs text-muted">{locked ? `Started ${tipTime(game.tip)}` : tipTime(game.tip)}
+          {pricedAt && ` · prices recorded ${new Date(pricedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}</div>
       </div>
     </div>
     {game.moneyline && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted"
@@ -137,6 +142,9 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
         {logo && <img src={logo} alt="" className="size-4" />}<b className="text-text">{code}</b> {price.odds} · {price.pct} to win
       </span>)}
     </div>}
+    {locked && <p role="status" className="mt-3 rounded-xl border border-warn/50 bg-warn/5 px-3 py-2 text-sm text-warn">
+      This game has started. These were its pregame prices, which can no longer be bet, so they can't be added.
+    </p>}
     <p className="mt-2 text-xs text-muted">
       {gamePicks
         ? <><b className="text-good">★ {gamePicks} model pick{gamePicks === 1 ? '' : 's'}</b> in this game, marked on their prices.</>
@@ -160,12 +168,14 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
     {empty ? <div className="mt-3">{picksOnly
       ? <Empty title={`No model picks in ${shown === 'lines' ? label : `${label} X+`}`} hint="Untick “Model picks only” or try another tab." />
       : <Empty title="No props for this game yet" hint="Lines appear after the next snapshot." />}</div>
-      : <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
+      : <>{shown === 'ladder' && !countPicks(rungLegs) && <p className="mt-3 text-xs text-muted">
+        X+ picks aren't starred: on the rungs FanDuel offers, every model's X+ picks have lost money so far.</p>}
+      <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
         {shown === 'lines'
           ? lineRows.map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi}
-            inGame team={teamOf.get(row.player_id) ?? undefined} />)
+            inGame team={teamOf.get(row.player_id) ?? undefined} locked={locked} />)
           : ladder.map((p) => <LadderRow key={p.id} player={p} label={label} selected={selected} toggle={toggle}
-            team={teamOf.get(p.id) ?? undefined} />)}
-      </div>}
+            team={teamOf.get(p.id) ?? undefined} locked={locked} />)}
+      </div></>}
   </section>
 }

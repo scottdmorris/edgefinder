@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Parlay stops offering what can't be bet, and says whose pick it is
+
+- Games that have tipped off are marked "Started" on their cards and listed after open games.
+  Their page says the prices were pregame and can no longer be bet, and their price buttons can't
+  add a bet (a leg already on the slip can still come off). Suggested slips and quick adds leave
+  started games out, and the Parlay screen warns when the slip holds a leg from one.
+- X+ picks are no longer starred. Re-scored on the rungs FanDuel offers (10+, 15+ ...), every
+  model's settled X+ picks had lost money (Shot profile 28-47, -15.1 units, -20%; Context 46-50,
+  -9%; Recent average -23%; Minutes -27%). They are still tracked on paper; the X+ view says
+  why none are marked. Over / Under picks stay starred.
+- Each pick names its model ("★ Recent average pick: Over 1.5"): the points-only models never
+  price rebounds, assists or threes, so those picks come from the Recent average model.
+- A game's page shows when its prices were recorded. Saved bets that left the board fold into
+  one line to expand, and an empty suggested slip is one line without the style's notes.
+- Validation: `pytest` 1,530 passed; `ruff check` clean; `vitest` 100 passed; `npm run build`
+  (tsc and vite) succeeded; checked tonight's started games and a game page in the app.
+
 ### Game pages list players like a sportsbook, and only bettable X+ rungs
 
 - A game's page lists both teams' players in one list, highest season average first (then last

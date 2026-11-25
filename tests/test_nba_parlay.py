@@ -299,7 +299,7 @@ def test_average_text_reads_simply_and_is_empty_for_unknown_players():
     assert nba_parlay.average_text(averages, 99) == ""
 
 
-def test_each_leg_carries_whether_it_is_the_models_tracked_pick():
+def test_each_leg_carries_whether_it_is_the_models_tracked_pick(monkeypatch):
     main = ledger()
     main.loc[0, "pick_side"] = "under"
     extra = alt()
@@ -307,7 +307,9 @@ def test_each_leg_carries_whether_it_is_the_models_tracked_pick():
     table = candidates(main, extra).set_index("Leg")["model_pick"]
     assert table.to_dict() == {"Jaylen Brown · Over 24.5 points": False,
                                "Jaylen Brown · Under 24.5 points": True,
-                               "Jaylen Brown · 25+ points": True}
+                               "Jaylen Brown · 25+ points": False}   # X+ picks are not marked
+    monkeypatch.setattr(nba_parlay, "MARK_X_PLUS_PICKS", True)
+    assert candidates(main, extra).set_index("Leg")["model_pick"]["Jaylen Brown · 25+ points"]
     main.loc[0, "pick_side"] = None
     extra.loc[0, "is_pick"] = False
     assert not candidates(main, extra)["model_pick"].any()

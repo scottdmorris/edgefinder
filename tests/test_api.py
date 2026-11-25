@@ -45,6 +45,8 @@ def _alt() -> pd.DataFrame:
 def client(monkeypatch):
     service.clear_cache()
     monkeypatch.setattr(service, "today", lambda: dt.date.fromisoformat(DAY))
+    # the morning of the game day: every game still to tip off
+    monkeypatch.setattr(service, "now", lambda: dt.datetime.fromisoformat(f"{DAY}T15:00:00+00:00"))
     monkeypatch.setattr(service, "load_ledger", _ledger)
     monkeypatch.setattr(service, "load_alt", _alt)
     monkeypatch.setattr(service, "load_games", pd.DataFrame)
@@ -521,3 +523,17 @@ def test_board_legs_carry_the_models_tracked_pick(client):
     table, _ = service.candidates(None, None, None)
     picked = {int(i) for i, row in table.iterrows() if row["model_pick"]}
     assert {leg["id"] for leg in board["legs"] if leg["pick"]} == picked
+
+
+def test_a_game_that_has_tipped_off_is_marked_started_and_left_out_of_suggestions(client, monkeypatch):
+    before = client.get("/api/board").json()
+    assert not any(g["started"] for g in before["games"])
+    tips = [g["tip"] for g in before["games"] if g["tip"]]
+    assert tips
+    service.clear_cache()
+    late = pd.Timestamp(max(tips)).to_pydatetime() + dt.timedelta(minutes=5)
+    monkeypatch.setattr(service, "now", lambda: late)
+    after = client.get("/api/board").json()
+    assert all(g["started"] for g in after["games"] if g["tip"])
+    for style in after["styles"]:
+        assert client.get("/api/ideas", params={"style": style}).json() == []
