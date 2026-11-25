@@ -9,7 +9,7 @@ import { BookBadge } from '../components/BookBadge'
 import { SlipPanel } from '../components/SlipPanel'
 import { PropsBrowser } from '../components/PropsBrowser'
 import { GameCards } from '../components/GameCards'
-import { GameProps } from '../components/GameProps'
+import { GameProps, countPicks } from '../components/GameProps'
 import { SlipImageReview } from '../components/SlipImageReview'
 import { QuickAdds, type QuickAdd } from '../components/QuickAdds'
 import { SuggestedSlip } from '../components/SuggestedSlip'
@@ -93,6 +93,8 @@ export function Parlay() {
   const model = board.models.find((m) => m.id === board.model)
   const bookName = board.books.find((b) => b.id === board.book)?.name ?? board.book
   const quick = quickAdds(board, picks, activeGame, gameShort, shown, bookName)
+  const picksByGame = Object.fromEntries(board.games.map((g) =>
+    [g.game, countPicks(board.legs.filter((l) => l.game === g.game))]))
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8">
@@ -161,7 +163,7 @@ export function Parlay() {
         ) : (
           <>
             <Section title="Games" aside="Tap a game for its props">
-              <GameCards games={board.games} value={game} onChange={setGame} layout="list" />
+              <GameCards games={board.games} value={game} onChange={setGame} layout="list" picks={picksByGame} />
             </Section>
             <Section title="Find a player" aside="Recorded prices, not live quotes">
               <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} searchOnly

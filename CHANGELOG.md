@@ -4,6 +4,21 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Props show what the model picks
+
+- Every prop row now shows the model's projection next to the season and last-10 averages.
+- The chosen model's tracked picks (the paper bets its record counts) are marked on their
+  price buttons with a green outline and star, and named under the player ("★ Model pick:
+  Under 1.5", or "13+ to 16+" across a ladder). A row with a pick opens on that line.
+- A game's page says how many model picks it holds, or that the model made none; the stat tabs
+  and the Over / Under / X+ switch show where they are (★ counts), picks come first in each team,
+  and "Model picks only" hides everyone else. Games on the Parlay home show their pick counts.
+- Several picked rungs of one player's ladder count as one pick.
+- Board legs carry a `pick` flag from the ledgers' `pick_side` (Over / Under) and `is_pick`
+  (X+).
+- Validation: `pytest` 1,527 passed; `ruff check` clean; `vitest` 96 passed; `npm run build`
+  (tsc and vite) succeeded; checked a game page's Over / Under, X+ and 3PM picks in the app.
+
 ### Safer ledgers, grading and uploads
 
 - The snapshot and settle jobs now take turns with each ledger (a `.lock` file beside it), so

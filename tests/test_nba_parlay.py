@@ -297,3 +297,17 @@ def test_average_text_reads_simply_and_is_empty_for_unknown_players():
     assert nba_parlay.average_text(averages, 7) == "avg 21.4 · last 10: 24.0"
     assert nba_parlay.average_text(averages, 7, "reb") == "avg 6.0 · last 10: 7.5"
     assert nba_parlay.average_text(averages, 99) == ""
+
+
+def test_each_leg_carries_whether_it_is_the_models_tracked_pick():
+    main = ledger()
+    main.loc[0, "pick_side"] = "under"
+    extra = alt()
+    extra.loc[0, "is_pick"] = True
+    table = candidates(main, extra).set_index("Leg")["model_pick"]
+    assert table.to_dict() == {"Jaylen Brown · Over 24.5 points": False,
+                               "Jaylen Brown · Under 24.5 points": True,
+                               "Jaylen Brown · 25+ points": True}
+    main.loc[0, "pick_side"] = None
+    extra.loc[0, "is_pick"] = False
+    assert not candidates(main, extra)["model_pick"].any()

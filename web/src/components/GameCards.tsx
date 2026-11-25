@@ -33,8 +33,10 @@ function Side({ code, logo, price }: { code?: string; logo?: string; price: Side
 
 /** `list` lays the games out as a grid to choose from (the Parlay home); `row` is one sideways
  * strip. With `all`, the first card clears the choice. */
-export function GameCards({ games, value, all, onChange, layout = 'row' }: {
+export function GameCards({ games, value, all, onChange, layout = 'row', picks = {} }: {
   games: BoardGame[]; value: string; all?: string; onChange: (game: string) => void; layout?: 'row' | 'list'
+  /** how many of the model's tracked picks each game holds, by game name */
+  picks?: Record<string, number>
 }) {
   const card = `min-h-11 shrink-0 rounded-2xl border px-3 py-2 text-left text-sm transition-colors ${layout === 'list' ? 'w-full' : ''}`
   const tone = (on: boolean) => (on ? 'border-text bg-raised-2' : 'border-line bg-raised hover:border-line-strong')
@@ -45,20 +47,23 @@ export function GameCards({ games, value, all, onChange, layout = 'row' }: {
     {games.map((g) => {
       const on = value === g.game
       const players = `${g.players ?? 0} player${g.players === 1 ? '' : 's'}`
+      const count = picks[g.game] ?? 0
+      const pickText = count ? `${count} model pick${count === 1 ? '' : 's'}` : ''
       const away = g.away ?? g.short.split(' @ ')[0]
       const home = g.home ?? g.short.split(' @ ')[1]
       const [awayPrice, homePrice] = [sidePrice(g.moneyline, 'away'), sidePrice(g.moneyline, 'home')]
       const odds = awayPrice && homePrice
         ? `, ${away} ${awayPrice.odds} ${awayPrice.pct} to win, ${home} ${homePrice.odds} ${homePrice.pct} to win` : ''
       return <button key={g.game} type="button" aria-pressed={on} onClick={() => onChange(g.game)}
-        aria-label={`${g.short}, ${tipTime(g.tip)}${odds}, ${players}`}
+        aria-label={`${g.short}, ${tipTime(g.tip)}${odds}, ${players}${pickText ? `, ${pickText}` : ''}`}
         title={g.moneyline ? 'Moneyline and win chance with the book’s margin removed' : undefined}
         className={`${card} ${tone(on)} ${g.moneyline ? 'min-w-48' : 'min-w-36'}`}>
         <div className="flex flex-col gap-1">
           <Side code={away} logo={g.away_logo} price={awayPrice} />
           <Side code={home} logo={g.home_logo} price={homePrice} />
         </div>
-        <div className="mt-1.5 text-[11px] text-muted">{tipTime(g.tip)} · {players}</div>
+        <div className="mt-1.5 text-[11px] text-muted">{tipTime(g.tip)} · {players}
+          {pickText && <> · <b className="text-good">★ {pickText}</b></>}</div>
       </button>
     })}
   </>

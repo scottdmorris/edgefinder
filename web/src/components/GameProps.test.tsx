@@ -108,3 +108,38 @@ it("puts each team's moneyline and win chance beside its heading in the game vie
   expect(within(home).getByRole('heading').textContent).toMatch(/CHA.*-150.*58%/)
   expect(screen.getByText(/FanDuel moneyline, vig removed/)).toBeTruthy()
 })
+
+it("marks the model's tracked picks on their prices, counts them, and can show them alone", () => {
+  const picked = legs.map((l) => (l.id === 6 ? { ...l, pick: true, projection: 21.3 } : l))
+  render(<GameProps game={game} legs={[...picked, ...rungs.map((r) => (r.id === 9 ? { ...r, pick: true } : r))]}
+    selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/2 model picks/)).toBeTruthy()
+  expect(screen.getByRole('radio', { name: 'Points · ★2' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Under Ja Morant 24.5 Points, model pick' })).toBeTruthy()
+  expect(screen.getByText('★ Model pick: Under 24.5')).toBeTruthy()
+  expect(screen.getByText('21.3')).toBeTruthy()                         // the model's number on the row
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Model picks only' }))
+  expect(screen.queryByText('Coby White')).toBeNull()
+  fireEvent.click(screen.getByRole('radio', { name: 'Points X+ · ★1' }))
+  expect(screen.getByRole('button', { name: 'At least Ja Morant 25+ Points, model pick' })).toBeTruthy()
+  expect(screen.getByText('★ Model pick: 25+')).toBeTruthy()
+})
+
+it('says so when the model made no picks in a game', () => {
+  render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/made no picks in this game/)).toBeTruthy()
+  expect(screen.queryByRole('checkbox', { name: 'Model picks only' })).toBeNull()
+})
+
+it("counts each game's model picks on its card", () => {
+  render(<GameCards games={[game]} value="" onChange={vi.fn()} layout="list" picks={{ [game.game]: 3 }} />)
+  expect(screen.getByRole('button', { name: /3 model picks$/ }).textContent).toContain('★ 3 model picks')
+})
+
+it('counts several picked rungs of one ladder as one pick and shows their range', () => {
+  const ladder = rungs.map((r) => ({ ...r, pick: r.id !== 7 }))      // 25+ and 30+
+  render(<GameProps game={game} legs={[...legs, ...ladder]} selected={[]} toggle={vi.fn()} kalshi={false} />)
+  expect(screen.getByText(/★ 1 model pick$/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('radio', { name: 'Points X+ · ★1' }))
+  expect(screen.getByText('★ Model pick: 25+ to 30+')).toBeTruthy()
+})

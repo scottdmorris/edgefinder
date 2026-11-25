@@ -224,6 +224,8 @@ def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> d
         "chance_pct": _num(row["Blended %"], 1), "ev_pct": _num(row["Leg EV %"], 1),
         "projection": _num(row.get("projection"), 1),
         "projection_model": model_short(row.get("projection_model", "")),
+        # the chosen model's own tracked pick on this prop: the bets its published record counts
+        "pick": bool(row.get("model_pick", False)),
         "average": None if pair is None else {"season": _num(pair[0], 1),
                                               "last10": _num(pair[1], 1)},
     }

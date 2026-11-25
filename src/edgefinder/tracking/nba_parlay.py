@@ -25,7 +25,7 @@ BOOK = "fanduel"          # the default price source
 DEFAULTS = {"stat": STAT, "book": BOOK}      # what an old ledger row without the column means
 COLUMNS = ["Leg", "Stat", "stat_key", "Game", "Player", "Side", "Odds", "Model %", "Market %", "Blended %",
            "Leg EV %", "player_id", "event_id", "is_over", "prob", "line",
-           "away_abbr", "home_abbr", "projection", "projection_model"]
+           "away_abbr", "home_abbr", "projection", "projection_model", "model_pick"]
 SUGGESTION_POOL = 16       # best legs considered when searching for slips
 SAME_GAME_POOL = 10        # inside one game, fewer: every combination is priced with correlations
 # Different players' bets in one game move together only a little (the measured values
@@ -307,9 +307,10 @@ def _over_under_rows(ledger: pd.DataFrame, game_date: str, model_version: str,
                 (True, row.over_odds, p_over, row.fair_p_over),
                 (False, row.under_odds, 1 - p_over, 1 - row.fair_p_over)):
             side = "Over" if is_over else "Under"
+            picked = str(getattr(row, "pick_side", "")) == side.lower()   # the model's tracked pick
             rows.append(_leg_row(
                 f"{row.player} · {side} {row.line} {noun}", row, side, odds, model_p,
-                market_p, is_over, row.line, stat))
+                market_p, is_over, row.line, stat, picked))
     return rows
 
 
@@ -322,12 +323,14 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str,
     return [
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
                  row.over_odds, model_over(row, row.model_p) if model_over else row.model_p,
-                 row.market_p, True, row.threshold - 0.5, STAT)
+                 row.market_p, True, row.threshold - 0.5, STAT,
+                 str(getattr(row, "is_pick", "")) == "True")
         for row in day.itertuples()
     ]
 
 
-def _leg_row(label, row, side, odds, model_p, market_p, is_over, line, stat) -> dict:
+def _leg_row(label, row, side, odds, model_p, market_p, is_over, line, stat,
+             picked: bool = False) -> dict:
     blended = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p
     return {"Leg": label, "Stat": nba_stat_model.STATS[stat].label, "stat_key": stat,
             "Game": f"{row.away} @ {row.home}",
@@ -338,7 +341,8 @@ def _leg_row(label, row, side, odds, model_p, market_p, is_over, line, stat) -> 
             "Market %": market_p * 100.0, "prob": blended,
             "player_id": row.player_id, "event_id": row.event_id, "is_over": is_over,
             "line": line, "away_abbr": nba_players.team_abbreviation(row.away),
-            "home_abbr": nba_players.team_abbreviation(row.home)}
+            "home_abbr": nba_players.team_abbreviation(row.home),
+            "model_pick": picked}
 
 
 def to_legs(chosen: pd.DataFrame, teams: dict[int, str]) -> list[Leg]:

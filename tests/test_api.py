@@ -513,3 +513,11 @@ def test_an_upload_too_big_by_its_declared_size_is_refused_before_it_is_read(cli
     assert response.status_code == 413
     assert api_app._upload_size_error(None).status_code == 411
     assert api_app._upload_size_error("1024") is None
+
+
+def test_board_legs_carry_the_models_tracked_pick(client):
+    board = client.get("/api/board").json()
+    assert all(isinstance(leg["pick"], bool) for leg in board["legs"])
+    table, _ = service.candidates(None, None, None)
+    picked = {int(i) for i, row in table.iterrows() if row["model_pick"]}
+    assert {leg["id"] for leg in board["legs"] if leg["pick"]} == picked

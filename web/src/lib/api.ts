@@ -34,6 +34,8 @@ export type Leg = {
   ev_pct: number | null
   projection?: number | null
   projection_model?: string
+  /** the chosen model's own tracked pick: the bets its published record counts */
+  pick?: boolean
   average: { season: number | null; last10: number | null } | null
 }
 

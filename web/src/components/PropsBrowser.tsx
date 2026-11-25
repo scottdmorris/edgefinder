@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { Leg } from '../lib/api'
 import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/ladder'
 import { QuoteNotes } from './QuoteNotes'
@@ -50,6 +50,11 @@ export function PropsBrowser({ legs, selected, toggle, kalshi, expanded = false,
   </section>
 }
 
+/** The corner mark on a price button the model picked. */
+export function PickStar({ on = false }: { on?: boolean }) {
+  return <span aria-hidden className={`absolute -right-1 -top-1.5 grid size-4 place-items-center rounded-full text-[9px] font-black ${on ? 'bg-text text-ink' : 'bg-good text-ink'}`}>★</span>
+}
+
 /** `compact` is for a row under its player's own heading: no photo, the stat named instead. */
 export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false }: {
   row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean; compact?: boolean
@@ -58,8 +63,10 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
 }) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
   const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
+  // the model's tracked pick on this prop, if it made one: the row opens on that line
+  const pickStep = row.steps.find((s) => s.yes.pick || s.no?.pick)
   // the step being looked at; a new selection (from an idea, say) brings its own step into view
-  const [choice, setChoice] = useState({ threshold: (selected ?? defaultStep(row)).threshold, selection })
+  const [choice, setChoice] = useState({ threshold: (selected ?? pickStep ?? defaultStep(row)).threshold, selection })
   const step = (choice.selection === selection ? row.steps.find((s) => s.threshold === choice.threshold) : selected) ?? defaultStep(row)
   const noSelected = step.no !== null && slip.includes(step.no.id)
   const compared = noSelected && step.no ? step.no : step.yes
@@ -83,12 +90,17 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
     const name = kalshi ? word : leg.side.endsWith('+') ? 'At least' : word
     const top = kalshi ? `${word} ${stepText(step)}` : plus ? stepText(step) : `${no ? 'U' : 'O'} ${leg.line}`
     const price = kalshi ? `${Math.round(100 / (leg.odds > 0 ? leg.odds / 100 + 1 : 100 / -leg.odds + 1))}¢` : american(leg.odds)
-    return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}`} onClick={() => toggle(leg.id)}
-      className={`flex h-12 w-[4.25rem] shrink-0 sm:w-[5.25rem] flex-col items-center justify-center rounded-lg border leading-tight transition-colors ${on ? 'border-button bg-button text-button-text' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+    return <button type="button" aria-pressed={on} aria-label={`${name} ${row.player} ${stepText(step)} ${label}${leg.pick ? ', model pick' : ''}`} onClick={() => toggle(leg.id)}
+      className={`relative flex h-12 w-[4.25rem] shrink-0 sm:w-[5.25rem] flex-col items-center justify-center rounded-lg border leading-tight transition-colors ${on ? 'border-button bg-button text-button-text' : leg.pick ? 'border-good bg-raised-2 hover:border-good' : 'border-line bg-raised-2 hover:border-line-strong'}`}>
+      {leg.pick && <PickStar on={on} />}
       <span className={`text-[11px] font-semibold ${on ? '' : 'text-muted'}`}>{top}</span>
       <span className={`text-sm font-black tabular-nums ${on ? '' : 'text-accent'}`}>{price}</span>
     </button>
   }
+  const picked = step.yes.pick ? step.yes : step.no?.pick ? step.no : null
+  const pickText = picked && (kalshi ? `${picked === step.no ? 'No' : 'Yes'} ${stepText(step)}`
+    : picked.side.endsWith('+') ? stepText(step) : `${picked.side} ${picked.line}`)
+  const projection = step.yes.projection ?? step.no?.projection
 
   // the model's view against the price: green when it rates this side higher, red when lower
   const lean = (compared.model_pct ?? 0) - (compared.market_pct ?? 0)
@@ -101,9 +113,12 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
       {!compact && <div className="hidden sm:block"><Photo src={row.photo} size={36} /></div>}
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 text-sm font-bold leading-tight">{compact ? label : row.player}</div>
+        {pickText && <div className="mt-0.5 text-xs font-bold text-good">★ Model pick: {pickText}</div>}
         <div className="mt-0.5 text-xs leading-snug tabular-nums text-muted">
-          {!compact && !inGame && <span>{row.game_short}{average ? ' · ' : ''}</span>}
-          {average && <span>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></span>}
+          {[!compact && !inGame && row.game_short,
+            average && <>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></>,
+            projection != null && <>proj <b className="text-text">{projection.toFixed(1)}</b></>]
+            .filter(Boolean).map((part, i) => <Fragment key={i}>{i > 0 && ' · '}<span>{part}</span></Fragment>)}
         </div>
       </div>
       <div className="flex shrink-0 gap-1 sm:gap-1.5">{button(step.yes)}{step.no && button(step.no, true)}</div>
