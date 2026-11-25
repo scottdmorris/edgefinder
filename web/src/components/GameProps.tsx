@@ -1,7 +1,7 @@
 // One game's betting options, laid out like a sportsbook's game page: the matchup on top, a tab
 // per stat, then each team's players. Where a stat has both, "Over / Under" lines and "X+"
 // ladders (10+, 15+, 20+) are two markets to switch between.
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { BoardGame, Leg } from '../lib/api'
 import { american, ladderRows, type Row } from '../lib/ladder'
 import { sidePrice, tipTime } from './GameCards'
@@ -85,9 +85,11 @@ function LadderRow({ player, label, selected, toggle, team, locked = false }: {
   </div>
 }
 
-export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
+export function GameProps({ game, legs, selected, toggle, kalshi, onBack, children }: {
   game: BoardGame; legs: Leg[]; selected: number[]; toggle: (id: number) => void; kalshi: boolean
   onBack?: () => void
+  /** shown under the matchup, before the props: the game simulation */
+  children?: ReactNode
 }) {
   const stats = STAT_ORDER.filter((s) => legs.some((l) => l.stat === s))
   const [picked, setStat] = useState(stats[0] ?? 'points')
@@ -145,6 +147,7 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
     {locked && <p role="status" className="mt-3 rounded-xl border border-warn/50 bg-warn/5 px-3 py-2 text-sm text-warn">
       This game has started. These were its pregame prices, which can no longer be bet, so they can't be added.
     </p>}
+    {children}
     <p className="mt-2 text-xs text-muted">
       {gamePicks
         ? <><b className="text-good">★ {gamePicks} model pick{gamePicks === 1 ? '' : 's'}</b> in this game, marked on their prices.</>

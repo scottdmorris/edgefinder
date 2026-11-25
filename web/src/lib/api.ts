@@ -453,6 +453,36 @@ async function send<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** One game run thousands of times from the players' projections (display only). */
+export type SimRange = { low: number; median: number; high: number }
+export type SimTeam = { win_pct: number; median: number; average: number }
+export type SimPlayer = { player_id: number; player: string; team: string
+  stats: Record<string, { average: number; low: number; high: number; lines: { line: number; over_pct: number }[] }> }
+export type SimBoxRow = { player_id: number; player: string; team: string
+  points?: number; rebounds?: number; assists?: number; threes?: number }
+export type Simulation = {
+  game: string; away: string; home: string; model: string; model_short: string; runs: number
+  teams: Record<string, SimTeam>; total: SimRange; margin: SimRange
+  margin_chart: { from: number; to: number; pct: number }[]
+  players: SimPlayer[]
+  typical: { score: Record<string, number>; rest: Record<string, number>; box: SimBoxRow[] }
+  /** the most typical run, event by event, to watch; null when it was only box-score simulated */
+  watch?: SimWatch | null
+}
+export type SimEvent = { t: number; period: number; clock: string
+  kind: 'start' | 'period' | 'final' | 'make' | 'miss' | 'free_throws' | 'rebound' | 'turnover' | 'steal'
+  team: string; text: string; away: number; home: number; on: Record<string, number[]>; home_win: number
+  player?: number; assist?: number | null; against?: number; points?: number; x?: number; y?: number; three?: boolean }
+export type SimWatch = { events: SimEvent[]; periods: number
+  roster: { id: number; name: string; team: string; starter: boolean; photo: string }[] }
+
+/** Lines a player has cleared in every game this season, and how the last finished day's did. */
+export type PerfectProp = { leg_id: number; player: string; player_id: number; game: string; event_id: string
+  stat: string; bet: string; side: string; line: number; odds: number; games: number; book: string
+  low: number; photo: string; started?: boolean; actual?: number | null; hit?: boolean | null }
+export type PerfectProps = { date: string; book: string; props: PerfectProp[]
+  recap: { date: string; hit: number; total: number; props: PerfectProp[] } | null }
+
 async function get<T>(path: string, params: Record<string, string | undefined> = {}): Promise<T> {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) if (value) query.set(key, value)
@@ -488,4 +518,6 @@ export const api = {
   teams: () => get<TeamOption[]>('/api/teams'),
   team: (code: string) => get<TeamProfile>(`/api/teams/${encodeURIComponent(code)}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),
+  simulate: (market: Market, game: string) => get<Simulation>('/api/simulate', { ...market, game }),
+  perfect: (market: Market) => get<PerfectProps>('/api/perfect', market),
 }

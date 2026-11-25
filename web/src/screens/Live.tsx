@@ -8,6 +8,7 @@ import { useLiveGames } from '../lib/live'
 import { savedSlip } from '../lib/slip'
 import { Empty, Photo } from '../components/ui'
 import { GameCenter } from '../components/GameCenter'
+import { LiveCourt } from '../components/LiveCourt'
 import { Freshness } from '../components/Freshness'
 
 const REFRESH_MS = 10_000
@@ -99,6 +100,7 @@ function Game({ id, card, legs = [] }: { id: string; card: GameCard; legs?: Trac
           Foul trouble: {shown.detail.foul_trouble.map((f) => `${f.name.split(' ').slice(-1)[0]} ${f.fouls} (${f.team})`).join(', ')}
         </p>
       )}
+      {shown.detail && <div className="mt-4"><LiveCourt game={{ ...shown, ...card, detail: shown.detail }} /></div>}
       {shown.detail && <GameCenter game={{ ...shown, detail: shown.detail }} mine={legs.map((leg) => leg.player)} />}
     </div>
   )

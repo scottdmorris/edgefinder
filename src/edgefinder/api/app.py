@@ -9,7 +9,7 @@ serves the app itself at "/", so one address works on a PC or a phone.
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from ..data import nba_live
-from . import live, picks, players, record, review, service, slip_review, teams
+from . import live, picks, players, record, review, service, showcase, slip_review, teams
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
@@ -64,6 +64,17 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
 def ideas(style: str, date: str | None = None, book: str | None = None,
           model: str | None = None, game: str | None = None) -> list[dict]:
     return _guard(lambda: service.ideas(date, book, model, style, game))
+
+
+@app.get("/api/simulate")
+def simulate_game(game: str = Query(max_length=120), date: str | None = None, book: str | None = None,
+                  model: str | None = None) -> dict:
+    return _guard(lambda: showcase.simulation(date, book, model, game))
+
+
+@app.get("/api/perfect")
+def perfect_props(date: str | None = None, book: str | None = None, model: str | None = None) -> dict:
+    return _guard(lambda: showcase.perfect(date, book, model))
 
 
 @app.post("/api/slip")

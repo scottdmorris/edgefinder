@@ -4,6 +4,46 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Watch a simulated game, and live games on the same court
+
+- The game simulation now plays every game possession by possession (`tracking/possession_sim.py`):
+  who uses each trip, threes, makes, free-throw trips, turnovers, steals, blocks, rebounds and
+  assists come from each player's last 15 games, lineups rotate by minutes with the starters
+  opening each half and closing, and each team's shooting is tuned so its average score meets the
+  chosen model's projections. 2,000 runs give the win chances, scores, margin chart and each
+  prop's hit rate; the box-score version remains for when there are no game logs.
+- The most typical run can be watched on a tilted court (`CourtStage`, `GameWatch`): ten player
+  dots take their spots each possession, the shooter lights up at his spot, the ball flies to the
+  rim and makes flash, with the scoreboard, a win-chance bar, a ticker, the players on the floor
+  with their lines so far, play / pause / 1-8x speed, skip to the end, and a win-chance timeline
+  to jump around. Shot spots and positions are drawn from typical zones, not tracking data, and
+  the page says so.
+- The Live game view gains the same court (`LiveCourt`): every real shot at its spot in team
+  colours, the newest flying in as it arrives, the latest play in the ticker, and who is on the
+  floor with their points, rebounds and assists.
+- Validation: `pytest` 1,544 passed; `ruff check` clean; `vitest` 107 passed; `npm run build`
+  (tsc and vite) succeeded; watched BOS @ WAS's simulated game play and checked DET @ ORL's final
+  on the Live court in the app.
+
+### Game simulations and Perfect Props on Parlay
+
+- Every game's page opens with "We simulated this game 5,000 times": a court-side scoreboard with
+  each team's simulated win chance beside the moneyline's no-vig chance, a typical final score,
+  the total and margin ranges (8 runs in 10), a chart of how often each margin came up, and a
+  typical game's box score. `tracking/game_sim.py` draws each player's stats around the chosen
+  model's projections with the props' own spreads, and team scores with a real game's swing
+  (11.5 points, partly shared through pace) split among the players; the unlisted players are a
+  "rest of the team" share. It adds up the projections, says so, and is never a pick.
+  `GET /api/simulate`.
+- Perfect Props on the Parlay home: each player's hardest line on any recorded book that he has
+  cleared in every game this season (8+ games), best price first, with what $10 wins at that price
+  and a note that a visible streak is priced in. This book's lines can be added to the slip. The
+  latest finished day's list is graded underneath as a grid of hits and misses ("12 of 12").
+  `tracking/perfect_props.py`, `GET /api/perfect`.
+- Validation: `pytest` 1,539 passed; `ruff check` clean; `vitest` 104 passed; `npm run build`
+  (tsc and vite) succeeded; checked BOS @ WAS's simulation (desktop and phone width) and Perfect
+  Props with Nov 23's and Nov 24's results in the app.
+
 ### Parlay stops offering what can't be bet, and says whose pick it is
 
 - Games that have tipped off are marked "Started" on their cards and listed after open games.

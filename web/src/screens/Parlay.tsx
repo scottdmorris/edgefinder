@@ -10,6 +10,8 @@ import { SlipPanel } from '../components/SlipPanel'
 import { PropsBrowser } from '../components/PropsBrowser'
 import { GameCards } from '../components/GameCards'
 import { GameProps, countPicks } from '../components/GameProps'
+import { GameSim } from '../components/GameSim'
+import { PerfectProps } from '../components/PerfectProps'
 import { SlipImageReview } from '../components/SlipImageReview'
 import { QuickAdds, type QuickAdd } from '../components/QuickAdds'
 import { SuggestedSlip } from '../components/SuggestedSlip'
@@ -170,13 +172,16 @@ export function Parlay() {
         {chosenGame ? (
           <div className="mt-6">
             <GameProps key={chosenGame.game} game={chosenGame} legs={shown} selected={slip.legs} toggle={slip.toggle}
-              kalshi={board.book === 'kalshi'} onBack={() => setGame(ALL)} />
+              kalshi={board.book === 'kalshi'} onBack={() => setGame(ALL)}>
+              <GameSim market={chosen} game={chosenGame} />
+            </GameProps>
           </div>
         ) : (
           <>
             <Section title="Games" aside="Tap a game for its props">
               <GameCards games={games} value={game} onChange={setGame} layout="list" picks={picksByGame} />
             </Section>
+            <PerfectProps market={chosen} legsById={legsById} selected={slip.legs} toggle={slip.toggle} />
             <Section title="Find a player" aside="Recorded prices, not live quotes">
               <PropsBrowser legs={shown} selected={slip.legs} toggle={slip.toggle} kalshi={board.book === 'kalshi'} searchOnly
                 other={otherBook && { name: otherBook.name, go: () => setMarket({ date: board.date, book: otherBook.id }) }} />

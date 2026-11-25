@@ -55,7 +55,10 @@ button:disabled { opacity: .55; cursor: wait; }
 .shot-pop { animation: shot-pop .7s ease-out both; transform-box: fill-box; transform-origin: center }
 .flash { animation: flash 2.4s ease-out }
 .ticker { animation: ticker .3s ease-out both }
+/* a make: a ring bursts out of the rim */
+@keyframes rim-flash { 0% { transform: scale(.4); opacity: 1 } 100% { transform: scale(2.6); opacity: 0 } }
+.rim-flash { animation: rim-flash .7s ease-out both; transform-box: fill-box; transform-origin: center }
 
 @media (prefers-reduced-motion: reduce) {
-  .score-pop, .shot-pop, .flash, .ticker { animation: none }
+  .score-pop, .shot-pop, .flash, .ticker, .rim-flash { animation: none }
 }

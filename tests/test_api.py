@@ -537,3 +537,13 @@ def test_a_game_that_has_tipped_off_is_marked_started_and_left_out_of_suggestion
     assert all(g["started"] for g in after["games"] if g["tip"])
     for style in after["styles"]:
         assert client.get("/api/ideas", params={"style": style}).json() == []
+
+
+def test_the_simulation_and_perfect_props_routes_answer_for_a_game_on_the_board(client):
+    board = client.get("/api/board").json()
+    game = board["games"][0]["game"]
+    sim = client.get("/api/simulate", params={"game": game}).json()
+    assert sim["runs"] == 5000 and set(sim["teams"]) == {sim["away"], sim["home"]}
+    assert client.get("/api/simulate", params={"game": "Nobody @ Nowhere"}).status_code == 404
+    perfect = client.get("/api/perfect").json()
+    assert perfect["props"] == [] and perfect["recap"] is None       # no game logs in this fixture
