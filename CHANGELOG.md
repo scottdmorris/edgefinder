@@ -4,6 +4,18 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Game pages list players like a sportsbook, and only bettable X+ rungs
+
+- A game's page lists both teams' players in one list, highest season average first (then last
+  10, then the biggest line), with each row naming the player's team. The moneylines and win
+  chances sit under the matchup instead of on team headings.
+- Points X+ shows only the rungs FanDuel's market offers, in steps of 5 (10+, 15+, 20+ ...).
+  The feeds also list every rung in between; from 2026-11-24 those are no longer recorded in the
+  X+ ledger, and older ones are left off the board, its picks and suggested slips. A saved slip
+  holding one is flagged as no longer on the board.
+- Validation: `pytest` 1,529 passed; `ruff check` clean; `vitest` 96 passed; `npm run build`
+  (tsc and vite) succeeded; checked DET @ ORL's Over / Under and Points X+ lists in the app.
+
 ### Props show what the model picks
 
 - Every prop row now shows the model's projection next to the season and last-10 averages.

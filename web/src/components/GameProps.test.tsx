@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { BoardGame, Leg } from '../lib/api'
 import { GameCards } from './GameCards'
@@ -38,14 +38,16 @@ it('lays the games out as a list to choose from, with no "All games" card', () =
   expect(screen.getByRole('button', { name: /^MEM @ CHA/ })).toBeTruthy()
 })
 
-it("opens on the game's first stat with each team's players, away side first, and a way back", () => {
+it("opens on the game's first stat with both teams in one list, biggest averages first, and a way back", () => {
   const back = vi.fn()
-  render(<GameProps game={game} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} onBack={back} />)
+  const averaged = legs.map((l) => ({ ...l, average: l.player === 'Coby White' ? { season: 19.2, last10: 21 } : { season: 25.1, last10: 24 } }))
+  render(<GameProps game={game} legs={averaged} selected={[]} toggle={vi.fn()} kalshi={false} onBack={back} />)
   expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Points', '3PM'])   // only stats it has
-  const [away, home] = screen.getAllByRole('region', { name: /^[A-Z]{3} props$/ })
-  expect(away.getAttribute('aria-label')).toBe('MEM props')
-  expect(within(away).getByRole('button', { name: 'Over Ja Morant 24.5 Points' }).textContent).toBe('O 24.5-110')
-  expect(within(home).getByRole('button', { name: 'Over Coby White 17.5 Points' })).toBeTruthy()
+  expect(screen.queryByRole('region', { name: /^[A-Z]{3} props$/ })).toBeNull()             // no split by team
+  const overs = screen.getAllByRole('button', { name: /^Over .* Points$/ })
+  expect(overs.map((b) => b.getAttribute('aria-label'))).toEqual(['Over Ja Morant 24.5 Points', 'Over Coby White 17.5 Points'])
+  expect(overs[0].textContent).toBe('O 24.5-110')
+  expect(screen.getByText('MEM')).toBeTruthy()                         // each row names its team
   expect(screen.queryByRole('button', { name: 'Over Coby White 1.5 3PM' })).toBeNull()
   fireEvent.click(screen.getByRole('radio', { name: '3PM' }))
   expect(screen.getByRole('button', { name: 'Over Coby White 1.5 3PM' })).toBeTruthy()
@@ -101,12 +103,11 @@ it('leaves the odds off a card whose game has no moneyline yet', () => {
   expect(card.textContent).not.toMatch(/%/)
 })
 
-it("puts each team's moneyline and win chance beside its heading in the game view", () => {
+it("shows both teams' moneylines and win chances under the matchup", () => {
   render(<GameProps game={priced} legs={legs} selected={[]} toggle={vi.fn()} kalshi={false} />)
-  const [away, home] = screen.getAllByRole('region', { name: /^[A-Z]{3} props$/ })
-  expect(within(away).getByRole('heading').textContent).toMatch(/MEM.*\+128.*42%/)
-  expect(within(home).getByRole('heading').textContent).toMatch(/CHA.*-150.*58%/)
-  expect(screen.getByText(/FanDuel moneyline, vig removed/)).toBeTruthy()
+  expect(screen.getByText('MEM', { selector: 'b' }).parentElement?.textContent).toMatch(/MEM \+128 · 42% to win/)
+  expect(screen.getByText('CHA', { selector: 'b' }).parentElement?.textContent).toMatch(/CHA -150 · 58% to win/)
+  expect(screen.getByTitle(/FanDuel moneyline, vig removed/)).toBeTruthy()
 })
 
 it("marks the model's tracked picks on their prices, counts them, and can show them alone", () => {

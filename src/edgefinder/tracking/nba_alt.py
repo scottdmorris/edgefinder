@@ -50,6 +50,15 @@ _MIN_PROB, _MAX_PROB = 0.001, 0.999
 # X+ picks: their single fixed spread overrates long shots, and over their first 1,250 graded
 # X+ picks (to 2026-11-13) they returned about -25%, against about -6% for the context models.
 NO_X_PLUS_PICKS = frozenset({nba_points.MODEL_VERSION, nba_minutes_points.MODEL_VERSION})
+# FanDuel's points X+ market is offered in steps of 5 (10+, 15+, 20+ ...). The feeds also list
+# every rung in between (alternate lines a bettor can't pick there), so only these are recorded
+# from 2026-11-24 and shown on the board.
+BETTABLE_STEP = 5
+
+
+def bettable(threshold: float) -> bool:
+    """Whether FanDuel's points X+ market offers this rung."""
+    return float(threshold) % BETTABLE_STEP == 0
 
 
 def is_pick(ev: float, model_p: float, market_p: float, model_version: str | None = None) -> bool:
@@ -115,6 +124,8 @@ def build_alt_rows(
         if prediction is None or odds is None or float(point).is_integer():
             continue
         threshold = math.ceil(point)
+        if not bettable(threshold):
+            continue                     # a rung FanDuel's X+ market doesn't offer
         model_p = p_at_least(threshold, prediction["mean"], dispersion)
         market_p = implied_prob(odds)
         blend = MODEL_WEIGHT * model_p + (1 - MODEL_WEIGHT) * market_p

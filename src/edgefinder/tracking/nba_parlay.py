@@ -17,7 +17,7 @@ from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal
 from ..data import nba_players
 from ..models import nba_recalibration, nba_stat_model
-from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P
+from .nba_alt import MAX_DISAGREEMENT, MIN_MODEL_P, bettable
 from .nba_paper import MODEL_WEIGHT
 
 STAT = "points"           # the default stat
@@ -320,6 +320,7 @@ def _x_plus_rows(alt_ledger: pd.DataFrame, game_date: str, model_version: str,
         return []
     day = alt_ledger[(alt_ledger["game_date"] == game_date)
                      & (alt_ledger["model_version"] == model_version)]
+    day = day[day["threshold"].map(bettable)]     # only rungs FanDuel actually offers
     return [
         _leg_row(f"{row.player} · {int(row.threshold)}+ {STAT}", row, f"{int(row.threshold)}+",
                  row.over_odds, model_over(row, row.model_p) if model_over else row.model_p,

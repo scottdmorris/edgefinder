@@ -83,8 +83,8 @@ def test_a_long_shot_is_never_a_pick_however_good_the_price_looks():
 
 
 def test_a_price_far_from_the_markets_is_excluded_as_a_data_problem():
-    # model ~31% vs market 10.5% (+850): a 20-point gap, so not a pick
-    far = [{"player": "Jaylen Brown", "line": 30.5, "over_odds": 850}]
+    # model well above market 10.5% (+850) on 30+: a 20-point-plus gap, so not a pick
+    far = [{"player": "Jaylen Brown", "line": 29.5, "over_odds": 850}]
     (row,) = nba_alt.build_alt_rows(
         EVENT, far, PREDICTIONS, "2026-11-04T17:00:00+00:00", "2026-11-04",
         model_version="ewma-v1", dispersion=7.8)
@@ -150,7 +150,7 @@ def test_suggestions_list_picks_best_first_and_merge_agreeing_models():
 
 def test_suggestions_show_one_rung_per_player():
     lines = [{"player": "Jaylen Brown", "line": 24.5, "over_odds": 130},
-             {"player": "Jaylen Brown", "line": 25.5, "over_odds": 150}]
+             {"player": "Jaylen Brown", "line": 19.5, "over_odds": -150}]
     data = nba_alt.build_alt_rows(EVENT, lines, PREDICTIONS, "2026-11-04T17:00:00+00:00",
                                   "2026-11-04", model_version="context-v1", dispersion=7.8)
     assert sum(r["is_pick"] for r in data) == 2
@@ -188,3 +188,10 @@ def test_a_payload_without_the_alternate_market_parses_to_nothing():
     assert nba_props.parse_alt_lines({"bookmakers": []}) == []
     other = {"bookmakers": [{"key": "fanduel", "markets": [{"key": "player_points", "outcomes": []}]}]}
     assert nba_props.parse_alt_lines(other) == []
+
+
+def test_only_rungs_fanduels_x_plus_market_offers_are_recorded():
+    lines = [{"player": "Jaylen Brown", "line": line, "over_odds": 150} for line in (18.5, 19.5, 21.5, 24.5)]
+    built = nba_alt.build_alt_rows(EVENT, lines, PREDICTIONS, "2026-11-04T17:00:00+00:00",
+                                   "2026-11-04", model_version="context-v2", dispersion=7.8)
+    assert [row["threshold"] for row in built] == [20, 25]

@@ -311,3 +311,9 @@ def test_each_leg_carries_whether_it_is_the_models_tracked_pick():
     main.loc[0, "pick_side"] = None
     extra.loc[0, "is_pick"] = False
     assert not candidates(main, extra)["model_pick"].any()
+
+
+def test_the_board_offers_only_the_x_plus_rungs_fanduel_lists():
+    extra = pd.concat([alt(), alt().assign(threshold=23)], ignore_index=True)   # 25+ and an old 23+
+    legs = candidates(ledger(), extra)
+    assert sorted(legs.loc[legs["Side"].str.endswith("+"), "Side"]) == ["25+"]

@@ -56,10 +56,12 @@ export function PickStar({ on = false }: { on?: boolean }) {
 }
 
 /** `compact` is for a row under its player's own heading: no photo, the stat named instead. */
-export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false }: {
+export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = false, team }: {
   row: Row; slip: number[]; toggle: (id: number) => void; kalshi: boolean; compact?: boolean
   /** on a game's own page: the game is already named above, so it is left off the row */
   inGame?: boolean
+  /** the player's team code, shown first on a game's page where both teams share one list */
+  team?: string
 }) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
   const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
@@ -115,7 +117,7 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
         <div className="line-clamp-2 text-sm font-bold leading-tight">{compact ? label : row.player}</div>
         {pickText && <div className="mt-0.5 text-xs font-bold text-good">★ Model pick: {pickText}</div>}
         <div className="mt-0.5 text-xs leading-snug tabular-nums text-muted">
-          {[!compact && !inGame && row.game_short,
+          {[!compact && (inGame ? team : row.game_short),
             average && <>avg <b className="text-text">{average.season?.toFixed(1) ?? '–'}</b> · L10 <b className="text-text">{average.last10?.toFixed(1) ?? '–'}</b></>,
             projection != null && <>proj <b className="text-text">{projection.toFixed(1)}</b></>]
             .filter(Boolean).map((part, i) => <Fragment key={i}>{i > 0 && ' · '}<span>{part}</span></Fragment>)}

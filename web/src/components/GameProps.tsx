@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import type { BoardGame, Leg } from '../lib/api'
 import { american, ladderRows, type Row } from '../lib/ladder'
-import { sidePrice, tipTime, type SidePrice } from './GameCards'
+import { sidePrice, tipTime } from './GameCards'
 import { PickStar, PropRow, STATS } from './PropsBrowser'
 import { Empty, Photo, Pills } from './ui'
 
@@ -14,6 +14,18 @@ type Market = 'lines' | 'ladder'
 const isRung = (leg: Leg) => leg.side.endsWith('+')
 const rowPicked = (row: Row) => row.steps.some((s) => s.yes.pick || s.no?.pick)
 const picksText = (n: number) => (n ? ` · ★${n}` : '')
+
+/** Highest season average first (then last 10, then the biggest line), like a sportsbook's list. */
+function byAverage<T>(items: T[], average: (item: T) => Leg['average'], line: (item: T) => number): T[] {
+  const score = (item: T) => {
+    const a = average(item)
+    return [a?.season ?? a?.last10 ?? -1, a?.last10 ?? -1, line(item)]
+  }
+  return [...items].sort((x, y) => {
+    const [a, b] = [score(x), score(y)]
+    return b[0] - a[0] || b[1] - a[1] || b[2] - a[2]
+  })
+}
 /** Picks counted by prop, not by price: several picked rungs of one player's ladder are one pick. */
 export const countPicks = (legs: Leg[]) =>
   new Set(legs.filter((l) => l.pick).map((l) => `${l.player_id}|${l.stat}|${isRung(l)}`)).size
@@ -39,8 +51,8 @@ function Average({ average }: { average: Leg['average'] }) {
 }
 
 /** A player's "at least" rungs as a row of price buttons, like a sportsbook's alt-line market. */
-function LadderRow({ player, label, selected, toggle }: {
-  player: LadderPlayer; label: string; selected: number[]; toggle: (id: number) => void
+function LadderRow({ player, label, selected, toggle, team }: {
+  player: LadderPlayer; label: string; selected: number[]; toggle: (id: number) => void; team?: string
 }) {
   const picks = player.rungs.filter((leg) => leg.pick)      // rungs come lowest first
   const projection = player.rungs[0]?.projection
@@ -52,7 +64,7 @@ function LadderRow({ player, label, selected, toggle }: {
         {picks.length > 0 && <div className="text-xs font-bold text-good">
           ★ Model pick: {rung(picks[0])}+{picks.length > 1 && ` to ${rung(picks[picks.length - 1])}+`}</div>}
         <div className="text-xs tabular-nums text-muted">
-          <Average average={player.average} />
+          {team && <span>{team} · </span>}<Average average={player.average} />
           {projection != null && <span>{player.average ? ' · ' : ''}proj <b className="text-text">{projection.toFixed(1)}</b></span>}
         </div>
       </div>
@@ -93,25 +105,16 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
   const shown: Market = rungLegs.length && (market === 'ladder' || !lineLegs.length) ? 'ladder' : 'lines'
 
   const teamOf = new Map(legs.map((l) => [l.player_id, l.team ?? null]))
-  const sides = [game.away, game.home].filter((t): t is string => !!t)
-  const sideOf = (id: number) => {   // a team that is neither side (a late trade) goes last
-    const team = teamOf.get(id)
-    return team && sides.includes(team) ? team : null
-  }
-  const logos: Record<string, string | undefined> = { [game.away ?? '']: game.away_logo, [game.home ?? '']: game.home_logo }
-  const prices: Record<string, SidePrice | null> = {
-    [game.away ?? '']: sidePrice(game.moneyline, 'away'), [game.home ?? '']: sidePrice(game.moneyline, 'home') }
+  const prices = [game.away, game.home].map((code, i) => ({ code, logo: i ? game.home_logo : game.away_logo,
+    price: sidePrice(game.moneyline, i ? 'home' : 'away') }))
   const bookName = game.moneyline?.book === 'draftkings' ? 'DraftKings' : 'FanDuel'
-  // the model's tracked picks come first in each team, or alone with "Model picks only"
-  const first = <T,>(items: T[], has: (item: T) => boolean) =>
-    [...items.filter(has), ...(picksOnly ? [] : items.filter((item) => !has(item)))]
-  const lineRows = first(ladderRows(lineLegs), rowPicked)
-  const ladder = first(ladderPlayers(rungLegs), (p) => p.rungs.some((l) => l.pick))
-  const groups = [...sides, null].map((team) => ({
-    team,
-    rows: lineRows.filter((r) => sideOf(r.player_id) === team),
-    rungs: ladder.filter((p) => sideOf(p.id) === team),
-  })).filter((g) => (shown === 'lines' ? g.rows.length : g.rungs.length))
+  // one list like a sportsbook's: the biggest producers first (season average, then last 10),
+  // and with "Model picks only" just the model's picks
+  const lineRows = byAverage(ladderRows(lineLegs), (r) => r.average, (r) => r.steps[r.steps.length - 1].threshold)
+    .filter((r) => !picksOnly || rowPicked(r))
+  const ladder = byAverage(ladderPlayers(rungLegs), (p) => p.average, (p) => rung(p.rungs[p.rungs.length - 1]))
+    .filter((p) => !picksOnly || p.rungs.some((l) => l.pick))
+  const empty = shown === 'lines' ? !lineRows.length : !ladder.length
   const pickCount = countPicks
   const gamePicks = pickCount(legs)
 
@@ -125,9 +128,15 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
           <span className="text-muted">@</span>
           {game.home_logo && <img src={game.home_logo} alt="" className="size-6" />}{game.home}
         </h2>
-        <div className="text-xs text-muted">{tipTime(game.tip)}{game.moneyline ? ` · win chances from the ${bookName} moneyline, vig removed` : ''}</div>
+        <div className="text-xs text-muted">{tipTime(game.tip)}</div>
       </div>
     </div>
+    {game.moneyline && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted"
+      title={`Win chances from the ${bookName} moneyline, vig removed`}>
+      {prices.map(({ code, logo, price }) => price && <span key={code} className="flex items-center gap-1.5 tabular-nums">
+        {logo && <img src={logo} alt="" className="size-4" />}<b className="text-text">{code}</b> {price.odds} · {price.pct} to win
+      </span>)}
+    </div>}
     <p className="mt-2 text-xs text-muted">
       {gamePicks
         ? <><b className="text-good">★ {gamePicks} model pick{gamePicks === 1 ? '' : 's'}</b> in this game, marked on their prices.</>
@@ -148,22 +157,15 @@ export function GameProps({ game, legs, selected, toggle, kalshi, onBack }: {
       </div>
     </div>
 
-    {groups.length === 0 ? <div className="mt-3">{picksOnly
+    {empty ? <div className="mt-3">{picksOnly
       ? <Empty title={`No model picks in ${shown === 'lines' ? label : `${label} X+`}`} hint="Untick “Model picks only” or try another tab." />
       : <Empty title="No props for this game yet" hint="Lines appear after the next snapshot." />}</div>
-      : groups.map(({ team, rows, rungs }) => (
-        <section key={team ?? 'other'} aria-label={`${team ?? 'Other'} props`} className="mt-4">
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-black">
-            {team && logos[team] && <img src={logos[team]} alt="" className="size-6" />}{team ?? 'Other players'}
-            {team && prices[team] && <span className="text-xs font-bold tabular-nums text-muted">
-              {prices[team]?.odds} · {prices[team]?.pct} to win</span>}
-          </h3>
-          <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
-            {shown === 'lines'
-              ? rows.map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi} inGame />)
-              : rungs.map((p) => <LadderRow key={p.id} player={p} label={label} selected={selected} toggle={toggle} />)}
-          </div>
-        </section>
-      ))}
+      : <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
+        {shown === 'lines'
+          ? lineRows.map((row) => <PropRow key={row.key} row={row} slip={selected} toggle={toggle} kalshi={kalshi}
+            inGame team={teamOf.get(row.player_id) ?? undefined} />)
+          : ladder.map((p) => <LadderRow key={p.id} player={p} label={label} selected={selected} toggle={toggle}
+            team={teamOf.get(p.id) ?? undefined} />)}
+      </div>}
   </section>
 }
