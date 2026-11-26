@@ -63,3 +63,32 @@ def test_the_report_names_each_model_and_says_what_the_misses_mean():
 
 def test_an_empty_ledger_reports_nothing():
     assert miss_report.report_lines(pd.DataFrame(columns=list(_row(0)))) == []
+
+
+def test_record_breakdown_keeps_books_stats_and_models_separate():
+    ledger = pd.DataFrame([
+        _row(1, result="win", odds=200),
+        _row(2, odds=-200, side="over"),
+        _row(3, stat="assists", odds=-100),
+        _row(4, book="kalshi", odds=-100),
+        _row(5, version="context-v2", odds=-100),
+        _row(6, status="pending"),
+        _row(7, result="push"),
+        _row(8, side=None),
+    ])
+    report = {(item["book"], item["stat"], item["model"]): item
+              for item in miss_report.record_breakdown(ledger)}
+    assert len(report) == 4
+    row = report["fanduel", "points", "ewma-v1"]
+    assert row["n"] == 2 and row["win_pct"] == 50
+    assert row["break_even_pct"] == 44.4  # two units staked, 4.50 gross units across both at a 100% hit rate
+    assert row["units"] == -0.09 and row["roi_pct"] == -4.5
+    assert row["sides"]["over"]["n"] == row["prices"]["even or plus money"]["n"] == 1
+
+
+def test_record_breakdown_serializes_missing_values():
+    import json
+
+    rows = miss_report.record_breakdown(pd.DataFrame([_row(1, odds=None, mean=None) | {"pnl_units": None}]))
+    assert rows[0]["break_even_pct"] is rows[0]["miss"] is rows[0]["roi_pct"] is None
+    json.dumps(rows, allow_nan=False)

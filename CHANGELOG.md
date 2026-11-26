@@ -4,6 +4,20 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Recoverable paper ledger and Record diagnostics
+
+- Snapshot and settle jobs now prepare the paper ledger and hash-chained audit
+  log together. The next write or record publish can finish an interrupted
+  update with its original audit entries. Record shows when recovery is pending.
+- Record now shows the nightly miss analysis by book, stat and model, including
+  hit rate against break-even, flat-unit return, results by side and price,
+  and projection bias. Responsive cards and a short filter transition support
+  desktop and mobile layouts and respect reduced-motion preferences.
+- Validation covered 1,555 Python tests, 109 web tests, the production build,
+  Ruff, the CI Bandit check, and desktop and mobile Chrome checks of the new
+  section. Web lint reported eight existing warnings. The local ledger matched
+  all 31,872 rows and all 12 published checkpoints.
+
 ### Record recovery, Long shot v2 and game replay fixes
 - Recovered six unlogged FanDuel assists rows as dated imports. The original
   chain entries and all 12 published checkpoints still match. The ledger audit

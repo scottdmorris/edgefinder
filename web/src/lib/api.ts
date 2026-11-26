@@ -245,7 +245,19 @@ export type ModelRecord = {
 
 type GapPart = { logged: number; record: string; units: number }
 
+export type MissMetrics = {
+  n: number; win_pct: number; break_even_pct: number | null; units: number | null
+  roi_pct: number | null; miss: number | null
+}
+
+export type MissReportRow = MissMetrics & {
+  book: string; stat: string; model: string; model_name: string
+  sides: Record<string, MissMetrics>; prices: Record<string, MissMetrics>
+  disagreement: { n: number; share: number; plus_minus: number } | null
+}
+
 export type RecordData = {
+  miss_report?: MissReportRow[]
   suggestions?: { offered: SuggestionFacts; experiment: SuggestionFacts; long_shot?: SuggestionFacts;
     long_shot_previous?: SuggestionFacts | null; long_shot_protocol?: { id: string };
     protocol: { id: string; review_after_slips: number; review_after_game_days: number } }
@@ -253,6 +265,7 @@ export type RecordData = {
   integrity: { picks: number; graded: number; after_tip: number; first_lock: string | null; last_lock: string | null }
   chain: {
     started: boolean
+    pending_commit?: boolean
     intact?: boolean
     entries?: number
     imported?: number

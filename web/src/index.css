@@ -36,9 +36,10 @@ button:disabled { opacity: .55; cursor: wait; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 .live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
 .rise { animation: rise .25s ease-out both; }
+.miss-reveal { animation: rise .18s ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-dot, .rise { animation: none; }
+  .live-dot, .rise, .miss-reveal { animation: none; }
   * { transition: none !important; }
 }
 

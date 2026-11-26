@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..tracking import gap_log, nba_alt, nba_paper, nba_record, pick_chain
+from ..data import safe_write
+from ..tracking import gap_log, ledger_commit, miss_report, nba_alt, nba_paper, nba_record, pick_chain
 from . import service
 from ..tracking import suggested_record
 
@@ -28,11 +29,14 @@ def _plain(text: str) -> str:
 def chain() -> dict:
     """Is the record tamper-evident and unchanged right now?"""
     path = pick_chain.chain_path_for(nba_paper.LEDGER_PATH)
-    verified = pick_chain.verify(path)
-    if not verified.entries:
-        return {"started": False}
-    audit = pick_chain.audit(service.load_ledger(), path)
-    checks = pick_chain.check_published(path, DIGESTS)
+    with safe_write.locked(nba_paper.LEDGER_PATH):
+        if ledger_commit.pending(nba_paper.LEDGER_PATH):
+            return {"started": False, "pending_commit": True}
+        verified = pick_chain.verify(path)
+        if not verified.entries:
+            return {"started": False}
+        audit = pick_chain.audit(nba_paper.load_ledger(), path)
+        checks = pick_chain.check_published(path, DIGESTS)
     return {
         "started": True, "intact": verified.intact, "entries": verified.entries,
         "imported": verified.imported, "first_at": verified.first_at, "head": verified.head,
@@ -144,6 +148,8 @@ def record() -> dict:
             "suggestions": suggested_record.summary(),
             "chain": chain(), "clv": _clv(everything), "gaps": _gaps(),
             "by_book": by_book(everything),
+            "miss_report": [{**row, "model_name": service.model_short(row["model"])}
+                            for row in miss_report.record_breakdown(everything)],
             "models": _models(ledger),
             "alt": {"picks": alt["picks"], "settled": alt["settled"], "record": alt["record"]},
             "running": _running(locked), "days": _days(locked), "log": _log(locked),

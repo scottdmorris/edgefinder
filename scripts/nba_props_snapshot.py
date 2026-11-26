@@ -424,6 +424,10 @@ def main() -> None:
     today = now.astimezone(nba_snapshot_plan.EASTERN).date()
     models = Models(today)
 
+    if not args.dry_run:
+        with nba_paper.writer() as recovered:
+            if recovered:
+                log.info("Completed an interrupted paper ledger write.")
     if args.backfill_models:
         backfill_models(models, now, args.dry_run)
         return

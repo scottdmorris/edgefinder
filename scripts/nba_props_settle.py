@@ -29,21 +29,23 @@ from edgefinder.tracking import (  # noqa: E402
 
 
 def build_report(today: dt.date) -> str:
-    if nba_paper.load_ledger().empty:
-        return "The ledger is empty: run scripts/nba_props_snapshot.py first."
+    with nba_paper.writer() as recovered:
+        if nba_paper.load_ledger().empty:
+            return "The ledger is empty: run scripts/nba_props_snapshot.py first."
     games = nba_stats.load_season(nba_stats.current_season(today), today=today)
     fanduel_close, other_close = nba_props.load_snapshots(), nba_props.load_book_snapshots()
     kalshi_close, propline_close = nba_kalshi_ledger.load_snapshots(), propline.load_snapshots()
     # read, grade and write back as one step, so a snapshot's new rows can't be overwritten
-    with safe_write.locked(nba_paper.LEDGER_PATH):
+    with nba_paper.writer() as recovered_later:
         ledger = nba_paper.load_ledger()
         settled = nba_paper.settle(ledger, games, fanduel_close, today, kalshi_close,
                                    other_close, propline_close)
-        logged = nba_paper.log_settlements(ledger, settled)
-        nba_paper.save_ledger(settled)
+        logged = nba_paper.commit_settlement(ledger, settled)
 
     lines = [f"Ledger: {len(settled)} lines  {settled['status'].value_counts().to_dict()}"
              f"  ({logged} results added to the pick chain)"]
+    if recovered or recovered_later:
+        lines.append("Completed an interrupted paper ledger write.")
     waiting = int(((settled["status"] == "pending")
                    & (settled["game_date"].astype(str) < today.isoformat())).sum())
     if waiting:

@@ -18,22 +18,38 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from edgefinder.data import nba_snapshot_plan, safe_write  # noqa: E402
-from edgefinder.tracking import nba_paper, pick_chain  # noqa: E402
+from edgefinder.tracking import ledger_commit, nba_paper, pick_chain  # noqa: E402
 
 DIGESTS = Path(__file__).resolve().parents[1] / "record" / "DIGESTS.md"
 
 
 def check(ledger_path: Path | None = None) -> tuple[pick_chain.Verification, pick_chain.Audit]:
-    ledger_path = ledger_path or nba_paper.LEDGER_PATH
-    chain = pick_chain.chain_path_for(ledger_path)
-    return pick_chain.verify(chain), pick_chain.audit(nba_paper.load_ledger(ledger_path), chain)
+    _, verification, audit = checked_ledger(ledger_path)
+    return verification, audit
+
+
+def checked_ledger(ledger_path: Path | None = None, *, recover: bool = False):
+    """Return the audited ledger and fingerprint from the same locked state."""
+    path = ledger_path or nba_paper.LEDGER_PATH
+    chain = pick_chain.chain_path_for(path)
+    with safe_write.locked(path):
+        if recover:
+            ledger_commit.recover(path, chain)
+        ledger = nba_paper.load_ledger(path)
+        verification = pick_chain.verify(chain)
+        if ledger_commit.pending(path):
+            audit = pick_chain.Audit(len(ledger), 0, ["A prepared ledger write is waiting for recovery."])
+        else:
+            audit = pick_chain.audit(ledger, chain)
+        return ledger, verification, audit
 
 
 def recover_unlogged(ledger_path: Path) -> int:
     """Append a dated import for missing rows. Refuse to repair any other discrepancy."""
     chain = pick_chain.chain_path_for(ledger_path)
-    with safe_write.locked(ledger_path):
-        verification, audit = check(ledger_path)
+    with nba_paper.writer(ledger_path):
+        ledger = nba_paper.load_ledger(ledger_path)
+        verification, audit = pick_chain.verify(chain), pick_chain.audit(ledger, chain)
         if not verification.intact or not verification.entries:
             raise ValueError("Recovery requires an existing intact chain.")
         if audit.clean:
@@ -41,7 +57,6 @@ def recover_unlogged(ledger_path: Path) -> int:
         entries = pick_chain.load(chain)
         seen = {entry["key"] for entry in entries if entry["kind"] == pick_chain.PICK}
         results = {entry["key"] for entry in entries if entry["kind"] == pick_chain.RESULT}
-        ledger = nba_paper.load_ledger(ledger_path)
         missing = [row for row in ledger.to_dict("records") if pick_chain.row_key(row) not in seen]
         recovered_at = dt.datetime.now(dt.timezone.utc)
         with TemporaryDirectory(dir=chain.parent) as temporary:

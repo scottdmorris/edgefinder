@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from edgefinder.tracking import nba_paper, pick_chain
+from edgefinder.data import safe_write
+from edgefinder.tracking import ledger_commit, nba_paper, pick_chain
 
 EVENT = {"event_id": "e1", "commence_time": "2026-11-05T00:00:00Z",
          "home": "Detroit Pistons", "away": "Philadelphia 76ers"}
@@ -280,21 +281,52 @@ def test_appending_the_same_rows_again_adds_nothing_to_the_ledger_or_the_chain(t
     assert pick_chain.verify(pick_chain.chain_path_for(path)).entries == 4
 
 
-def test_a_chain_failure_never_loses_a_pick_and_the_audit_then_shows_it_was_not_logged(
-        tmp_path, monkeypatch):
+def test_a_failure_before_the_journal_is_ready_changes_neither_file(tmp_path, monkeypatch):
     path = tmp_path / "ledger.csv"
 
     def broken(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(pick_chain, "record_picks", broken)
-    assert nba_paper.append_rows(four(), path) == 4                      # the pick is still saved
-    monkeypatch.undo()
-    audit = pick_chain.audit(nba_paper.load_ledger(path), pick_chain.chain_path_for(path))
-    assert len(audit.problems) == 4 and all("never logged" in p for p in audit.problems)
+    with monkeypatch.context() as interrupted:
+        interrupted.setattr(pick_chain, "record_picks", broken)
+        with pytest.raises(OSError, match="disk full"):
+            nba_paper.append_rows(four(), path)
+    chain = pick_chain.chain_path_for(path)
+    assert not path.exists() and not chain.exists()
+    assert nba_paper.append_rows(four(), path) == 4
+    assert pick_chain.audit(nba_paper.load_ledger(path), chain).clean
 
 
-def test_settling_through_the_ledger_logs_the_results_and_the_audit_stays_clean(tmp_path):
+@pytest.mark.parametrize("fail_side", ["ledger", "chain"])
+def test_prepared_snapshot_is_recovered_once_with_original_audit_entries(tmp_path, monkeypatch, verify_script,
+                                                                       fail_side):
+    path = tmp_path / "ledger.csv"
+    chain = pick_chain.chain_path_for(path)
+    nba_paper.append_rows(rows(), path)
+    prefix = pick_chain.load(chain)
+    replace = safe_write.replace_file
+
+    def interrupted(source, target):
+        if target == (path if fail_side == "ledger" else chain):
+            raise OSError("interrupted commit")
+        replace(source, target)
+
+    batch = rows("minutes-v1")
+    with monkeypatch.context() as patches:
+        patches.setattr(safe_write, "replace_file", interrupted)
+        with pytest.raises(OSError, match="interrupted commit"):
+            nba_paper.append_rows(batch, path)
+    assert ledger_commit.pending(path)
+    staged = pick_chain.load(path.with_name(path.name + ".pending") / "chain.jsonl")
+    assert staged[:len(prefix)] == prefix
+    assert not verify_script.check(path)[1].clean
+    assert nba_paper.append_rows(batch, path) == 0
+    assert not ledger_commit.pending(path)
+    assert pick_chain.load(chain) == staged
+    assert verify_script.check(path)[1].clean
+
+
+def test_interrupted_settlement_recovers_results_without_log_duplicates(tmp_path, monkeypatch):
     path = tmp_path / "ledger.csv"
     nba_paper.append_rows(rows(), path)
     before = nba_paper.load_ledger(path)
@@ -303,14 +335,53 @@ def test_settling_through_the_ledger_logs_the_results_and_the_audit_stays_clean(
     empty = pd.DataFrame(columns=["fetched_at", "phase", "event_id", "player", "line",
                                   "over_odds", "under_odds"])
     after = nba_paper.settle(before, games, empty, pd.Timestamp("2026-11-06").date())
-    assert nba_paper.log_settlements(before, after, path) == 2
-    nba_paper.save_ledger(after, path)
     chain = pick_chain.chain_path_for(path)
+    replace = safe_write.replace_file
+
+    def interrupted(source, target):
+        if target == chain:
+            raise OSError("interrupted settlement")
+        replace(source, target)
+
+    with monkeypatch.context() as patches:
+        patches.setattr(safe_write, "replace_file", interrupted)
+        with nba_paper.writer(path), pytest.raises(OSError, match="interrupted settlement"):
+            nba_paper.commit_settlement(before, after, path)
+    with nba_paper.writer(path) as recovered:
+        assert recovered
+        recovered_ledger = nba_paper.load_ledger(path)
+        assert nba_paper.commit_settlement(recovered_ledger, recovered_ledger, path) == 0
+    assert pick_chain.verify(chain).entries == len(before) + 2
     assert pick_chain.verify(chain).intact
     assert pick_chain.audit(nba_paper.load_ledger(path), chain).clean
     # a closing price arriving later is not part of the log, so it never trips the audit
     after.loc[0, "clv_pct"] = 3.0
     assert pick_chain.audit(after, chain).clean
+
+
+def test_recovery_refuses_to_replace_a_destination_that_changed_outside_the_job(tmp_path, monkeypatch):
+    path = tmp_path / "ledger.csv"
+    chain = pick_chain.chain_path_for(path)
+    nba_paper.append_rows(rows(), path)
+    original_chain = chain.read_bytes()
+    replace = safe_write.replace_file
+
+    def interrupted(source, target):
+        if target == path:
+            raise OSError("interrupted commit")
+        replace(source, target)
+
+    with monkeypatch.context() as patches:
+        patches.setattr(safe_write, "replace_file", interrupted)
+        with pytest.raises(OSError, match="interrupted commit"):
+            nba_paper.append_rows(rows("minutes-v1"), path)
+    externally_edited = path.read_bytes() + b"\n"
+    path.write_bytes(externally_edited)
+    with pytest.raises(ValueError, match="ledger.csv differs"):
+        with nba_paper.writer(path):
+            pytest.fail("recovery accepted an external change")
+    assert path.read_bytes() == externally_edited
+    assert chain.read_bytes() == original_chain
 
 
 def test_editing_the_saved_ledger_file_by_hand_is_caught_by_the_audit(tmp_path):

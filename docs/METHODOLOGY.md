@@ -177,6 +177,11 @@ fingerprint after it. The Record tab walks the log and compares it with the ledg
 rows, deleted rows, rows that were never logged, and results that differ from the one logged
 are all named.
 
+The snapshot and settle jobs prepare both files under the same lock. If a job stops
+after marking both files ready, the next snapshot, settle, or record publish finishes
+that write with its original audit entries. Record shows a pending recovery during
+that interval. If either file changed outside the jobs, recovery stops for inspection.
+
 **What it proves, and what it doesn't.** On its own it proves little: whoever can edit the
 ledger can also rebuild the whole log. What makes it trustworthy is publishing the *latest
 fingerprint* somewhere the operator cannot rewrite. `python scripts/verify_record.py

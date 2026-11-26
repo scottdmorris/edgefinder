@@ -18,7 +18,9 @@ in the pick's favour.
 
 import csv
 import datetime as dt
-from collections.abc import Callable
+import shutil
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -29,7 +31,7 @@ from . import settlement
 from ..betting.ev import ev_per_unit
 from ..betting.odds_math import american_to_decimal, devig_two_way, implied_prob
 from ..models import nba_stat_model
-from . import closing, pick_chain
+from . import closing, ledger_commit, pick_chain
 from ..models.nba_points import MODEL_DISPERSION, MODEL_VERSION
 
 LEDGER_PATH = Path(__file__).resolve().parents[3] / "data" / "nba_paper_log.csv"
@@ -153,25 +155,24 @@ def load_ledger(path: Path | None = None) -> pd.DataFrame:
     return ledger.astype({c: object for c in _TEXT_COLUMNS})
 
 
-def _upgrade_file(path: Path) -> None:
-    """Rewrite an older ledger file with the current columns before new rows
-    are appended, so the header and the rows can never disagree."""
-    with path.open(encoding="utf-8") as handle:
-        header = handle.readline().strip().split(",")
-    if header != COLUMNS:
-        save_ledger(load_ledger(path).reindex(columns=COLUMNS), path)
-
-
 def save_ledger(ledger: pd.DataFrame, path: Path | None = None) -> None:
     path = path or LEDGER_PATH
     safe_write.write_csv(ledger, path)
+
+
+@contextmanager
+def writer(path: Path | None = None) -> Iterator[bool]:
+    """Hold the shared lock and finish a prepared write before taking new work."""
+    path = path or LEDGER_PATH
+    with safe_write.locked(path):
+        yield ledger_commit.recover(path, pick_chain.chain_path_for(path))
 
 
 def append_rows(rows: list[dict], path: Path | None = None) -> int:
     """Add rows not already recorded for the same game, player, line, model,
     stat and book. Returns how many were new."""
     path = path or LEDGER_PATH
-    with safe_write.locked(path):     # never while a settle is rewriting the file
+    with writer(path):
         return _append_rows_unlocked(rows, path)
 
 
@@ -186,39 +187,49 @@ def _append_rows_unlocked(rows: list[dict], path: Path) -> int:
             fresh.append(row)
     if not fresh:
         return 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    is_new = not path.exists()
     chain = pick_chain.chain_path_for(path)
-    _chain_safely("start the pick chain", pick_chain.ensure_started, chain, existing)
-    if not is_new:
-        _upgrade_file(path)
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=COLUMNS)
-        if is_new:
-            writer.writeheader()
-        writer.writerows(fresh)
-    _chain_safely("log the new rows", pick_chain.record_picks, chain, fresh)
+
+    def prepare(staged_ledger: Path, staged_chain: Path) -> None:
+        if path.exists():
+            with path.open(encoding="utf-8") as handle:
+                header = handle.readline().strip().split(",")
+            if header == COLUMNS:
+                shutil.copyfile(path, staged_ledger)
+            else:
+                existing.reindex(columns=COLUMNS).to_csv(staged_ledger, index=False)
+        needs_header = not staged_ledger.exists()
+        with staged_ledger.open("a", newline="", encoding="utf-8") as handle:
+            output = csv.DictWriter(handle, fieldnames=COLUMNS)
+            if needs_header:
+                output.writeheader()
+            output.writerows(fresh)
+        _prepare_chain(chain, staged_chain, existing)
+        pick_chain.record_picks(staged_chain, fresh)
+
+    ledger_commit.commit(path, chain, prepare)
     return len(fresh)
 
 
-def log_settlements(before: pd.DataFrame, after: pd.DataFrame, path: Path | None = None) -> int:
-    """Log the results a settle run filled in (call before saving the settled ledger).
-    Returns how many were logged; a failure is reported but never stops the settle."""
-    chain = pick_chain.chain_path_for(path or LEDGER_PATH)
-    _chain_safely("start the pick chain", pick_chain.ensure_started, chain, before)
-    return _chain_safely("log the results", pick_chain.record_settlements, chain, before,
-                         after) or 0
+def _prepare_chain(chain: Path, staged: Path, existing: pd.DataFrame) -> None:
+    if chain.exists():
+        shutil.copyfile(chain, staged)
+    else:
+        pick_chain.ensure_started(staged, existing)
 
 
-def _chain_safely(what: str, action, *args):
-    """The chain is a record-keeping layer: its failure must never lose a pick or a result.
-    A row it misses shows up in the audit as never logged."""
-    try:
-        return action(*args)
-    except Exception:       # noqa: BLE001
-        import logging
-        logging.getLogger(__name__).exception("could not %s", what)
-        return None
+def commit_settlement(before: pd.DataFrame, after: pd.DataFrame, path: Path | None = None) -> int:
+    """Save grading and its audit entries together while the caller holds writer()."""
+    path = path or LEDGER_PATH
+    chain = pick_chain.chain_path_for(path)
+    results = pick_chain.settlements(before, after)
+
+    def prepare(staged_ledger: Path, staged_chain: Path) -> None:
+        after.to_csv(staged_ledger, index=False)
+        _prepare_chain(chain, staged_chain, before)
+        pick_chain.record_results(staged_chain, results)
+
+    ledger_commit.commit(path, chain, prepare)
+    return len(results)
 
 
 def _row_key(row: dict) -> tuple:
