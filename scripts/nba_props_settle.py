@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from edgefinder.data import (  # noqa: E402
     job_health, nba_props, nba_snapshot_plan, nba_stats, propline, safe_write)
 from edgefinder.tracking import (  # noqa: E402
-    book_gaps, gap_log, miss_report, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper)
+    book_gaps, ev_log, gap_log, miss_report, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper)
 
 
 def build_report(today: dt.date) -> str:
@@ -72,6 +72,7 @@ def build_report(today: dt.date) -> str:
     lines += alt_stats_block(games, today)
     lines += gap_block(games, today, (fanduel_close, other_close))
     lines += book_gap_block(games, today, (fanduel_close, other_close))
+    lines += ev_block(games, today)
     return "\n".join(lines)
 
 
@@ -141,6 +142,23 @@ def book_gap_block(games, today: dt.date, closes=()) -> list[str]:
     for part, label in (("all", "all"), ("price", "better price"), ("number", "other number")):
         f = s[part]
         lines.append(f"  {label:12s} record {f['record']}, {f['units']:+.2f} units "
+                     f"({f['roi_pct']:+.1f}% return), {fair_close_text(f)}")
+    return lines
+
+
+def ev_block(games, today: dt.date) -> list[str]:
+    """Grade the +EV screen's paper flags against the results and the market's fair close."""
+    with safe_write.locked(ev_log.LOG_PATH):
+        log = ev_log.load()
+        if log.empty:
+            return []
+        settled = ev_log.attach_closing(ev_log.settle(log, games, today),
+                                        propline.load_snapshots(books=None))
+        ev_log.save(settled)
+    s = ev_log.summary(settled)
+    lines = ["", f"+EV screen (paper): {s['all']['logged']} logged, {s['all']['graded']} graded"]
+    for label, f in [("all", s["all"]), *sorted(s["by_stat"].items())]:
+        lines.append(f"  {label:9s} record {f['record']}, {f['units']:+.2f} units "
                      f"({f['roi_pct']:+.1f}% return), {fair_close_text(f)}")
     return lines
 

@@ -4,6 +4,33 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### A +EV screen: every book's price against the rest of the market (paper test)
+
+- PropLine's one request a run now asks for every book instead of FanDuel and DraftKings only.
+  Checked live on 2026-11-25: about 30 books carry main player lines, among them Pinnacle,
+  Novig, ProphetX, BetRivers, Fanatics, Hard Rock, BetMGM (X+ only), Kalshi and Polymarket.
+  Every book's main Over/Under lines are archived in `nba_propline_lines.csv`; no extra
+  requests. Older readers, including the closing prices the ledger settles against, still
+  see FanDuel and DraftKings only, so the published record is unchanged.
+- New `tracking/ev_screen.py`: for each player, stat and number, each book's two-way price is
+  devigged and the other books' fair chances are averaged (at least 3 books on the same
+  number; a book is never part of its own fair price, and one far from the median is left
+  out). A side paying at least 3% more than that fair chance says it is worth is flagged.
+  Pick'em apps are skipped (PrizePicks and Pick6 list every line at +100). Books are weighted
+  equally: nothing has graded which books are sharper yet, so `WEIGHTS` starts empty.
+- New paper ledger `data/ev_log.csv` (`tracking/ev_log.py`): each snapshot logs the flags for
+  games that have not started, first price kept; the settle job grades them by stat at a flat
+  unit and measures each against every book's fair close, and reports them by stat.
+- `/api/ev` and a "+EV lines" section on the Parlay screen list book, line, price, fair price,
+  how many books stand behind it and the edge, with the paper record so far. It has no add
+  buttons and is described as a paper test, not advice. Nothing is published or posted.
+- On tonight's live slate (9 games, 26 books, 8,921 lines) the screen flagged 98 sides at 3%+
+  and 38 at 5%+, most of them at prediction markets and smaller books.
+- Validation (after rebasing on the game-simulation work): `pytest` 1,568 passed; `ruff check`
+  clean; `tsc -b` clean; `vitest` 109 passed;
+  `oxlint` warnings only in files this change did not touch; one live PropLine request to see
+  which books it carries. Not checked in the running app.
+
 ### Watch a simulated game, and live games on the same court
 
 - The game simulation now plays every game possession by possession (`tracking/possession_sim.py`):

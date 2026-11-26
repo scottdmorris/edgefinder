@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from ..data import nba_live
-from . import live, picks, players, record, review, service, showcase, slip_review, teams
+from . import ev, live, picks, players, record, review, service, showcase, slip_review, teams
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 MAX_LEGS = 12
@@ -191,6 +191,12 @@ def our_record() -> dict:
 @app.get("/api/picks")
 def model_picks(date: str | None = None) -> dict:
     return _guard(lambda: picks.picks(date))
+
+
+@app.get("/api/ev")
+def ev_lines(date: str | None = None) -> dict:
+    """Lines one book prices better than the other books' fair consensus (paper experiment)."""
+    return _guard(lambda: ev.ev(date))
 
 
 @app.get("/api/players")

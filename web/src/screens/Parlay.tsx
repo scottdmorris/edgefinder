@@ -1,7 +1,7 @@
 // Parlay: one suggested slip up front, quick adds beside it, then every prop. The day, price
 // source, model and game sit in one summary row that opens into the full choices.
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Board, type Idea, type Leg, type Market, type Picks } from '../lib/api'
+import { api, type Board, type EvLines as EvData, type Idea, type Leg, type Market, type Picks } from '../lib/api'
 import { american, money } from '../lib/ladder'
 import { useSlip } from '../lib/slip'
 import { Empty, Pills, Section } from '../components/ui'
@@ -15,6 +15,7 @@ import { PerfectProps } from '../components/PerfectProps'
 import { SlipImageReview } from '../components/SlipImageReview'
 import { QuickAdds, type QuickAdd } from '../components/QuickAdds'
 import { SuggestedSlip } from '../components/SuggestedSlip'
+import { EvLines } from '../components/EvLines'
 
 const ALL = '__all__'
 const PICKS_SHOWN = 6
@@ -48,6 +49,7 @@ export function Parlay() {
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
   const [picks, setPicks] = useState<Picks['liked']>([])
   const [choosing, setChoosing] = useState(false)
+  const [ev, setEv] = useState<EvData | null>(null)
 
   useEffect(() => {
     let live = true
@@ -81,6 +83,14 @@ export function Parlay() {
     if (!day) return
     let live = true
     api.picks(day).then((p) => live && setPicks(p.liked)).catch(() => live && setPicks([]))
+    return () => { live = false }
+  }, [day, refresh])
+
+  // every book's prices against the others' no-vig average (a paper test); none is not an error
+  useEffect(() => {
+    if (!day) return
+    let live = true
+    api.ev(day).then((e) => live && setEv(e)).catch(() => live && setEv(null))
     return () => { live = false }
   }, [day, refresh])
 
@@ -196,6 +206,12 @@ export function Parlay() {
         {quick.length > 0 && (
           <Section title="Quick adds" aside={<a href="#/picks" className="underline">every line and projection</a>}>
             <QuickAdds items={quick} selected={slip.legs} toggle={slip.toggle} />
+          </Section>
+        )}
+
+        {ev && ev.lines.some((l) => !gameShort || l.game_short === gameShort) && (
+          <Section title="+EV lines" aside="Every book vs the others' no-vig average · paper test">
+            <EvLines data={ev} game={gameShort} />
           </Section>
         )}
 

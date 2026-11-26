@@ -13,6 +13,9 @@ are archived separately, and early lines are priced into the ledger under their 
 PropLine's FanDuel and DraftKings lines for all four stats are archived at the same moment
 (one request a run, its own file), when a key is configured, and FanDuel's rebounds,
 assists and threes are priced into the ledger by the rolling-average model.
+The same PropLine request carries about 30 books; every book's main lines are archived, and
+lines one book prices better than the others' devigged consensus are logged as paper bets
+(tracking/ev_screen, tracking/ev_log). That screen is an experiment and is never published.
 FanDuel's "X+ points" lines are no longer fetched: the request each one cost now pays for
 two more games a night (nba_snapshot_plan.DEFAULT_MAX_GAMES). Kalshi still prices X+ rungs.
 
@@ -41,8 +44,8 @@ from edgefinder.data import (  # noqa: E402
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import (  # noqa: E402
-    book_gaps, gap_log, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper, nba_recording,
-    price_gaps)
+    book_gaps, ev_log, ev_screen, gap_log, nba_alt, nba_alt_stats, nba_kalshi_ledger, nba_paper,
+    nba_recording, price_gaps)
 
 log = logging.getLogger("nba_props_snapshot")
 
@@ -326,6 +329,7 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) 
     except Exception:
         log.exception("PropLine snapshot failed; the FanDuel snapshot is unaffected")
         return
+    log_ev_flags(games, due, fetched_at)
     try:
         log.info("Moneylines saved: %d", nba_moneylines.archive(
             games, [(task.event, task.phase) for task in due], fetched_at))
@@ -344,6 +348,22 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) 
                  record_propline_milestones(games, early, models))
     except Exception:
         log.exception("Pricing PropLine X+ lines failed; the FanDuel snapshot is unaffected")
+
+
+def log_ev_flags(games: list[dict], due: list[nba_snapshot_plan.SnapshotTask], fetched_at: str,
+                 path: Path | None = None) -> int:
+    """Log the lines one book prices better than the other books' fair consensus, for games
+    that have not started, as paper bets. Nothing it raises may fail the run."""
+    try:
+        rows = propline.snapshot_rows(games, [(task.event, task.phase) for task in due], fetched_at)
+        flags = ev_screen.screen(pd.DataFrame(rows))
+        added = ev_log.append(ev_log.rows_to_log(flags, dt.datetime.now(dt.timezone.utc),
+                                                 nba_snapshot_plan.tip_date), path)
+        log.info("+EV screen: %d flagged, %d new in the paper log", len(flags), added)
+        return added
+    except Exception:
+        log.exception("The +EV screen failed; the snapshot is unaffected")
+        return 0
 
 
 def record_propline(games: list[dict], events: list[dict], models: Models,

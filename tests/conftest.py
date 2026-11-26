@@ -15,6 +15,8 @@ def no_real_propline(tmp_path, monkeypatch):
     monkeypatch.setattr(nba_moneylines, "MONEYLINES_PATH", tmp_path / "nba_moneylines.csv")
     from edgefinder.tracking import nba_alt_stats
     monkeypatch.setattr(nba_alt_stats, "LEDGER_PATH", tmp_path / "nba_alt_stats_log.csv")
+    from edgefinder.tracking import ev_log
+    monkeypatch.setattr(ev_log, "LOG_PATH", tmp_path / "ev_log.csv")
 
 
 @pytest.fixture(autouse=True)
