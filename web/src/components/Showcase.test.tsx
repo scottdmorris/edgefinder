@@ -21,8 +21,10 @@ const sim: Simulation = {
 }
 
 it("shows each side's simulated win chance beside the market's, the typical score and its box score", async () => {
-  vi.spyOn(api, 'simulate').mockResolvedValue(sim)
+  const simulate = vi.spyOn(api, 'simulate').mockResolvedValue(sim)
   render(<GameSim market={{ date: '2026-11-24', book: 'fanduel' }} game={game} />)
+  expect(simulate).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Run game simulation' }))
   expect(await screen.findByText('60%')).toBeTruthy()
   expect(screen.getByText('40%')).toBeTruthy()
   expect(screen.getByText('market 79%')).toBeTruthy()
@@ -34,11 +36,13 @@ it("shows each side's simulated win chance beside the market's, the typical scor
   expect(screen.getAllByText('Rest of the team')).toHaveLength(2)
 })
 
-it('stays out of the way when the simulation cannot be run', async () => {
-  vi.spyOn(api, 'simulate').mockRejectedValue(new Error('no'))
-  const { container } = render(<GameSim market={{}} game={game} />)
-  await new Promise((r) => setTimeout(r, 0))
-  expect(container.textContent).toBe('')
+it('offers retry when the simulation cannot be run', async () => {
+  vi.spyOn(api, 'simulate').mockRejectedValueOnce(new Error('no')).mockResolvedValue(sim)
+  render(<GameSim market={{}} game={game} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Run game simulation' }))
+  expect(await screen.findByRole('alert')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry simulation' }))
+  expect(await screen.findByText('108–104')).toBeTruthy()
 })
 
 const prop = { leg_id: 7, player: 'Jalen Suggs', player_id: 3, game: 'X @ Y', event_id: 'e', stat: 'assists',

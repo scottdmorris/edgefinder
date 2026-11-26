@@ -26,10 +26,13 @@ import hashlib
 import json
 import logging
 import math
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
+
+from ..data import safe_write
 
 log = logging.getLogger(__name__)
 
@@ -106,8 +109,19 @@ def _append(path: Path, entries: list[dict]) -> None:
                                 allow_nan=False))
         seq += 1
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(lines) + "\n")
+    # Retry opening through transient Windows file locks. Once a write starts,
+    # a failed write is ambiguous and must be checked rather than retried blindly.
+    for attempt in range(safe_write.REPLACE_ATTEMPTS):
+        try:
+            handle = path.open("a", encoding="utf-8", newline="\n")
+        except PermissionError:
+            if attempt == safe_write.REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(safe_write.REPLACE_WAIT_SECONDS)
+        else:
+            with handle:
+                handle.write("\n".join(lines) + "\n")
+            return
 
 
 def _body(entry: dict) -> dict:

@@ -247,6 +247,7 @@ type GapPart = { logged: number; record: string; units: number }
 
 export type RecordData = {
   suggestions?: { offered: SuggestionFacts; experiment: SuggestionFacts; long_shot?: SuggestionFacts;
+    long_shot_previous?: SuggestionFacts | null; long_shot_protocol?: { id: string };
     protocol: { id: string; review_after_slips: number; review_after_game_days: number } }
   empty: boolean
   integrity: { picks: number; graded: number; after_tip: number; first_lock: string | null; last_lock: string | null }

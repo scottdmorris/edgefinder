@@ -214,8 +214,8 @@ operator does not control.
 .venv\Scripts\python scripts\verify_record.py    # intact? does the ledger match?
 ```
 
-It cannot prove the entries that existed when the log began (they were
-imported and are marked so), and the time on an entry is the clock of the
+Entries marked as imports carry the time they entered the chain, including
+rows recovered later from the ledger. The time on an entry comes from the
 machine that wrote it. Details are in the methodology document.
 
 ## Roadmap

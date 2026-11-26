@@ -32,12 +32,13 @@ EXPERIMENT = {"id": "higher-hit-v1", "model": "context-v2", "book": "fanduel",
               "fees": "before fees; simulated product payout, not a verified sportsbook parlay quote"}
 # Many legs, one a night: Kalshi is the only source with enough worthwhile legs most nights.
 # Last season's markets say it loses at real prices; this records whether it does here.
-LONG_SHOT_EXPERIMENT = {"id": "long-shot-v1", "model": "context-v2", "book": "kalshi",
+LONG_SHOT_V1 = {"id": "long-shot-v1", "model": "context-v2", "book": "kalshi",
                         "style": "Long shot", "min_legs": 8, "max_legs": 10, "max_per_game": 2,
                         "min_leg_ev": .02, "first_qualifying_slip_per_day": True,
                         "review_after_game_days": 60,
                         "success": "positive flat-unit return over the review window",
                         "fees": "before Kalshi fees; product of the leg prices"}
+LONG_SHOT_EXPERIMENT = LONG_SHOT_V1 | {"id": "long-shot-v2"}
 EXPERIMENTS = {spec["id"]: spec for spec in (EXPERIMENT, LONG_SHOT_EXPERIMENT)}
 
 
@@ -165,8 +166,11 @@ def summary(path: Path | None = None) -> dict:
                 for i, p, r in db.execute("SELECT id,payload,result FROM offers")]
         trial, trial_protocol = _trial(db, rows, EXPERIMENT)
         long_shot, long_shot_protocol = _trial(db, rows, LONG_SHOT_EXPERIMENT)
+        legacy, legacy_protocol = _trial(db, rows, LONG_SHOT_V1)
     return {"offered": facts(rows), "experiment": trial, "protocol": trial_protocol,
-            "long_shot": long_shot, "long_shot_protocol": long_shot_protocol}
+            "long_shot": long_shot, "long_shot_protocol": long_shot_protocol,
+            "long_shot_previous": legacy if legacy["offered"] else None,
+            "long_shot_previous_protocol": legacy_protocol if legacy["offered"] else None}
 
 
 def _trial(db: sqlite3.Connection, rows: list, spec: dict) -> tuple[dict, dict]:

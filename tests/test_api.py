@@ -1,6 +1,8 @@
 """The web app's API, run against a small made-up ledger (no files, no network)."""
 
 import datetime as dt
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Event
 
 import pandas as pd
 import pytest
@@ -21,6 +23,35 @@ GAMES = [
      "home": "New York Knicks", "away": "Chicago Bulls"},
 ]
 PLAYERS = [("Jaylen Brown", 1, 27.0, GAMES[0]), ("Jalen Brunson", 2, 34.0, GAMES[1])]
+
+
+def test_same_key_concurrent_cache_misses_share_one_computation(monkeypatch):
+    service.clear_cache()
+    computing, waiting, release = Event(), Event(), Event()
+    value = object()
+
+    class ObservedFuture(Future):
+        def result(self, timeout=None):
+            waiting.set()
+            return super().result(timeout)
+
+    monkeypatch.setattr(service, "Future", ObservedFuture)
+
+    def compute():
+        computing.set()
+        assert release.wait(5)
+        return value
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.cached, ("shared-test",), compute)
+        try:
+            assert computing.wait(5)
+            second = pool.submit(service.cached, ("shared-test",), object)
+            assert waiting.wait(5)
+        finally:
+            release.set()
+        assert first.result() is second.result() is value
+    service.clear_cache()
 
 
 def _ledger() -> pd.DataFrame:

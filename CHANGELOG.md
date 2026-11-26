@@ -4,6 +4,22 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Record recovery, Long shot v2 and game replay fixes
+- Recovered six unlogged FanDuel assists rows as dated imports. The original
+  chain entries and all 12 published checkpoints still match. The ledger audit
+  now matches all 31,872 rows. Chain appends retry transient file-open failures.
+- New qualifying Long shot slips use `long-shot-v2`. The six v1 offers and their
+  results stay in their own Record section, and historical cards can still read them.
+- Game simulations load on request, with retry if loading fails. Concurrent
+  requests for the same uncached result share one computation. Historical
+  simulations derive rosters, pace and averages from logs before the selected day.
+- Perfect Props keeps unresolved entries visible alongside same-day graded
+  results. The live court clears the flying shot after the animation even when
+  an intervening refresh returns the same shot.
+- Validation: 153 focused Python tests, 108 web tests, production build, Ruff
+  and Bandit passed. Web lint reported the eight existing warnings. The live
+  ledger passed the read-only verification after recovery.
+
 ### Watch a simulated game, and live games on the same court
 
 - The game simulation now plays every game possession by possession (`tracking/possession_sim.py`):

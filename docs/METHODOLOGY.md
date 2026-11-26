@@ -186,9 +186,11 @@ does not control, and any later log must still contain that fingerprint at that 
 A log that was cut short or rewritten cannot reproduce it. To let a stranger check it, the
 log and the ledger have to be shared, and until then only the operator can run the check.
 
-**What it does not cover.** The 813 entries that existed when the log began (5 Nov 2026) were
-imported, not witnessed, and are marked so; only entries after that were logged as they
-happened. The time on an entry is the clock of the machine that wrote it. Closing prices
+**What it does not cover.** Imports carry the time they were added to the chain.
+This includes the 813 entries saved when the log began and six rows recovered on
+25 Nov 2026. The recovery command (`python scripts/verify_record.py --recover-unlogged`)
+adds imports only when the existing chain is intact and the resulting audit passes.
+The time on an entry is the clock of the machine that wrote it. Closing prices
 arrive after the fact and are not part of the log. The X+ ledger is not chained yet. A pick
 is no longer written at all if its game has started.
 

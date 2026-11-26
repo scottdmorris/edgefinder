@@ -340,6 +340,38 @@ def test_the_digest_line_is_the_date_the_entry_count_and_the_head(chain):
         f"| 2026-11-05 | 4 | `{result.head}` |")
 
 
+def test_recovery_preserves_prior_fingerprint_and_an_existing_result(verify_script, tmp_path):
+    path = tmp_path / "ledger.csv"
+    chain = pick_chain.chain_path_for(path)
+    batch = four()
+    batch[-1].update(status="settled", result="win", pnl_units=1)
+    nba_paper.save_ledger(frame(batch), path)
+    pick_chain.record_picks(chain, batch[:-1], NOW)
+    pick_chain.record_results(chain, batch[-1:], NOW)
+    old = pick_chain.verify(chain)
+
+    assert verify_script.recover_unlogged(path) == 1
+    assert verify_script.check(path)[1].clean
+    assert pick_chain.holds(chain, old.entries, old.head)
+    recovered = pick_chain.load(chain)[-1]
+    assert recovered["kind"] == pick_chain.PICK and recovered["imported"]
+    assert dt.datetime.fromisoformat(recovered["at"]) > NOW
+    assert verify_script.recover_unlogged(path) == 0
+
+
+def test_recovery_does_not_reconcile_edited_rows(verify_script, tmp_path):
+    path = tmp_path / "ledger.csv"
+    chain = pick_chain.chain_path_for(path)
+    batch = four()
+    pick_chain.record_picks(chain, batch[:-1], NOW)
+    original = chain.read_bytes()
+    batch[0]["over_odds"] = 150
+    nba_paper.save_ledger(frame(batch), path)
+    with pytest.raises(ValueError, match="other audit discrepancies"):
+        verify_script.recover_unlogged(path)
+    assert chain.read_bytes() == original
+
+
 def test_writing_the_digest_adds_a_line_once_per_state(verify_script, chain, tmp_path):
     pick_chain.record_picks(chain, rows(), NOW)
     digests = tmp_path / "DIGESTS.md"

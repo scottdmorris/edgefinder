@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from edgefinder.tracking import game_sim, perfect_props
+from edgefinder.api import service, showcase
 
 
 def _player(pid, team, points, lines=()):
@@ -87,3 +88,44 @@ def test_grading_says_hit_or_miss_from_that_nights_box_score_and_none_without_on
     assert [p["hit"] for p in perfect_props.grade(found, logs, "2026-11-09")] == [False]
     assert [p["hit"] for p in perfect_props.grade(found, logs, "2026-11-10")] == [None]
     assert np.isnan(perfect_props.grade(found, logs.assign(pts=np.nan), "2026-11-09")[0]["actual"])
+
+
+def test_same_day_recap_keeps_upcoming_props(monkeypatch):
+    day = "2026-11-25"
+    props = [{"leg_id": pid, "player_id": pid, "event_id": f"e{pid}", "stat": "points", "line": 9.5}
+             for pid in (1, 2)]
+    monkeypatch.setattr(service, "candidates", lambda *a: (pd.DataFrame(), {"date": day, "book": "fanduel"}))
+    monkeypatch.setattr(service, "load_games", lambda: _logs([12], start=day))
+    monkeypatch.setattr(service, "days", lambda: [{"date": day}])
+    monkeypatch.setattr(service, "_tips", dict)
+    monkeypatch.setattr(showcase, "_every_book", lambda *a: pd.DataFrame())
+    monkeypatch.setattr(perfect_props, "find", lambda *a: props)
+    result = showcase.perfect(day, None, None)
+    assert [p["leg_id"] for p in result["props"]] == [2]
+    assert [p["leg_id"] for p in result["recap"]["props"]] == [1]
+
+
+def test_historical_simulation_only_passes_pregame_history_to_inputs(monkeypatch):
+    day = "2026-11-25"
+    game = "Boston Celtics @ Washington Wizards"
+    chosen = {"date": day, "book": "fanduel", "model": "context-v2"}
+    slate = pd.DataFrame([{"Game": game, "away_abbr": "BOS", "home_abbr": "WAS"}])
+    logs = _logs([12, 99, 100], start="2026-11-24")
+    monkeypatch.setattr(service, "candidates", lambda *a: (slate, chosen))
+    monkeypatch.setattr(service, "load_games", lambda: logs)
+    monkeypatch.setattr(service, "cached", lambda key, compute, seconds: compute())
+    monkeypatch.setattr(showcase.nba_parlay, "player_averages", lambda history: {1: {"pts": (history.pts.mean(), 0)}})
+    monkeypatch.setattr(showcase.nba_parlay, "player_teams", lambda history: {1: str(history.pts.max())})
+    monkeypatch.setattr(showcase, "_team_points", lambda games: {})
+    # Keep roster construction out of the orchestration test.
+    player = _player(1, "BOS", 12)
+    def players(rows, teams, averages, sides):
+        assert teams == {1: "12"}
+        assert averages[1]["pts"][0] == 12
+        return [player]
+    monkeypatch.setattr(showcase, "_players", players)
+    def play(players, history, *args):
+        assert history.pts.tolist() == [12]
+        return {"runs": 1}
+    monkeypatch.setattr(showcase, "_possessions", play)
+    assert showcase.simulation(day, "fanduel", "context-v2", game)["runs"] == 1

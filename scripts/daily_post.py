@@ -94,6 +94,7 @@ def trial_slips(day: str, path: Path | None = None) -> list[dict]:
     if not db_path.exists():
         return []
     names = {suggested_record.EXPERIMENT["id"]: "Higher hit rate",
+             suggested_record.LONG_SHOT_V1["id"]: "Long shot",
              suggested_record.LONG_SHOT_EXPERIMENT["id"]: "Long shot"}
     out = []
     try:

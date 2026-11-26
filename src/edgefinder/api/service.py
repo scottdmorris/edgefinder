@@ -12,6 +12,8 @@ import json
 import math
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
+from threading import Lock
 
 import pandas as pd
 
@@ -31,6 +33,8 @@ STEADY_SHOWN = 8
 RECOMMEND_MIN_LINES = 100     # graded lines every model priced before one is recommended
 BOOK_NAMES = {"fanduel": "FanDuel", "draftkings": "DraftKings", "kalshi": "Kalshi"}
 _cache: dict[tuple, tuple[float, object]] = {}
+_inflight: dict[tuple, Future] = {}
+_cache_lock = Lock()
 
 
 class NotFound(ValueError):
@@ -40,21 +44,41 @@ class NotFound(ValueError):
 def cached(key: tuple, compute: Callable, seconds: float = CACHE_SECONDS):
     """`compute()`, reused for `seconds`. Entries past their time are dropped on each write and
     the cache never holds more than CACHE_MAX_ENTRIES, so odd requests can't grow it for good."""
-    now = time.monotonic()
-    hit = _cache.get(key)
-    if hit and now < hit[0]:
-        return hit[1]
-    value = compute()
-    for stale in [k for k, (expires, _) in _cache.items() if expires <= now]:
-        del _cache[stale]
-    while len(_cache) >= CACHE_MAX_ENTRIES:
-        del _cache[min(_cache, key=lambda k: _cache[k][0])]     # the one closest to expiring
-    _cache[key] = (now + seconds, value)
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and time.monotonic() < hit[0]:
+            return hit[1]
+        pending = _inflight.get(key)
+        owner = pending is None
+        if pending is None:
+            pending = _inflight[key] = Future()
+    if not owner:
+        return pending.result()
+    try:
+        value = compute()
+    except BaseException as error:
+        with _cache_lock:
+            if _inflight.get(key) is pending:
+                del _inflight[key]
+        pending.set_exception(error)
+        raise
+    with _cache_lock:
+        if _inflight.get(key) is pending:
+            now = time.monotonic()
+            for stale in [k for k, (expires, _) in _cache.items() if expires <= now]:
+                del _cache[stale]
+            while len(_cache) >= CACHE_MAX_ENTRIES:
+                del _cache[min(_cache, key=lambda k: _cache[k][0])]
+            _cache[key] = (now + seconds, value)
+            del _inflight[key]
+    pending.set_result(value)
     return value
 
 
 def clear_cache() -> None:
-    _cache.clear()
+    with _cache_lock:
+        _cache.clear()
+        _inflight.clear()
 
 
 # ---- data, swappable in tests ------------------------------------------------------------------

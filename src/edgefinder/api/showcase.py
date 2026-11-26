@@ -146,8 +146,12 @@ def simulation(date: str | None, book: str | None, model: str | None, game: str)
     away, home = rows["away_abbr"].iloc[0], rows["home_abbr"].iloc[0]
 
     def run() -> dict:
-        games, averages = service.load_games(), service._averages()
-        players = _players(rows, service._teams(), averages, (away, home))
+        games = service.load_games()
+        if not games.empty:
+            games = games[games["game_date"] < pd.Timestamp(chosen["date"])]
+        averages = nba_parlay.player_averages(games) if not games.empty else {}
+        teams = nba_parlay.player_teams(games) if not games.empty else {}
+        players = _players(rows, teams, averages, (away, home))
         usual = _team_points(games)
         listed = {team: sum(averages.get(p.player_id, {}).get("pts", (0.0, 0.0))[0]
                             for p in players if p.team == team) for team in (away, home)}
@@ -187,7 +191,7 @@ def perfect(date: str | None, book: str | None, model: str | None) -> dict:
     started = {e for e, tip in service._tips().items() if service._started(tip)}
     today = [{**p, "started": p["event_id"] in started} for p in today]
     recap = None
-    # the latest day whose games are over: the chosen day itself once its box scores are in
+    # The current list and its graded recap can coexist while a slate is in progress.
     for day in [d["date"] for d in service.days() if d["date"] <= chosen["date"]][:RECAP_LOOKBACK]:
         if games.empty:
             break
@@ -195,9 +199,10 @@ def perfect(date: str | None, book: str | None, model: str | None) -> dict:
         done = [p for p in perfect_props.grade(found, games, day) if p["hit"] is not None]
         if done:
             recap = {"date": day, "hit": sum(p["hit"] for p in done), "total": len(done), "props": done}
+            if day == chosen["date"]:
+                graded = {p["leg_id"] for p in done}
+                today = [p for p in today if p["leg_id"] not in graded]
             break
-    if recap and recap["date"] == chosen["date"]:
-        today = []                    # the day is over: its list is the recap now
 
     def with_photo(props: list[dict]) -> list[dict]:
         return [{**p, "photo": nba_parlay.headshot_url(p["player_id"])} for p in props]

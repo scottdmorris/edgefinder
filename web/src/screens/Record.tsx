@@ -37,7 +37,8 @@ export function Record() {
       {data.models.length === 0 && <p className="mt-4 text-sm text-muted">No FanDuel lines recorded. Other sources are shown separately below.</p>}
       {data.suggestions && <Section title="Suggested slips and the trials" aside="prospective paper record">
         {[['Suggestions offered', data.suggestions.offered], ['Frozen higher-hit trial', data.suggestions.experiment],
-          ...(data.suggestions.long_shot ? [['Long shot trial (8–10 legs, Kalshi)', data.suggestions.long_shot]] : [])].map(([label, item]) => {
+          ...(data.suggestions.long_shot ? [[`Long shot trial · ${data.suggestions.long_shot_protocol?.id ?? 'Kalshi'}`, data.suggestions.long_shot]] : []),
+          ...(data.suggestions.long_shot_previous ? [['Long shot trial · long-shot-v1 (closed to new offers)', data.suggestions.long_shot_previous]] : [])].map(([label, item]) => {
           const facts = item as NonNullable<RecordData['suggestions']>['offered']
           return <div key={String(label)} className="mt-2 rounded-2xl border border-line p-4">
             <h3 className="font-bold">{String(label)}</h3>
@@ -256,7 +257,7 @@ function Chain({ chain }: { chain: RecordData['chain'] }) {
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted">
           Every pick and result goes into an append-only log where each entry carries a fingerprint of the one before, so
-          changing the past breaks everything after it. {chain.imported} entries were imported when the log began.{' '}
+          changing the past breaks everything after it. {chain.imported} entries are marked as imports and carry the time they were added to the log.{' '}
           {published.length === 0
             ? 'No fingerprint has been published yet, so until one is this proves nothing to an outsider.'
             : published.every((p) => p.ok)
