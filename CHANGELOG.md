@@ -4,6 +4,19 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Exact-line history in the prop drawer
+
+- Prop details show the last 5, 10 and 20 games and season hit rates beside
+  the model chance and the offered price's break-even rate. Switch sides or
+  alternate lines without changing the slip. The history loads when the
+  drawer opens and uses regular-season appearances before the selected slate.
+- A held-out test on 8,861 Kalshi points quotes found no clear accuracy gain
+  from adding those history windows to the model and market. The results
+  are in `docs/KALSHI_BACKTEST.md`.
+- Validation covered 1,556 Python tests, 110 web tests, the production build,
+  Ruff, the CI Bandit check, and Chrome drawer checks at 320, 390 and 1440 px.
+  Web lint reported eight existing warnings.
+
 ### Recoverable paper ledger and Record diagnostics
 
 - Snapshot and settle jobs now prepare the paper ledger and hash-chained audit

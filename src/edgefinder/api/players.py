@@ -7,7 +7,7 @@ import pandas as pd
 
 from ..data import nba_live, nba_stats
 from ..models import nba_stat_model
-from ..tracking import nba_paper, nba_parlay
+from ..tracking import nba_paper, nba_parlay, prop_history
 from ..tracking import nba_player_lookup as lookup
 from ..data import team_colors
 from . import service
@@ -18,6 +18,18 @@ RECENT_GAMES = 10            # the "last 10" average beside each line on the sla
 
 def _history() -> pd.DataFrame:
     return service.load_games()
+
+
+def line_history(player_id: int, date: dt.date, stat: str, line: float) -> dict:
+    def build() -> dict:
+        games = _history()
+        if not games.empty:
+            games = games[games["player_id"] == player_id]
+        column = nba_stat_model.STATS[stat].column
+        return prop_history.line_counts(prop_history.played_games(games, column), column,
+                                        pd.Timestamp(date), line)
+
+    return service.cached(("prop-history", player_id, date, stat, line), build)
 
 
 def players() -> list[dict]:

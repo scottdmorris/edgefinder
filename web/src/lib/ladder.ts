@@ -25,13 +25,13 @@ export function ladderRows(legs: Leg[]): Row[] {
     const steps = new Map<number, Step>()
     for (const over of mine.filter((l) => l.side === 'Over')) {
       const under = mine.find((l) => l.side === 'Under' && l.line === over.line) ?? null
-      steps.set(thresholdOf(over), { threshold: thresholdOf(over), yes: over, no: under })
+      steps.set(over.line, { threshold: thresholdOf(over), yes: over, no: under })
     }
     for (const plus of mine.filter((l) => l.side.endsWith('+'))) {
       const t = thresholdOf(plus)
-      if (!steps.has(t)) steps.set(t, { threshold: t, yes: plus, no: null })
+      if (!steps.has(plus.line)) steps.set(plus.line, { threshold: t, yes: plus, no: null })
     }
-    row.steps = [...steps.values()].sort((a, b) => a.threshold - b.threshold)
+    row.steps = [...steps.values()].sort((a, b) => a.yes.line - b.yes.line)
   }
   // the biggest names first: the highest line a player is priced at
   return [...rows.values()].filter((r) => r.steps.length)

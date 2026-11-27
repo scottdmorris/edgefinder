@@ -1,11 +1,10 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { Leg } from '../lib/api'
 import { american, defaultStep, ladderRows, type Row, type Step } from '../lib/ladder'
-import { QuoteNotes } from './QuoteNotes'
+import { PropEvidence } from './PropEvidence'
 import { Empty, Photo, Pills } from './ui'
 
 export const STATS: Record<string, string> = { points: 'Points', rebounds: 'Rebounds', assists: 'Assists', threes: '3PM' }
-const MODEL_AGREES = 2     // percentage points within which the model and the price are called level
 const SHOWN = 6     // players listed before "Show all"; the biggest names come first
 export const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -66,14 +65,13 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
   locked?: boolean
 }) {
   const selected = row.steps.find((s) => slip.includes(s.yes.id) || (s.no && slip.includes(s.no.id)))
-  const selection = selected ? `${selected.threshold}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
+  const selection = selected ? `${selected.yes.id}:${slip.includes(selected.yes.id) ? 'yes' : 'no'}` : ''
   // the model's tracked pick on this prop, if it made one: the row opens on that line
   const pickStep = row.steps.find((s) => s.yes.pick || s.no?.pick)
   // the step being looked at; a new selection (from an idea, say) brings its own step into view
-  const [choice, setChoice] = useState({ threshold: (selected ?? pickStep ?? defaultStep(row)).threshold, selection })
-  const step = (choice.selection === selection ? row.steps.find((s) => s.threshold === choice.threshold) : selected) ?? defaultStep(row)
+  const [choice, setChoice] = useState({ id: (selected ?? pickStep ?? defaultStep(row)).yes.id, selection })
+  const step = (choice.selection === selection ? row.steps.find((s) => s.yes.id === choice.id) : selected) ?? defaultStep(row)
   const noSelected = step.no !== null && slip.includes(step.no.id)
-  const compared = noSelected && step.no ? step.no : step.yes
   const label = STATS[row.stat] ?? row.stat
   const stepText = (s: Step) => (kalshi || s.yes.side.endsWith('+') ? `${s.threshold}+` : String(s.yes.line))
 
@@ -84,7 +82,7 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
     const box = strip.current
     const on = box?.querySelector<HTMLElement>('[data-on]')
     if (box && on) box.scrollLeft = on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2
-  }, [step.threshold, open])
+  }, [step.yes.id, open])
 
   // a sportsbook price button: the bet on top, the price underneath
   const button = (leg: Leg, no = false) => {
@@ -107,9 +105,6 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
     : picked.side.endsWith('+') ? stepText(step) : `${picked.side} ${picked.line}`)
   const projection = step.yes.projection ?? step.no?.projection
 
-  // the model's view against the price: green when it rates this side higher, red when lower
-  const lean = (compared.model_pct ?? 0) - (compared.market_pct ?? 0)
-  const leanTone = compared.model_pct == null || Math.abs(lean) < MODEL_AGREES ? 'text-text' : lean > 0 ? 'text-good' : 'text-bad'
   const average = row.average && (row.average.season != null || row.average.last10 != null) ? row.average : null
 
   // like a sportsbook: who, their averages, two prices; everything else behind the details button
@@ -137,23 +132,18 @@ export function PropRow({ row, slip, toggle, kalshi, compact = false, inGame = f
         <div className="mb-1">Other lines</div>
         <div ref={strip} className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
           {row.steps.map((s) => {
-            const on = s.threshold === step.threshold
+            const on = s.yes.id === step.yes.id
             const picked = slip.includes(s.yes.id) || (s.no !== null && slip.includes(s.no.id))
-            return <button key={s.threshold} type="button" data-on={on || undefined} aria-current={on || undefined}
-              onClick={() => setChoice({ threshold: s.threshold, selection })}
+            return <button key={s.yes.id} type="button" data-on={on || undefined} aria-current={on || undefined}
+              onClick={() => setChoice({ id: s.yes.id, selection })}
               className={`min-h-8 shrink-0 rounded-full px-2.5 font-semibold tabular-nums ${on ? 'bg-button text-button-text' : picked ? 'text-accent ring-1 ring-line' : 'ring-1 ring-line hover:text-text'}`}>
               {stepText(s)}
             </button>
           })}
         </div>
       </div>}
-      <div>
-        Price implies <b className="text-text">{compared.market_pct?.toFixed(0) ?? '–'}%</b>
-        {' · '}model <b className={leanTone}>{compared.model_pct?.toFixed(0) ?? '–'}%</b>
-        {compared.projection != null && <> · projects <b className="text-text">{compared.projection.toFixed(1)}</b></>}
-      </div>
-      <QuoteNotes quality={compared.quality} comparisons={compared.comparisons} side={compared.side} />
-      <div>Hit rates are past games, not forecasts. Injury news isn't checked.</div>
+      <PropEvidence key={`${step.yes.id}:${noSelected}`} step={step}
+        initialUnder={noSelected} kalshi={kalshi} lineLabel={stepText(step)} />
     </div>}
   </div>
 }

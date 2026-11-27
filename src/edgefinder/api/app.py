@@ -7,7 +7,9 @@ picks to the ledger. Suggested slips returned to visitors have a separate paper 
 serves the app itself at "/", so one address works on a PC or a phone.
 """
 
+import datetime as dt
 from pathlib import Path
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -201,6 +203,13 @@ def player_list() -> list[dict]:
 @app.get("/api/players/{player_id}")
 def player_profile(player_id: int) -> dict:
     return _guard(lambda: players.profile(player_id))
+
+
+@app.get("/api/players/{player_id}/prop-history")
+def player_prop_history(player_id: int, date: dt.date,
+                        stat: Literal["points", "rebounds", "assists", "threes"],
+                        line: Annotated[float, Query(ge=0, allow_inf_nan=False)]) -> dict:
+    return players.line_history(player_id, date, stat, line)
 
 
 @app.get("/api/teams")

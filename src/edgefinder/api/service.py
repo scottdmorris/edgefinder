@@ -247,7 +247,7 @@ def candidates(date: str | None, book: str | None, model: str | None) -> tuple[p
     return table, {"date": date, "book": book, "model": model, "found": found}
 
 
-def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> dict:
+def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str], date: str) -> dict:
     stat = row["stat_key"]
     pair = averages.get(int(row["player_id"]), {}).get(nba_stat_model.STATS[stat].column)
     return {
@@ -255,7 +255,7 @@ def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> d
         "id": int(index), "player": row["Player"], "player_id": int(row["player_id"]),
         "team": teams.get(int(row["player_id"])),
         "photo": nba_parlay.headshot_url(row["player_id"]), "game": row["Game"],
-        "game_short": _short(row["Game"]), "stat": stat, "stat_label": row["Stat"],
+        "game_short": _short(row["Game"]), "game_date": date, "stat": stat, "stat_label": row["Stat"],
         "side": row["Side"], "line": _num(row["line"], 1),
         "bet": row["Leg"].split(" · ", 1)[-1], "odds": int(row["Odds"]),
         "model_pct": _num(row["Model %"], 1), "market_pct": _num(row["Market %"], 1),
@@ -306,7 +306,7 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
     found = chosen["found"]
     averages = _averages()
     teams = _teams()
-    legs = [_leg(i, row, averages, teams) for i, row in table.iterrows()]
+    legs = [_leg(i, row, averages, teams, chosen["date"]) for i, row in table.iterrows()]
     games = _games(table, chosen["book"])
     gaps = gaps_for(chosen["date"], chosen["book"], table)
     return {

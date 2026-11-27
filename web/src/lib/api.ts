@@ -8,6 +8,8 @@ export type QuoteQuality = {
 }
 export type BookComparison = { book: string; line: number; odds: number; fetched_at: string;
   stale: boolean; same_line: boolean; better_payout: boolean }
+export type LineCounts = { over: number; under: number; pushes: number }
+export type PropHistory = Record<'last5' | 'last10' | 'last20' | 'season', LineCounts>
 export type SuggestionFacts = { offered: number; graded: number; wins: number; losses: number;
   pending: number; void: number; units: number; hit_pct: number | null; roi_pct: number | null;
   brier: number | null; market_brier: number | null; calibration_n: number; game_days: number }
@@ -22,6 +24,7 @@ export type Leg = {
   photo: string
   game: string
   game_short: string
+  game_date?: string
   stat: string
   stat_label: string
   side: string // "Over", "Under" or "25+"
@@ -529,6 +532,8 @@ export const api = {
   gradeSlip: (date: string, legs: SlipLegQuery[]) => send<GradedSlip>('/api/review/slip', { date, legs }),
   players: () => get<PlayerOption[]>('/api/players'),
   player: (id: number) => get<PlayerProfile>(`/api/players/${id}`),
+  propHistory: (id: number, date: string, stat: string, line: number) =>
+    get<PropHistory>(`/api/players/${id}/prop-history`, { date, stat, line: String(line) }),
   teams: () => get<TeamOption[]>('/api/teams'),
   team: (code: string) => get<TeamProfile>(`/api/teams/${encodeURIComponent(code)}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),

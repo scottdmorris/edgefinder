@@ -133,6 +133,28 @@ Every market, grouped by how often the player reached that number in his last 20
 
 **A nightly 3-leg slip of the steadiest favourites** (reached the number in 90%+ of the last 20 games, priced 80%+, one leg a player): 81 nights, average cost 0.77, won 74.1%, return -6.2% (95% interval -18.5% to +5.9%). The legs are priced as independent, which is how Kalshi would sell them one by one.
 
+### Does consistency improve the probability estimate?
+
+`python scripts/nba_consistency_eval.py` tests the last 5, 10, 20 and season hit rates
+at the exact points threshold. Each rate uses games played before that slate and
+is shrunk toward the Kalshi midpoint with 10 prior-game equivalents. The
+comparison fits the same logistic model with and without those four rates.
+Both versions start with the market and a pregame model, either Simple or
+Smarter. The fit used 4,582 quotes through Jan 27, 2026. The holdout had 8,861
+quotes across 68 nights from Jan 28 through Apr 12, 2026.
+
+| Pregame model | Brier without history | Brier with history | Difference (95% interval) | Log loss without / with |
+|---|---:|---:|---:|---:|
+| Simple | 0.179129 | 0.179249 | +0.000120 (−0.000456 to +0.000655) | 0.535404 / 0.535214 |
+| Smarter | 0.179383 | 0.179418 | +0.000035 (−0.000359 to +0.000400) | 0.536034 / 0.535729 |
+
+Lower is better for both scores. Brier intervals resample whole game nights.
+The Kalshi midpoint scored 0.178123 on the holdout and the fixed Smarter
+model/market blend scored 0.178005. The fitted models with consistency showed
+no clear accuracy gain. The drawer displays the history for research and the
+app continues to price props with its existing probabilities. This run tested
+Kalshi points markets only.
+
 ## Limits
 
 - One season. The models never saw it, but the rules and spreads were chosen with earlier seasons, and this test was run once after the fact.

@@ -11,14 +11,15 @@ interface QuoteNotesProps {
   quality?: QuoteQuality | null
   comparisons?: BookComparison[]
   side: string
+  showRecentHit?: boolean
 }
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'unknown')
 
-export function QuoteNotes({ quality, comparisons = [], side }: QuoteNotesProps) {
+export function QuoteNotes({ quality, comparisons = [], side, showRecentHit = true }: QuoteNotesProps) {
   if (!quality && comparisons.length === 0) return null
   const parts: ReactNode[] = []
-  if (quality?.recent_hit_pct != null) parts.push(<span key="hit">Hit <b className="text-text">{Math.round(quality.recent_hit_pct)}%</b> of last {quality.history_games}</span>)
+  if (showRecentHit && quality?.recent_hit_pct != null) parts.push(<span key="hit">Hit <b className="text-text">{Math.round(quality.recent_hit_pct)}%</b> of last {quality.history_games}</span>)
   if (quality?.historical_low != null) parts.push(<span key="range">usually {quality.historical_low}–{quality.historical_high}</span>)
   for (const other of comparisons) {
     const word = comparisonWord(other)
