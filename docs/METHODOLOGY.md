@@ -177,6 +177,11 @@ fingerprint after it. The Record tab walks the log and compares it with the ledg
 rows, deleted rows, rows that were never logged, and results that differ from the one logged
 are all named.
 
+The snapshot and settle jobs prepare both files under the same lock. If a job stops
+after marking both files ready, the next snapshot, settle, or record publish finishes
+that write with its original audit entries. Record shows a pending recovery during
+that interval. If either file changed outside the jobs, recovery stops for inspection.
+
 **What it proves, and what it doesn't.** On its own it proves little: whoever can edit the
 ledger can also rebuild the whole log. What makes it trustworthy is publishing the *latest
 fingerprint* somewhere the operator cannot rewrite. `python scripts/verify_record.py
@@ -186,9 +191,11 @@ does not control, and any later log must still contain that fingerprint at that 
 A log that was cut short or rewritten cannot reproduce it. To let a stranger check it, the
 log and the ledger have to be shared, and until then only the operator can run the check.
 
-**What it does not cover.** The 813 entries that existed when the log began (5 Nov 2026) were
-imported, not witnessed, and are marked so; only entries after that were logged as they
-happened. The time on an entry is the clock of the machine that wrote it. Closing prices
+**What it does not cover.** Imports carry the time they were added to the chain.
+This includes the 813 entries saved when the log began and six rows recovered on
+25 Nov 2026. The recovery command (`python scripts/verify_record.py --recover-unlogged`)
+adds imports only when the existing chain is intact and the resulting audit passes.
+The time on an entry is the clock of the machine that wrote it. Closing prices
 arrive after the fact and are not part of the log. The X+ ledger is not chained yet. A pick
 is no longer written at all if its game has started.
 

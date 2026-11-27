@@ -83,7 +83,8 @@ def test_the_bulk_request_asks_for_moneylines_without_a_second_call(monkeypatch)
         def json(self):
             return [GAME]
     propline.fetch_slate(get=lambda url, **kw: calls.append(kw) or Response())
-    assert len(calls) == 1 and "h2h" in calls[0]["params"]["markets"].split(",")
+    assert len(calls) == 1
+    assert {"h2h", "spreads", "totals"} <= set(calls[0]["params"]["markets"].split(","))
 
 
 def _script():

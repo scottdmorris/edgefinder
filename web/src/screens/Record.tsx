@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type ModelRecord, type RecordData } from '../lib/api'
 import { american } from '../lib/ladder'
+import { MissReport } from '../components/MissReport'
 import { Empty, Pills, Section, StatStrip } from '../components/ui'
 
 const SERIES = ['#eff3f4', '#8b98a5', '#f5b83d', '#00ba7c', '#1d9bf0']
@@ -32,12 +33,14 @@ export function Record() {
       </p>
       <p className="mt-2 text-sm text-muted">Paper results at recorded prices, before trading fees. Each model is scored separately; picks can overlap.</p>
       <p className="mt-1 text-xs text-muted">{data.days.length ? `Game days: ${data.days.map((day) => day.day).sort()[0]} through ${data.days.map((day) => day.day).sort().at(-1)}.` : 'No game-day history yet.'} Sample size is shown for each model; a winning record alone does not establish an edge.</p>
+      {data.chain.pending_commit && <p role="status" className="mt-3 font-bold text-warn">A prepared ledger write is waiting for recovery. The next recording job will finish it.</p>}
       {data.chain.started && (!data.chain.intact || !data.chain.clean) && <p role="alert" className="mt-3 font-bold text-bad">The record does not match its log. Do not trust these results.</p>}
       {integrity.after_tip > 0 && <p role="alert" className="mt-3 text-sm text-warn">{integrity.after_tip} picks were recorded after tip-off. Review the audit trail before interpreting these results.</p>}
       {data.models.length === 0 && <p className="mt-4 text-sm text-muted">No FanDuel lines recorded. Other sources are shown separately below.</p>}
       {data.suggestions && <Section title="Suggested slips and the trials" aside="prospective paper record">
         {[['Suggestions offered', data.suggestions.offered], ['Frozen higher-hit trial', data.suggestions.experiment],
-          ...(data.suggestions.long_shot ? [['Long shot trial (8–10 legs, Kalshi)', data.suggestions.long_shot]] : [])].map(([label, item]) => {
+          ...(data.suggestions.long_shot ? [[`Long shot trial · ${data.suggestions.long_shot_protocol?.id ?? 'Kalshi'}`, data.suggestions.long_shot]] : []),
+          ...(data.suggestions.long_shot_previous ? [['Long shot trial · long-shot-v1 (closed to new offers)', data.suggestions.long_shot_previous]] : [])].map(([label, item]) => {
           const facts = item as NonNullable<RecordData['suggestions']>['offered']
           return <div key={String(label)} className="mt-2 rounded-2xl border border-line p-4">
             <h3 className="font-bold">{String(label)}</h3>
@@ -49,6 +52,7 @@ export function Record() {
           {data.suggestions.long_shot && ' Long shot trial: the first qualifying 8–10-leg Kalshi slip each day, Context v2, at most two players a game. On last season’s markets slips like this lost money at real prices, so this records whether that holds, not an edge.'}</p>
       </Section>}
       <Models models={data.models} />
+      {data.miss_report && <MissReport rows={data.miss_report} />}
       <Profit running={data.running} models={data.models} />
       <ByBook data={data} />
       <details className="mt-8 rounded-2xl border border-line p-4">
@@ -58,7 +62,7 @@ export function Record() {
           { value: integrity.picks, label: 'FanDuel picks locked' },
           { value: integrity.graded, label: 'graded so far' },
           { value: <span className={integrity.after_tip ? 'text-bad' : 'text-good'}>{integrity.after_tip}</span>, label: 'recorded after tip-off' },
-          { value: data.chain.started ? <span className={data.chain.intact && data.chain.clean ? 'text-good' : 'text-bad'}>{data.chain.intact && data.chain.clean ? 'Intact' : 'Broken'}</span> : '–', label: 'tamper log' },
+          { value: data.chain.pending_commit ? 'Recovery pending' : data.chain.started ? <span className={data.chain.intact && data.chain.clean ? 'text-good' : 'text-bad'}>{data.chain.intact && data.chain.clean ? 'Intact' : 'Broken'}</span> : '–', label: 'tamper log' },
         ]} />
         {integrity.first_lock && (
           <p className="mt-2 text-xs text-muted">
@@ -256,7 +260,7 @@ function Chain({ chain }: { chain: RecordData['chain'] }) {
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted">
           Every pick and result goes into an append-only log where each entry carries a fingerprint of the one before, so
-          changing the past breaks everything after it. {chain.imported} entries were imported when the log began.{' '}
+          changing the past breaks everything after it. {chain.imported} entries are marked as imports and carry the time they were added to the log.{' '}
           {published.length === 0
             ? 'No fingerprint has been published yet, so until one is this proves nothing to an outsider.'
             : published.every((p) => p.ok)

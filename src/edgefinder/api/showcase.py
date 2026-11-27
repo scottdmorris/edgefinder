@@ -1,10 +1,12 @@
 """The game simulation and Perfect Props, shaped for the Parlay screen. Display only."""
 
 import hashlib
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
+from ..data import nba_game_lines
 from ..models import nba_stat_model
 from ..tracking import game_sim, nba_parlay, perfect_props, possession_sim
 from . import service
@@ -14,6 +16,16 @@ RECAP_LOOKBACK = 3       # days searched back for the latest finished one
 SIM_RUNS = 2000          # games played possession by possession per simulation
 OREB_SHARE = 0.23        # share of a team's rebounds that are offensive, for its possessions
 STAT_BOX = {"points": "points", "rebounds": "rebounds", "assists": "assists", "threes": "threes"}
+
+
+@dataclass(frozen=True)
+class GameInputs:
+    history: pd.DataFrame
+    averages: dict
+    players: list[game_sim.Player]
+    usual: dict[str, float]
+    listed: dict[str, float]
+    rest: dict[str, float]
 
 
 def _seed(*parts: str) -> int:
@@ -97,8 +109,7 @@ def _possessions(players, games, averages, away, home, rest, seed) -> dict | Non
     rosters = _rosters(players, games, averages, rest, (away, home))
     if rosters is None:
         return None
-    targets = {team: rest.get(team, 0.0) + sum(p.means.get("points", 0.0) for p in players if p.team == team)
-               for team in (away, home)}
+    targets = {team: game_sim.team_target(players, team, rest.get(team, 0.0)) for team in (away, home)}
     result = possession_sim.simulate(rosters, away, home, _pace(games, (away, home)), targets, SIM_RUNS, seed)
     scores, margin = result["scores"], result["margin"]
     home_wins = margin > 0
@@ -138,26 +149,82 @@ def _possessions(players, games, averages, away, home, rest, seed) -> dict | Non
     }
 
 
-def simulation(date: str | None, book: str | None, model: str | None, game: str) -> dict:
-    table, chosen = service.candidates(date, book, model)
+def _game_rows(table: pd.DataFrame, game: str) -> pd.DataFrame:
     rows = table[table["Game"] == game]
     if rows.empty:
         raise service.NotFound(f"no game {game[:80]!r} on this board")
+    return rows
+
+
+def _game_inputs(rows: pd.DataFrame, date: str, sides: tuple[str, str]) -> GameInputs:
+    games = service.load_games()
+    if not games.empty:
+        games = games[games["game_date"] < pd.Timestamp(date)]
+    averages = nba_parlay.player_averages(games) if not games.empty else {}
+    teams = nba_parlay.player_teams(games) if not games.empty else {}
+    players = _players(rows, teams, averages, sides)
+    usual = _team_points(games)
+    listed = {team: sum(averages.get(p.player_id, {}).get("pts", (0.0, 0.0))[0]
+                        for p in players if p.team == team) for team in sides}
+    rest = {team: max(usual.get(team, listed[team]) - listed[team], 0.0) for team in sides}
+    return GameInputs(games, averages, players, usual, listed, rest)
+
+
+def _scoring_details(inputs: GameInputs, team: str) -> dict:
+    projected = game_sim.team_target(inputs.players, team, inputs.rest[team])
+    recent = inputs.usual[team]
+    known = inputs.listed[team]
+    shifts = []
+    players = [p for p in inputs.players if p.team == team]
+    for player in players:
+        average = inputs.averages.get(player.player_id, {}).get("pts")
+        if average is not None:
+            change = service._num(player.means["points"] - average[0])
+            if change:
+                shifts.append({"name": player.name, "change": change})
+    shifts.sort(key=lambda item: abs(item["change"]), reverse=True)
+    return {"projected": round(projected, 2), "recent": round(recent, 2),
+            "adjustment": round(projected - inputs.rest[team] - known, 2),
+            "baseline_floor": round(max(known - recent, 0.0), 2), "coverage": len(players),
+            "players": shifts[:3]}
+
+
+def breakdown(date: str | None, book: str | None, model: str | None, game: str) -> dict:
+    table, chosen = service.candidate_rows(date, book, model)
+    rows = _game_rows(table, game)
+    away, home = rows["away_abbr"].iloc[0], rows["home_abbr"].iloc[0]
+
+    def build() -> dict:
+        inputs = _game_inputs(rows, chosen["date"], (away, home))
+        market = nba_game_lines.latest(nba_game_lines.load(), chosen["book"],
+                                       rows["event_id"].astype(str).unique().tolist())
+        if market and market["total"] is not None:
+            market["away_score"] = (market["total"] + market["home_spread"]) / 2
+            market["home_score"] = (market["total"] - market["home_spread"]) / 2
+        teams = {team: _scoring_details(inputs, team) for team in (away, home)} if all(
+            team in inputs.usual for team in (away, home)) else None
+        margin = round(teams[home]["projected"] - teams[away]["projected"], 2) if teams else None
+        gap = round(margin + market["home_spread"], 2) if margin is not None and market else None
+        return {"away": away, "home": home, "model": service.model_short(chosen["model"]),
+                "recent_window": TEAM_GAMES, "teams": teams, "market": market,
+                "home_margin": margin, "home_margin_gap": gap}
+
+    return service.cached(("game-breakdown", chosen["date"], chosen["book"], chosen["model"], game), build, 60)
+
+
+def simulation(date: str | None, book: str | None, model: str | None, game: str) -> dict:
+    table, chosen = service.candidates(date, book, model)
+    rows = _game_rows(table, game)
     away, home = rows["away_abbr"].iloc[0], rows["home_abbr"].iloc[0]
 
     def run() -> dict:
-        games, averages = service.load_games(), service._averages()
-        players = _players(rows, service._teams(), averages, (away, home))
-        usual = _team_points(games)
-        listed = {team: sum(averages.get(p.player_id, {}).get("pts", (0.0, 0.0))[0]
-                            for p in players if p.team == team) for team in (away, home)}
-        rest = {team: max(usual.get(team, listed[team]) - listed[team], 0.0) for team in (away, home)}
+        inputs = _game_inputs(rows, chosen["date"], (away, home))
         seed = _seed(chosen["date"], chosen["book"], chosen["model"], game)
         base = {"game": game, "away": away, "home": home, "model": chosen["model"],
                 "model_short": service.model_short(chosen["model"])}
-        played = _possessions(players, games, averages, away, home, rest, seed)
+        played = _possessions(inputs.players, inputs.history, inputs.averages, away, home, inputs.rest, seed)
         if played is None:           # no game logs to build players from: the box-score version
-            return {**base, **game_sim.simulate(players, away, home, rest, seed=seed), "watch": None}
+            return {**base, **game_sim.simulate(inputs.players, away, home, inputs.rest, seed=seed), "watch": None}
         return {**base, **played}
     return service.cached(("simulation", chosen["date"], chosen["book"], chosen["model"], game), run, 300)
 
@@ -187,7 +254,7 @@ def perfect(date: str | None, book: str | None, model: str | None) -> dict:
     started = {e for e, tip in service._tips().items() if service._started(tip)}
     today = [{**p, "started": p["event_id"] in started} for p in today]
     recap = None
-    # the latest day whose games are over: the chosen day itself once its box scores are in
+    # The current list and its graded recap can coexist while a slate is in progress.
     for day in [d["date"] for d in service.days() if d["date"] <= chosen["date"]][:RECAP_LOOKBACK]:
         if games.empty:
             break
@@ -195,9 +262,10 @@ def perfect(date: str | None, book: str | None, model: str | None) -> dict:
         done = [p for p in perfect_props.grade(found, games, day) if p["hit"] is not None]
         if done:
             recap = {"date": day, "hit": sum(p["hit"] for p in done), "total": len(done), "props": done}
+            if day == chosen["date"]:
+                graded = {p["leg_id"] for p in done}
+                today = [p for p in today if p["leg_id"] not in graded]
             break
-    if recap and recap["date"] == chosen["date"]:
-        today = []                    # the day is over: its list is the recap now
 
     def with_photo(props: list[dict]) -> list[dict]:
         return [{**p, "photo": nba_parlay.headshot_url(p["player_id"])} for p in props]

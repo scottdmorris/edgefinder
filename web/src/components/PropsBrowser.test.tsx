@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { Leg } from '../lib/api'
+import { api, type Leg } from '../lib/api'
 import { PropsBrowser } from './PropsBrowser'
 
 afterEach(cleanup)
+afterEach(() => vi.restoreAllMocks())
 const over = { id: 1, player: 'Nikola Jokić', player_id: 7, photo: '', game: 'DEN @ BOS', game_short: 'DEN @ BOS',
   stat: 'points', stat_label: 'Points', side: 'Over', line: 24.5, bet: 'Over 24.5 points', odds: -110,
   market_pct: 52, model_pct: 60, chance_pct: 54, average: null } as Leg
@@ -28,16 +29,17 @@ it('shows a prop like a sportsbook: the line and price on each button, the numbe
   render(<PropsBrowser legs={[over, under]} selected={[]} toggle={vi.fn()} kalshi={false} />)
   expect(screen.getByRole('button', { name: 'Over Nikola Jokić 24.5 Points' }).textContent).toBe('O 24.5-110')
   expect(screen.getByRole('button', { name: 'Under Nikola Jokić 24.5 Points' }).textContent).toBe('U 24.5-110')
-  expect(screen.queryByText(/Price implies/)).toBeNull()             // no percentages until asked
+  expect(screen.queryByText('Break-even')).toBeNull()
   details()
-  expect(screen.getByText(/Price implies/).textContent).toBe('Price implies 52% · model 60%')
+  expect(screen.getByText('Break-even').nextElementSibling?.textContent).toBe('52.4%')
+  expect(screen.getByText('Model chance').nextElementSibling?.textContent).toBe('60.0%')
 })
 
 it("shows the under side's chances when the under is selected and exposes pressed state", () => {
   const toggle = vi.fn()
   render(<PropsBrowser legs={[over, under]} selected={[2]} toggle={toggle} kalshi={false} />)
   details()
-  expect(screen.getByText(/Price implies/).textContent).toBe('Price implies 48% · model 40%')
+  expect(screen.getByText('Model chance').nextElementSibling?.textContent).toBe('40.0%')
   const button = screen.getByRole('button', { name: 'Under Nikola Jokić 24.5 Points' })
   expect(button.getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(button)
@@ -53,7 +55,32 @@ it('brings a newly selected ladder step into view even when another step is the 
   expect(yes.getAttribute('aria-pressed')).toBe('true')
   expect(yes.textContent).toMatch(/^Yes 10\+\d+¢$/)
   details()
-  expect(screen.getByText(/Price implies/).textContent).toContain('90%')
+  expect(screen.getByText('Model chance').nextElementSibling?.textContent).toBe('60.0%')
+})
+
+it('loads history only for an open drawer and changes the exact line and side without adding to the slip', async () => {
+  const recent = { over: 3, under: 1, pushes: 1 }
+  const load = vi.spyOn(api, 'propHistory').mockResolvedValue({
+    last5: recent, last10: recent, last20: recent, season: recent,
+  })
+  const toggle = vi.fn()
+  const game_date = '2026-11-25'
+  const whole = { ...over, id: 5, line: 24 }
+  const wholeUnder = { ...under, id: 6, line: 24, odds: 125 }
+  const legs = [over, under, whole, wholeUnder].map((leg) => ({ ...leg, game_date }))
+  render(<PropsBrowser legs={legs} selected={[]} toggle={toggle} kalshi={false} />)
+  expect(load).not.toHaveBeenCalled()
+  details()
+  expect(await screen.findAllByText('75%')).toHaveLength(4)
+  expect(load).toHaveBeenLastCalledWith(7, game_date, 'points', 24)
+  fireEvent.click(screen.getByRole('button', { name: 'Under 24' }))
+  expect(screen.getAllByText('25%')).toHaveLength(4)
+  expect(screen.getByText('Break-even').nextElementSibling?.textContent).toBe('44.4%')
+  expect(load).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByRole('button', { name: '24.5' }))
+  expect(await screen.findAllByText('75%')).toHaveLength(4)
+  expect(load).toHaveBeenLastCalledWith(7, game_date, 'points', 24.5)
+  expect(toggle).not.toHaveBeenCalled()
 })
 
 it('always offers all four stats and points to another source when one has no lines', () => {

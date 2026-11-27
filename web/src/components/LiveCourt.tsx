@@ -1,7 +1,7 @@
 // A live game on the court stage: the real score, clock and latest play, every shot at its real
 // spot (the newest flies to the rim when it arrives), and the ten on the floor with their lines.
 // NBA's feed has no player tracking, so players are listed, not placed on the court.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { BoxRow, GameDetail } from '../lib/api'
 import { CourtStage, type ShotMark } from './CourtStage'
 
@@ -21,19 +21,19 @@ export function LiveCourt({ game }: { game: GameDetail & { detail: Detail } }) {
   const shots: ShotMark[] = detail.shots.slice(-SHOTS_SHOWN)
     .map((s) => ({ key: s.n, x: s.x, y: s.y, made: s.made, team: sideOf(s.team), three: s.three }))
   // the newest shot flies in once, when it is new since the last refresh
-  const seen = useRef<number | null>(null)
+  const newest = shots.at(-1)
+  const key = newest?.key ?? null
+  const [seen, setSeen] = useState(key)
   const [flying, setFlying] = useState<ShotMark | null>(null)
-  const newest = shots[shots.length - 1]
+  if (seen !== key) {
+    setSeen(key)
+    setFlying(seen !== null && newest ? newest : null)
+  }
   useEffect(() => {
-    if (!newest) return
-    if (seen.current !== null && newest.key !== seen.current) {
-      setFlying(newest)
-      const t = setTimeout(() => setFlying(null), 1500)
-      seen.current = Number(newest.key)
-      return () => clearTimeout(t)
-    }
-    seen.current = Number(newest.key)
-  }, [newest])
+    if (!flying) return
+    const timer = setTimeout(() => setFlying(null), 1500)
+    return () => clearTimeout(timer)
+  }, [flying])
   const final = game.state === 'final'
   return <CourtStage
     away={{ code: game.away.team, logo: game.away.logo, color: game.away.color, score: game.away.score }}

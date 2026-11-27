@@ -26,10 +26,70 @@ Newest first. Dates are when the work was committed.
   buttons and is described as a paper test, not advice. Nothing is published or posted.
 - On tonight's live slate (9 games, 26 books, 8,921 lines) the screen flagged 98 sides at 3%+
   and 38 at 5%+, most of them at prediction markets and smaller books.
-- Validation (after rebasing on the game-simulation work): `pytest` 1,568 passed; `ruff check`
-  clean; `tsc -b` clean; `vitest` 109 passed;
+- Validation (after merging main as of 2026-11-27): `pytest` 1,584 passed; `ruff check`
+  clean; `tsc -b` clean; `vitest` 114 passed;
   `oxlint` warnings only in files this change did not touch; one live PropLine request to see
   which books it carries. Not checked in the running app.
+
+### Game breakdown on Parlay
+
+- Open a matchup to compare our projected score and spread with the archived
+  sportsbook spread and its implied score. The panel shows the margin gap,
+  the book and snapshot time, each team's recent scoring baseline, and the
+  listed players whose projections move that baseline most.
+- The breakdown uses the existing simulation's scoring inputs and loads
+  independently of the replay. The scheduled PropLine snapshot now saves
+  FanDuel and DraftKings full-game spreads and totals in the same request
+  it already makes for player props.
+- Ledger recovery now reuses its empty journal directory so OneDrive's
+  directory protection cannot stop a snapshot before it loads the slate.
+- Validation covered 1,560 Python tests, 112 web tests, the production build,
+  Ruff, the CI Bandit check, and Chrome checks at 320, 390 and 1440 px against
+  the local app with an archived FanDuel quote. The ledger matched all 32,094
+  rows in its audit log. Web lint reported eight existing warnings.
+
+### Exact-line history in the prop drawer
+
+- Prop details show the last 5, 10 and 20 games and season hit rates beside
+  the model chance and the offered price's break-even rate. Switch sides or
+  alternate lines without changing the slip. The history loads when the
+  drawer opens and uses regular-season appearances before the selected slate.
+- A held-out test on 8,861 Kalshi points quotes found no clear accuracy gain
+  from adding those history windows to the model and market. The results
+  are in `docs/KALSHI_BACKTEST.md`.
+- Validation covered 1,556 Python tests, 110 web tests, the production build,
+  Ruff, the CI Bandit check, and Chrome drawer checks at 320, 390 and 1440 px.
+  Web lint reported eight existing warnings.
+
+### Recoverable paper ledger and Record diagnostics
+
+- Snapshot and settle jobs now prepare the paper ledger and hash-chained audit
+  log together. The next write or record publish can finish an interrupted
+  update with its original audit entries. Record shows when recovery is pending.
+- Record now shows the nightly miss analysis by book, stat and model, including
+  hit rate against break-even, flat-unit return, results by side and price,
+  and projection bias. Responsive cards and a short filter transition support
+  desktop and mobile layouts and respect reduced-motion preferences.
+- Validation covered 1,555 Python tests, 109 web tests, the production build,
+  Ruff, the CI Bandit check, and desktop and mobile Chrome checks of the new
+  section. Web lint reported eight existing warnings. The local ledger matched
+  all 31,872 rows and all 12 published checkpoints.
+
+### Record recovery, Long shot v2 and game replay fixes
+- Recovered six unlogged FanDuel assists rows as dated imports. The original
+  chain entries and all 12 published checkpoints still match. The ledger audit
+  now matches all 31,872 rows. Chain appends retry transient file-open failures.
+- New qualifying Long shot slips use `long-shot-v2`. The six v1 offers and their
+  results stay in their own Record section, and historical cards can still read them.
+- Game simulations load on request, with retry if loading fails. Concurrent
+  requests for the same uncached result share one computation. Historical
+  simulations derive rosters, pace and averages from logs before the selected day.
+- Perfect Props keeps unresolved entries visible alongside same-day graded
+  results. The live court clears the flying shot after the animation even when
+  an intervening refresh returns the same shot.
+- Validation: 153 focused Python tests, 108 web tests, production build, Ruff
+  and Bandit passed. Web lint reported the eight existing warnings. The live
+  ledger passed the read-only verification after recovery.
 
 ### Watch a simulated game, and live games on the same court
 

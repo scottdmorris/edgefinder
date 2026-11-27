@@ -319,9 +319,10 @@ def script(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def heartbeat_file(script, tmp_path, monkeypatch):
-    """Keep the tests' heartbeats out of the real data folder."""
+    """Keep test heartbeats and snapshot recovery out of the real data folder."""
     monkeypatch.setattr(script.job_health, "HEARTBEAT_PATH", tmp_path / "heartbeat.json")
     monkeypatch.setattr(script.book_gaps, "LOG_PATH", tmp_path / "book_gaps.csv")
+    monkeypatch.setattr(script.nba_paper, "LEDGER_PATH", tmp_path / "ledger.csv")
     monkeypatch.setattr(script, "RETRY_WAIT_SECONDS", 0.0)          # no real waiting in tests
     return tmp_path / "heartbeat.json"
 

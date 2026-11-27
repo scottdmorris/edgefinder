@@ -11,6 +11,7 @@ import { PropsBrowser } from '../components/PropsBrowser'
 import { GameCards } from '../components/GameCards'
 import { GameProps, countPicks } from '../components/GameProps'
 import { GameSim } from '../components/GameSim'
+import { GameBreakdown } from '../components/GameBreakdown'
 import { PerfectProps } from '../components/PerfectProps'
 import { SlipImageReview } from '../components/SlipImageReview'
 import { QuickAdds, type QuickAdd } from '../components/QuickAdds'
@@ -183,6 +184,7 @@ export function Parlay() {
           <div className="mt-6">
             <GameProps key={chosenGame.game} game={chosenGame} legs={shown} selected={slip.legs} toggle={slip.toggle}
               kalshi={board.book === 'kalshi'} onBack={() => setGame(ALL)}>
+              <GameBreakdown key={`${marketKey}|${boardRevision}`} market={chosen} game={chosenGame.game} />
               <GameSim market={chosen} game={chosenGame} />
             </GameProps>
           </div>

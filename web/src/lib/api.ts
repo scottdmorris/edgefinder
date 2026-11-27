@@ -8,6 +8,8 @@ export type QuoteQuality = {
 }
 export type BookComparison = { book: string; line: number; odds: number; fetched_at: string;
   stale: boolean; same_line: boolean; better_payout: boolean }
+export type LineCounts = { over: number; under: number; pushes: number }
+export type PropHistory = Record<'last5' | 'last10' | 'last20' | 'season', LineCounts>
 export type SuggestionFacts = { offered: number; graded: number; wins: number; losses: number;
   pending: number; void: number; units: number; hit_pct: number | null; roi_pct: number | null;
   brier: number | null; market_brier: number | null; calibration_n: number; game_days: number }
@@ -22,6 +24,7 @@ export type Leg = {
   photo: string
   game: string
   game_short: string
+  game_date?: string
   stat: string
   stat_label: string
   side: string // "Over", "Under" or "25+"
@@ -258,13 +261,27 @@ export type ModelRecord = {
 
 type GapPart = { logged: number; record: string; units: number }
 
+export type MissMetrics = {
+  n: number; win_pct: number; break_even_pct: number | null; units: number | null
+  roi_pct: number | null; miss: number | null
+}
+
+export type MissReportRow = MissMetrics & {
+  book: string; stat: string; model: string; model_name: string
+  sides: Record<string, MissMetrics>; prices: Record<string, MissMetrics>
+  disagreement: { n: number; share: number; plus_minus: number } | null
+}
+
 export type RecordData = {
+  miss_report?: MissReportRow[]
   suggestions?: { offered: SuggestionFacts; experiment: SuggestionFacts; long_shot?: SuggestionFacts;
+    long_shot_previous?: SuggestionFacts | null; long_shot_protocol?: { id: string };
     protocol: { id: string; review_after_slips: number; review_after_game_days: number } }
   empty: boolean
   integrity: { picks: number; graded: number; after_tip: number; first_lock: string | null; last_lock: string | null }
   chain: {
     started: boolean
+    pending_commit?: boolean
     intact?: boolean
     entries?: number
     imported?: number
@@ -468,6 +485,17 @@ async function send<T>(path: string, body: unknown): Promise<T> {
 
 /** One game run thousands of times from the players' projections (display only). */
 export type SimRange = { low: number; median: number; high: number }
+export type GameScoring = {
+  projected: number; recent: number; adjustment: number; baseline_floor: number; coverage: number
+  players: { name: string; change: number }[]
+}
+export type GameBreakdownData = {
+  away: string; home: string; model: string; recent_window: number
+  teams: Record<string, GameScoring> | null
+  market: { book: string; home_spread: number; total: number | null; as_of: string
+    away_score?: number; home_score?: number } | null
+  home_margin: number | null; home_margin_gap: number | null
+}
 export type SimTeam = { win_pct: number; median: number; average: number }
 export type SimPlayer = { player_id: number; player: string; team: string
   stats: Record<string, { average: number; low: number; high: number; lines: { line: number; over_pct: number }[] }> }
@@ -528,10 +556,13 @@ export const api = {
   gradeSlip: (date: string, legs: SlipLegQuery[]) => send<GradedSlip>('/api/review/slip', { date, legs }),
   players: () => get<PlayerOption[]>('/api/players'),
   player: (id: number) => get<PlayerProfile>(`/api/players/${id}`),
+  propHistory: (id: number, date: string, stat: string, line: number) =>
+    get<PropHistory>(`/api/players/${id}/prop-history`, { date, stat, line: String(line) }),
   teams: () => get<TeamOption[]>('/api/teams'),
   team: (code: string) => get<TeamProfile>(`/api/teams/${encodeURIComponent(code)}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),
   simulate: (market: Market, game: string) => get<Simulation>('/api/simulate', { ...market, game }),
+  gameBreakdown: (market: Market, game: string) => get<GameBreakdownData>('/api/game-breakdown', { ...market, game }),
   perfect: (market: Market) => get<PerfectProps>('/api/perfect', market),
   ev: (date?: string) => get<EvLines>('/api/ev', { date }),
 }

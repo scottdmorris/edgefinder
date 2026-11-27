@@ -1,6 +1,8 @@
 """The web app's API, run against a small made-up ledger (no files, no network)."""
 
 import datetime as dt
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Event
 
 import pandas as pd
 import pytest
@@ -21,6 +23,35 @@ GAMES = [
      "home": "New York Knicks", "away": "Chicago Bulls"},
 ]
 PLAYERS = [("Jaylen Brown", 1, 27.0, GAMES[0]), ("Jalen Brunson", 2, 34.0, GAMES[1])]
+
+
+def test_same_key_concurrent_cache_misses_share_one_computation(monkeypatch):
+    service.clear_cache()
+    computing, waiting, release = Event(), Event(), Event()
+    value = object()
+
+    class ObservedFuture(Future):
+        def result(self, timeout=None):
+            waiting.set()
+            return super().result(timeout)
+
+    monkeypatch.setattr(service, "Future", ObservedFuture)
+
+    def compute():
+        computing.set()
+        assert release.wait(5)
+        return value
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.cached, ("shared-test",), compute)
+        try:
+            assert computing.wait(5)
+            second = pool.submit(service.cached, ("shared-test",), object)
+            assert waiting.wait(5)
+        finally:
+            release.set()
+        assert first.result() is second.result() is value
+    service.clear_cache()
 
 
 def _ledger() -> pd.DataFrame:
@@ -70,12 +101,42 @@ def test_days_lists_each_game_day_with_a_label(client):
     assert days[0]["label"]
 
 
+def test_prop_history_uses_exact_line_and_only_games_before_slate(client, monkeypatch):
+    games = pd.DataFrame([
+        (1, "2026-11-05", "2026-27", 80, 30),
+        (1, DAY, "2026-27", 75, 30),
+        (1, "2026-11-03", "2026-27", 24, 30),
+        (1, "2026-11-02", "2026-27", 30, 30),
+        (1, "2026-11-01", "2026-27", 18, 30),
+        (1, "2026-10-28", "2026-27", 0, 0),
+        (1, "2026-04-10", "2025-26", 26, 30),
+        (2, "2026-11-03", "2026-27", 70, 30),
+    ], columns=["player_id", "game_date", "season", "pts", "minutes"])
+    monkeypatch.setattr(service, "load_games", lambda: games)
+    path = "/api/players/1/prop-history"
+    params = {"date": DAY, "stat": "points", "line": 24}
+    response = client.get(path, params=params)
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "last5": {"over": 2, "under": 1, "pushes": 1},
+        "last10": {"over": 2, "under": 1, "pushes": 1},
+        "last20": {"over": 2, "under": 1, "pushes": 1},
+        "season": {"over": 1, "under": 1, "pushes": 1},
+    }
+    half = client.get(path, params={**params, "line": 23.5}).json()
+    assert half["season"] == {"over": 2, "under": 1, "pushes": 0}
+    assert client.get(path, params={**params, "stat": "unknown"}).status_code == 422
+    assert client.get(path, params={**params, "line": "NaN"}).status_code == 422
+
+
 def test_board_defaults_to_the_latest_day_and_lists_every_leg(client):
     board = client.get("/api/board").json()
     assert board["date"] == DAY and board["book"] == "fanduel" and board["model"] == "minutes-v1"
     assert board["summary"]["games"] == 2
     assert {leg["player"] for leg in board["legs"]} == {"Jaylen Brown", "Jalen Brunson"}
     leg = board["legs"][0]
+    assert leg["game_date"] == DAY
     assert {"id", "odds", "market_pct", "model_pct", "photo", "game_short", "bet"} <= set(leg)
     assert leg["projection"] in (27.0, 34.0)
     assert leg["projection_model"] == "Minutes"

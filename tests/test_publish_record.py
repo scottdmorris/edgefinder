@@ -111,7 +111,7 @@ def test_a_record_that_does_not_match_its_log_is_never_published(publish, tmp_pa
     class Audit:
         clean = True
 
-    monkeypatch.setattr(publish.verify_record, "check", lambda: (Unsound(), Audit()))
+    monkeypatch.setattr(publish.verify_record, "checked_ledger", lambda **kwargs: (None, Unsound(), Audit()))
     git = Git()
     assert "not published" in publish.run(TODAY, repo=tmp_path, run=git)
     assert git.calls == []

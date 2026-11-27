@@ -1,7 +1,7 @@
 """What the misses say: where each model's FanDuel points picks lose, and how much of its
 disagreement with the line has come true across every settled line.
 
-Read-only and for the settle log. Nothing here feeds back into the models: the record has
+Read-only diagnostics for the settle log and Record page. Nothing here feeds back into the models: the record has
 to stay an honest test, so a lesson from it becomes a new model version, not a quiet tweak.
 """
 
@@ -9,6 +9,7 @@ import math
 
 import pandas as pd
 
+from ..betting.odds_math import american_to_decimal
 from .nba_paper import DEFAULT_BOOK, DEFAULT_STAT
 
 MIN_LINES = 30                  # fewer settled lines than this cannot say anything
@@ -48,16 +49,25 @@ def side_split(ledger: pd.DataFrame, version: str) -> dict[str, dict]:
 
 def price_split(ledger: pd.DataFrame, version: str) -> dict[str, dict]:
     picks = _picks(ledger, version)
-    split = {label: picks[inside(picks["pick_odds"])] for label, inside in PRICE_BANDS}
-    return {label: _facts(group) for label, group in split.items() if not group.empty}
+    return {label: _facts(group) for label, group in _price_groups(picks)}
+
+
+def _price_groups(picks: pd.DataFrame):
+    for label, inside in PRICE_BANDS:
+        group = picks[inside(picks["pick_odds"])]
+        if not group.empty:
+            yield label, group
 
 
 def disagreement_share(ledger: pd.DataFrame, version: str) -> dict | None:
     """Fit actual - line = share * (projection - line) on every settled line the model
     priced. 1 means the model's disagreement with the line came true in full, 0 that the
     line already knew everything. None until there are MIN_LINES lines."""
-    rows = _settled(ledger, version).dropna(subset=["actual", "model_mean"]) \
-        .drop_duplicates(["event_id", "player"])
+    return _fit_disagreement(_settled(ledger, version))
+
+
+def _fit_disagreement(rows: pd.DataFrame) -> dict | None:
+    rows = rows.dropna(subset=["actual", "model_mean"]).drop_duplicates(["event_id", "player"])
     if len(rows) < MIN_LINES:
         return None
     x = (rows["model_mean"] - rows["line"]).to_numpy(float)
@@ -69,6 +79,42 @@ def disagreement_share(ledger: pd.DataFrame, version: str) -> dict | None:
     residual = float(((y - share * x) ** 2).sum()) / (len(rows) - 1)
     return {"n": len(rows), "share": share,
             "plus_minus": Z_95 * math.sqrt(residual / spread)}
+
+
+def _finite(value: float) -> float | None:
+    return float(value) if math.isfinite(value) else None
+
+
+def _pick_metrics(picks: pd.DataFrame) -> dict:
+    facts = _facts(picks)
+    odds = picks["pick_odds"]
+    valid_odds = odds.notna().all() and (odds.abs().ge(100) & odds.abs().lt(math.inf)).all()
+    payouts = sum(american_to_decimal(float(price)) for price in odds) if valid_odds else None
+    units = _finite(picks["pnl_units"].sum()) if picks["pnl_units"].notna().all() else None
+    return {**facts, "miss": _finite(facts["miss"]), "units": facts["units"] if units is not None else None,
+            "roi_pct": round(100 * units / facts["n"], 1) if units is not None else None,
+            "break_even_pct": round(100 * facts["n"] / payouts, 1) if payouts else None}
+
+
+def record_breakdown(ledger: pd.DataFrame) -> list[dict]:
+    """Report versioned flat-stake results. Exclude pending picks and pushes."""
+    if ledger.empty:
+        return []
+    rows = ledger[ledger["status"] == "settled"].copy()
+    rows["book"] = rows["book"].fillna(DEFAULT_BOOK)
+    rows["stat"] = rows["stat"].fillna(DEFAULT_STAT)
+    columns = ["actual", "model_mean", "line", "pick_odds", "pnl_units"]
+    rows[columns] = rows[columns].apply(pd.to_numeric, errors="coerce").replace([math.inf, -math.inf], math.nan)
+    report = []
+    for (book, stat, model), group in rows.groupby(["book", "stat", "model_version"]):
+        picks = group[group["pick_side"].notna() & group["result"].isin(["win", "loss"])]
+        if picks.empty:
+            continue
+        report.append({"book": book, "stat": stat, "model": model, **_pick_metrics(picks),
+                       "sides": {side: _pick_metrics(part) for side, part in picks.groupby("pick_side")},
+                       "prices": {label: _pick_metrics(part) for label, part in _price_groups(picks)},
+                       "disagreement": _fit_disagreement(group.dropna(subset=["line"]))})
+    return report
 
 
 def _group_text(label: str, facts: dict) -> str:

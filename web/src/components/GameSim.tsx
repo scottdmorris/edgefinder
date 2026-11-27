@@ -93,15 +93,26 @@ export function GameSim({ market, game }: { market: Market; game: BoardGame }) {
   const [sim, setSim] = useState<Simulation | null>(null)
   const [failed, setFailed] = useState(false)
   const [showBox, setShowBox] = useState(false)
+  const [request, setRequest] = useState<{ key: string } | null>(null)
   const key = `${market.date}|${market.book}|${market.model}|${game.game}`
+  const requested = request?.key === key
   useEffect(() => {
+    if (!requested) return
     let live = true
     setSim(null); setFailed(false)
     api.simulate(market, game.game).then((s) => live && setSim(s)).catch(() => live && setFailed(true))
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  if (failed) return null
+  }, [key, request, requested])
+  if (!requested || failed) return (
+    <section aria-label="Game simulation" className="mt-4 rounded-3xl border border-line bg-raised p-4">
+      {requested && failed && <p role="alert" className="mb-2 text-sm text-warn">The simulation couldn’t load.</p>}
+      <button type="button" className="min-h-11 font-bold text-accent"
+        onClick={() => { setFailed(false); setSim(null); setShowBox(false); setRequest({ key }) }}>
+        {requested && failed ? 'Retry simulation' : 'Run game simulation'}
+      </button>
+    </section>
+  )
   const awayTeam = sim?.teams[sim.away]
   const homeTeam = sim?.teams[sim.home]
   const prices = [sidePrice(game.moneyline, 'away'), sidePrice(game.moneyline, 'home')]
@@ -115,7 +126,7 @@ export function GameSim({ market, game }: { market: Market; game: BoardGame }) {
       {!sim?.watch && <Court />}
       <div className="relative">
         <p className="text-center text-[11px] font-black uppercase tracking-[0.2em] text-good">
-          We simulated this game {sim ? sim.runs.toLocaleString() : ''} times{sim?.watch ? ': all of them' : ''}</p>
+          {sim ? `We simulated this game ${sim.runs.toLocaleString()} times` : <span role="status">Simulating game…</span>}</p>
         {!sim || !awayTeam || !homeTeam ? <div className="mx-auto mt-4 h-28 max-w-md animate-pulse rounded-2xl bg-raised-2/60" />
           : <>
             <div className="mt-3 flex items-start justify-between gap-3">

@@ -61,26 +61,38 @@ def payload(n: int = 8, per_game: int = 2, **changes) -> dict:
 
 
 def test_long_shot_trial_records_its_first_slip_of_the_day_apart_from_higher_hit():
-    first = sr.archive(payload(), NOW, experiment="long-shot-v1")
+    first = sr.archive(payload(), NOW, experiment=sr.LONG_SHOT_EXPERIMENT["id"])
     assert first is not None
-    sr.archive(payload(n=10), NOW, experiment="long-shot-v1")
+    sr.archive(payload(n=10), NOW, experiment=sr.LONG_SHOT_EXPERIMENT["id"])
     with sr.connect() as db:
-        assert db.execute("SELECT trial, offer FROM experiment").fetchall() == [("long-shot-v1", first)]
+        assert db.execute("SELECT trial, offer FROM experiment").fetchall() == [(sr.LONG_SHOT_EXPERIMENT["id"], first)]
     facts = sr.summary()
     assert facts["long_shot"]["offered"] == 1 and facts["experiment"]["offered"] == 0
-    assert facts["long_shot_protocol"]["id"] == "long-shot-v1"
+    assert facts["long_shot_protocol"]["id"] == sr.LONG_SHOT_EXPERIMENT["id"]
+
+
+def test_long_shot_revision_records_separately_from_the_saved_trial():
+    previous = sr.archive(payload(), NOW)
+    with sr.connect() as db:
+        db.execute("INSERT INTO experiment VALUES (?, ?, ?)", ("long-shot-v1", "2026-11-15", previous))
+    current = sr.archive(payload(n=10), NOW, experiment=sr.LONG_SHOT_EXPERIMENT["id"])
+    assert current and current != previous
+    record = sr.summary()
+    assert record["long_shot"]["offered"] == record["long_shot_previous"]["offered"] == 1
+    assert record["long_shot_protocol"]["id"] == "long-shot-v2"
+    assert record["long_shot_previous_protocol"]["id"] == "long-shot-v1"
 
 
 @pytest.mark.parametrize("bad", [payload(n=7), payload(n=11), payload(per_game=3), payload(book="fanduel"),
                                  payload(game="G1")])
 def test_long_shot_trial_rejects_slips_outside_its_rules(bad):
-    assert sr.archive(bad, NOW, experiment="long-shot-v1") is None
+    assert sr.archive(bad, NOW, experiment=sr.LONG_SHOT_EXPERIMENT["id"]) is None
 
 
 def test_an_ineligible_leg_keeps_the_slip_out_of_the_trial():
     bad = payload()
     bad["legs"][0]["evidence"] = {"eligible": False}
-    assert sr.archive(bad, NOW, experiment="long-shot-v1") is None
+    assert sr.archive(bad, NOW, experiment=sr.LONG_SHOT_EXPERIMENT["id"]) is None
 
 
 def test_the_kalshi_long_shot_offer_goes_to_its_trial(monkeypatch):
@@ -91,7 +103,7 @@ def test_the_kalshi_long_shot_offer_goes_to_its_trial(monkeypatch):
     chosen = {"date": "2026-11-15", "book": "kalshi", "model": "context-v2"}
     ss.archive_idea(chosen, "Long shot", None, table, list(table.index[:8]), .1, 9.0, NOW)
     ss.archive_idea(chosen | {"book": "fanduel"}, "Long shot", None, table, list(table.index[:8]), .1, 9.0, NOW)
-    assert seen == ["long-shot-v1", False]
+    assert seen == [sr.LONG_SHOT_EXPERIMENT["id"], False]
 
 
 def test_nightly_capture_runs_both_trials_even_when_one_fails(monkeypatch):

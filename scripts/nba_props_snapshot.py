@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from edgefinder.api.suggestion_service import capture_nightly  # noqa: E402
 
 from edgefinder.data import (  # noqa: E402
-    job_health, nba_injuries, nba_moneylines, nba_props, nba_snapshot_plan, nba_stats, propline)
+    job_health, nba_game_lines, nba_injuries, nba_moneylines, nba_props, nba_snapshot_plan, nba_stats, propline)
 from edgefinder.models import (  # noqa: E402
     nba_context_points, nba_context_v2, nba_minutes_points, nba_points, nba_stat_model)
 from edgefinder.tracking import (  # noqa: E402
@@ -335,6 +335,11 @@ def archive_propline(due: list[nba_snapshot_plan.SnapshotTask], models: Models) 
             games, [(task.event, task.phase) for task in due], fetched_at))
     except Exception:
         log.exception("Moneyline snapshot failed; the FanDuel snapshot is unaffected")
+    try:
+        log.info("Game lines saved: %d", nba_game_lines.archive(
+            games, [(task.event, task.phase) for task in due], fetched_at))
+    except Exception:
+        log.exception("Game line snapshot failed; the FanDuel snapshot is unaffected")
     early = [task.event for task in due if task.phase == "early"]
     if not early:
         return
@@ -444,6 +449,10 @@ def main() -> None:
     today = now.astimezone(nba_snapshot_plan.EASTERN).date()
     models = Models(today)
 
+    if not args.dry_run:
+        with nba_paper.writer() as recovered:
+            if recovered:
+                log.info("Completed an interrupted paper ledger write.")
     if args.backfill_models:
         backfill_models(models, now, args.dry_run)
         return

@@ -77,8 +77,9 @@ def long_shot(day: str, path: Path | None = None) -> dict | None:
     try:
         with suggested_record.connect(db_path) as db:
             found = db.execute("SELECT o.payload FROM experiment e JOIN offers o ON o.id = e.offer "
-                               "WHERE e.trial = ? AND e.day = ?",
-                               (suggested_record.LONG_SHOT_EXPERIMENT["id"], day)).fetchone()
+                               "WHERE e.trial IN (?, ?) AND e.day = ? ORDER BY e.trial DESC",
+                               (suggested_record.LONG_SHOT_EXPERIMENT["id"],
+                                suggested_record.LONG_SHOT_V1["id"], day)).fetchone()
     except sqlite3.Error:
         return None
     if not found:

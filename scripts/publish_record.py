@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from edgefinder.data import nba_snapshot_plan  # noqa: E402
-from edgefinder.tracking import nba_paper  # noqa: E402
 
 import readme_results  # noqa: E402  (same folder)
 import verify_record  # noqa: E402  (same folder)
@@ -123,13 +122,13 @@ def retry_unpublished(repo: Path = REPO, run=subprocess.run) -> str | None:
 
 def run(today: dt.date, repo: Path = REPO, run=subprocess.run) -> str:
     """Refresh and publish. Returns one line for the settle report."""
-    verification, audit = verify_record.check()
+    ledger, verification, audit = verify_record.checked_ledger(recover=True)
     if not (verification.intact and audit.clean):
         return "Record not published: the ledger does not match its log."
     digests = repo / "record" / "DIGESTS.md"
     readme = repo / "README.md"
     verify_record.write_digest(verification, today, digests)
-    refresh_readme(readme, nba_paper.load_ledger(), today)
+    refresh_readme(readme, ledger, today)
     outcome = commit_and_push(repo, [readme.relative_to(repo), digests.relative_to(repo)],
                               f"docs: record as of {today.isoformat()}", run=run)
     return f"Record published ({outcome}): {verification.entries} log entries."

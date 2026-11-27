@@ -25,12 +25,12 @@ at a flat 1 unit):
 <!-- record:start -->
 | Model | Graded picks | Record | Units | Beat the closing price |
 |---|---:|---:|---:|---:|
-| Smartest (`context-v1`) | 267 | 136-131 | -9.73 | 52% of 200 |
-| Sharpest (`context-v2`) | 198 | 102-96 | -5.10 | 52% of 145 |
-| Simple (`ewma-v1`) | 340 | 176-164 | -7.97 | 49% of 259 |
-| Smarter (`minutes-v1`) | 243 | 130-113 | +2.71 | 51% of 184 |
+| Smartest (`context-v1`) | 298 | 153-145 | -8.34 | 52% of 224 |
+| Sharpest (`context-v2`) | 224 | 114-110 | -8.05 | 52% of 164 |
+| Simple (`ewma-v1`) | 387 | 203-184 | -3.80 | 47% of 299 |
+| Smarter (`minutes-v1`) | 276 | 147-129 | +2.10 | 50% of 209 |
 
-19 game days graded (2026-11-04 to 2026-11-22), as of 2026-11-23.
+22 game days graded (2026-11-04 to 2026-11-25), as of 2026-11-27.
 <!-- record:end -->
 
 That is still
@@ -214,8 +214,8 @@ operator does not control.
 .venv\Scripts\python scripts\verify_record.py    # intact? does the ledger match?
 ```
 
-It cannot prove the entries that existed when the log began (they were
-imported and are marked so), and the time on an entry is the clock of the
+Entries marked as imports carry the time they entered the chain, including
+rows recovered later from the ledger. The time on an entry comes from the
 machine that wrote it. Details are in the methodology document.
 
 ## Roadmap

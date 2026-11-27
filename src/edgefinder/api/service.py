@@ -12,6 +12,8 @@ import json
 import math
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
+from threading import Lock
 
 import pandas as pd
 
@@ -31,6 +33,8 @@ STEADY_SHOWN = 8
 RECOMMEND_MIN_LINES = 100     # graded lines every model priced before one is recommended
 BOOK_NAMES = {"fanduel": "FanDuel", "draftkings": "DraftKings", "kalshi": "Kalshi"}
 _cache: dict[tuple, tuple[float, object]] = {}
+_inflight: dict[tuple, Future] = {}
+_cache_lock = Lock()
 
 
 class NotFound(ValueError):
@@ -40,21 +44,41 @@ class NotFound(ValueError):
 def cached(key: tuple, compute: Callable, seconds: float = CACHE_SECONDS):
     """`compute()`, reused for `seconds`. Entries past their time are dropped on each write and
     the cache never holds more than CACHE_MAX_ENTRIES, so odd requests can't grow it for good."""
-    now = time.monotonic()
-    hit = _cache.get(key)
-    if hit and now < hit[0]:
-        return hit[1]
-    value = compute()
-    for stale in [k for k, (expires, _) in _cache.items() if expires <= now]:
-        del _cache[stale]
-    while len(_cache) >= CACHE_MAX_ENTRIES:
-        del _cache[min(_cache, key=lambda k: _cache[k][0])]     # the one closest to expiring
-    _cache[key] = (now + seconds, value)
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and time.monotonic() < hit[0]:
+            return hit[1]
+        pending = _inflight.get(key)
+        owner = pending is None
+        if pending is None:
+            pending = _inflight[key] = Future()
+    if not owner:
+        return pending.result()
+    try:
+        value = compute()
+    except BaseException as error:
+        with _cache_lock:
+            if _inflight.get(key) is pending:
+                del _inflight[key]
+        pending.set_exception(error)
+        raise
+    with _cache_lock:
+        if _inflight.get(key) is pending:
+            now = time.monotonic()
+            for stale in [k for k, (expires, _) in _cache.items() if expires <= now]:
+                del _cache[stale]
+            while len(_cache) >= CACHE_MAX_ENTRIES:
+                del _cache[min(_cache, key=lambda k: _cache[k][0])]
+            _cache[key] = (now + seconds, value)
+            del _inflight[key]
+    pending.set_result(value)
     return value
 
 
 def clear_cache() -> None:
-    _cache.clear()
+    with _cache_lock:
+        _cache.clear()
+        _inflight.clear()
 
 
 # ---- data, swappable in tests ------------------------------------------------------------------
@@ -203,7 +227,8 @@ def model_name(version: str) -> str:
     return model_short(version) + (": " + original.split(": ", 1)[1] if ": " in original else "")
 
 
-def candidates(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+def candidate_rows(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+    """The priced slate before attaching quote warnings and cross-book comparisons."""
     date, book, model, found = _choose(date, book, model)
 
     def build() -> pd.DataFrame:
@@ -218,12 +243,17 @@ def candidates(date: str | None, book: str | None, model: str | None) -> tuple[p
             raise ValueError("duplicate quote identities; refresh the recorded data")
         return table
     table = cached(("candidates", date, book, model), identified)
-    table = suggestion_service.enrich(table, {"date": date, "book": book, "model": model},
-                                      load_ledger(), load_alt(), load_games(), dt.datetime.now(dt.timezone.utc))
     return table, {"date": date, "book": book, "model": model, "found": found}
 
 
-def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> dict:
+def candidates(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+    table, chosen = candidate_rows(date, book, model)
+    table = suggestion_service.enrich(table, {k: chosen[k] for k in ("date", "book", "model")},
+                                      load_ledger(), load_alt(), load_games(), dt.datetime.now(dt.timezone.utc))
+    return table, chosen
+
+
+def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str], date: str) -> dict:
     stat = row["stat_key"]
     pair = averages.get(int(row["player_id"]), {}).get(nba_stat_model.STATS[stat].column)
     return {
@@ -231,7 +261,7 @@ def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str]) -> d
         "id": int(index), "player": row["Player"], "player_id": int(row["player_id"]),
         "team": teams.get(int(row["player_id"])),
         "photo": nba_parlay.headshot_url(row["player_id"]), "game": row["Game"],
-        "game_short": _short(row["Game"]), "stat": stat, "stat_label": row["Stat"],
+        "game_short": _short(row["Game"]), "game_date": date, "stat": stat, "stat_label": row["Stat"],
         "side": row["Side"], "line": _num(row["line"], 1),
         "bet": row["Leg"].split(" · ", 1)[-1], "odds": int(row["Odds"]),
         "model_pct": _num(row["Model %"], 1), "market_pct": _num(row["Market %"], 1),
@@ -282,7 +312,7 @@ def board(date: str | None = None, book: str | None = None, model: str | None = 
     found = chosen["found"]
     averages = _averages()
     teams = _teams()
-    legs = [_leg(i, row, averages, teams) for i, row in table.iterrows()]
+    legs = [_leg(i, row, averages, teams, chosen["date"]) for i, row in table.iterrows()]
     games = _games(table, chosen["book"])
     gaps = gaps_for(chosen["date"], chosen["book"], table)
     return {

@@ -61,16 +61,21 @@ def _replace(path: Path, write: Callable[[Path], None], wait: float) -> None:
     temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
         write(temporary)
-        for attempt in range(1, REPLACE_ATTEMPTS + 1):
-            try:
-                os.replace(temporary, path)
-                return
-            except PermissionError:
-                if attempt == REPLACE_ATTEMPTS:
-                    raise
-                time.sleep(wait)
+        replace_file(temporary, path, wait)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def replace_file(source: Path, target: Path, wait: float = REPLACE_WAIT_SECONDS) -> None:
+    """Move a prepared file into place. Keep the source if replacement fails."""
+    for attempt in range(1, REPLACE_ATTEMPTS + 1):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS:
+                raise
+            time.sleep(wait)
 
 
 def write_text(path: Path, text: str, wait: float = REPLACE_WAIT_SECONDS) -> None:

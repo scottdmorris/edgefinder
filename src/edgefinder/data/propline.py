@@ -39,7 +39,7 @@ FANDUEL = "fanduel"
 BOOKS = (FANDUEL, "draftkings")    # the books everything before the +EV screen reads
 MARKETS = {"player_points": "points", "player_rebounds": "rebounds",
            "player_assists": "assists", "player_threes": "threes"}
-GAME_MARKETS = ("h2h",)   # moneylines ride along in the same request (see nba_moneylines)
+GAME_MARKETS = ("h2h", "spreads", "totals")
 RUNG = re.compile(r"^\s*(\d+)\+")      # "6+ Rebounds" -> 6
 REQUEST_TIMEOUT = 60
 SAME_GAME_HOURS = 6   # PropLine and The Odds API may list a tip time a little differently
