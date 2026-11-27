@@ -30,7 +30,7 @@ at a flat 1 unit):
 | Simple (`ewma-v1`) | 387 | 203-184 | -3.80 | 47% of 299 |
 | Smarter (`minutes-v1`) | 276 | 147-129 | +2.10 | 50% of 209 |
 
-22 game days graded (2026-11-04 to 2026-11-25), as of 2026-11-26.
+22 game days graded (2026-11-04 to 2026-11-25), as of 2026-11-27.
 <!-- record:end -->
 
 That is still
