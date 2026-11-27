@@ -472,6 +472,17 @@ async function send<T>(path: string, body: unknown): Promise<T> {
 
 /** One game run thousands of times from the players' projections (display only). */
 export type SimRange = { low: number; median: number; high: number }
+export type GameScoring = {
+  projected: number; recent: number; adjustment: number; baseline_floor: number; coverage: number
+  players: { name: string; change: number }[]
+}
+export type GameBreakdownData = {
+  away: string; home: string; model: string; recent_window: number
+  teams: Record<string, GameScoring> | null
+  market: { book: string; home_spread: number; total: number | null; as_of: string
+    away_score?: number; home_score?: number } | null
+  home_margin: number | null; home_margin_gap: number | null
+}
 export type SimTeam = { win_pct: number; median: number; average: number }
 export type SimPlayer = { player_id: number; player: string; team: string
   stats: Record<string, { average: number; low: number; high: number; lines: { line: number; over_pct: number }[] }> }
@@ -538,5 +549,6 @@ export const api = {
   team: (code: string) => get<TeamProfile>(`/api/teams/${encodeURIComponent(code)}`),
   picks: (date?: string) => get<Picks>('/api/picks', { date }),
   simulate: (market: Market, game: string) => get<Simulation>('/api/simulate', { ...market, game }),
+  gameBreakdown: (market: Market, game: string) => get<GameBreakdownData>('/api/game-breakdown', { ...market, game }),
   perfect: (market: Market) => get<PerfectProps>('/api/perfect', market),
 }

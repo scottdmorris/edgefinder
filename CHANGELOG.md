@@ -4,6 +4,23 @@ Newest first. Dates are when the work was committed.
 
 ## Unreleased
 
+### Game breakdown on Parlay
+
+- Open a matchup to compare our projected score and spread with the archived
+  sportsbook spread and its implied score. The panel shows the margin gap,
+  the book and snapshot time, each team's recent scoring baseline, and the
+  listed players whose projections move that baseline most.
+- The breakdown uses the existing simulation's scoring inputs and loads
+  independently of the replay. The scheduled PropLine snapshot now saves
+  FanDuel and DraftKings full-game spreads and totals in the same request
+  it already makes for player props.
+- Ledger recovery now reuses its empty journal directory so OneDrive's
+  directory protection cannot stop a snapshot before it loads the slate.
+- Validation covered 1,560 Python tests, 112 web tests, the production build,
+  Ruff, the CI Bandit check, and Chrome checks at 320, 390 and 1440 px against
+  the local app with an archived FanDuel quote. The ledger matched all 32,094
+  rows in its audit log. Web lint reported eight existing warnings.
+
 ### Exact-line history in the prop drawer
 
 - Prop details show the last 5, 10 and 20 games and season hit rates beside

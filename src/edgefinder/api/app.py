@@ -74,6 +74,12 @@ def simulate_game(game: str = Query(max_length=120), date: str | None = None, bo
     return _guard(lambda: showcase.simulation(date, book, model, game))
 
 
+@app.get("/api/game-breakdown")
+def game_breakdown(game: Annotated[str, Query(max_length=120)], date: str | None = None,
+                   book: str | None = None, model: str | None = None) -> dict:
+    return _guard(lambda: showcase.breakdown(date, book, model, game))
+
+
 @app.get("/api/perfect")
 def perfect_props(date: str | None = None, book: str | None = None, model: str | None = None) -> dict:
     return _guard(lambda: showcase.perfect(date, book, model))

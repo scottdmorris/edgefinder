@@ -227,7 +227,8 @@ def model_name(version: str) -> str:
     return model_short(version) + (": " + original.split(": ", 1)[1] if ": " in original else "")
 
 
-def candidates(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+def candidate_rows(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+    """The priced slate before attaching quote warnings and cross-book comparisons."""
     date, book, model, found = _choose(date, book, model)
 
     def build() -> pd.DataFrame:
@@ -242,9 +243,14 @@ def candidates(date: str | None, book: str | None, model: str | None) -> tuple[p
             raise ValueError("duplicate quote identities; refresh the recorded data")
         return table
     table = cached(("candidates", date, book, model), identified)
-    table = suggestion_service.enrich(table, {"date": date, "book": book, "model": model},
-                                      load_ledger(), load_alt(), load_games(), dt.datetime.now(dt.timezone.utc))
     return table, {"date": date, "book": book, "model": model, "found": found}
+
+
+def candidates(date: str | None, book: str | None, model: str | None) -> tuple[pd.DataFrame, dict]:
+    table, chosen = candidate_rows(date, book, model)
+    table = suggestion_service.enrich(table, {k: chosen[k] for k in ("date", "book", "model")},
+                                      load_ledger(), load_alt(), load_games(), dt.datetime.now(dt.timezone.utc))
+    return table, chosen
 
 
 def _leg(index: int, row: pd.Series, averages: dict, teams: dict[int, str], date: str) -> dict:

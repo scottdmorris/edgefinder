@@ -6,6 +6,7 @@ import pytest
 
 from edgefinder.tracking import game_sim, perfect_props
 from edgefinder.api import service, showcase
+from edgefinder.data import nba_game_lines
 
 
 def _player(pid, team, points, lines=()):
@@ -129,3 +130,35 @@ def test_historical_simulation_only_passes_pregame_history_to_inputs(monkeypatch
         return {"runs": 1}
     monkeypatch.setattr(showcase, "_possessions", play)
     assert showcase.simulation(day, "fanduel", "context-v2", game)["runs"] == 1
+
+
+def test_breakdown_explains_the_signed_margin_gap_without_running_the_simulation(monkeypatch):
+    day = "2026-11-25"
+    game = "Boston Celtics @ Washington Wizards"
+    chosen = {"date": day, "book": "fanduel", "model": "context-v2"}
+    slate = pd.DataFrame([
+        {"Game": game, "away_abbr": "BOS", "home_abbr": "WAS", "event_id": "e1",
+         "player_id": pid, "Player": f"P{pid}", "projection": points, "stat_key": "points", "line": 23.5}
+        for pid, points in [(1, 24), (2, 22), (2, 22)]
+    ])
+    logs = pd.DataFrame([
+        (1, "BOS", "old", "2026-11-24", 20), (3, "BOS", "old", "2026-11-24", 90),
+        (2, "WAS", "old", "2026-11-24", 25), (4, "WAS", "old", "2026-11-24", 90),
+        (2, "BOS", "same-day", day, 200),
+    ], columns=["player_id", "team", "game_id", "game_date", "pts"]).assign(season="2026-27")
+    logs["game_date"] = pd.to_datetime(logs["game_date"])
+    quote = pd.DataFrame([("e1", "draftkings", "2026-11-25T20:00:00Z", "2026-11-26T00:00:00Z",
+                           "early", -3.5, 220.5)], columns=nba_game_lines.COLUMNS)
+    monkeypatch.setattr(service, "candidate_rows", lambda *a: (slate, chosen))
+    monkeypatch.setattr(service, "load_games", lambda: logs)
+    monkeypatch.setattr(nba_game_lines, "load", lambda: quote)
+    monkeypatch.setattr(service, "cached", lambda key, compute, seconds: compute())
+    monkeypatch.setattr(showcase, "_possessions", lambda *a: pytest.fail("ran simulation"))
+    result = showcase.breakdown(day, None, None, game)
+    assert result["home_margin"] == -2
+    assert result["home_margin_gap"] == -5.5
+    assert result["teams"]["BOS"]["projected"] == 114
+    assert result["teams"]["WAS"]["projected"] == 112
+    assert result["teams"]["BOS"]["players"] == [{"name": "P1", "change": 4}]
+    assert result["teams"]["WAS"]["adjustment"] == -3
+    assert result["market"]["away_score"] == 108.5 and result["market"]["home_score"] == 112

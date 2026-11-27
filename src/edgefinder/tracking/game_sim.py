@@ -38,6 +38,10 @@ class Player:
     lines: dict[str, list[float]] = field(default_factory=dict)   # stat key -> lines to price
 
 
+def team_target(players: list[Player], team: str, rest: float) -> float:
+    return rest + sum(p.means.get("points", 0.0) for p in players if p.team == team)
+
+
 def _draw(rng: np.random.Generator, means: np.ndarray, dispersion: float) -> np.ndarray:
     """Negative-binomial counts around each mean (variance = mean + mean^2 / dispersion)."""
     safe = np.maximum(means, 1e-6)
@@ -62,8 +66,7 @@ def simulate(players: list[Player], away: str, home: str, rest: dict[str, float]
                   if p.team == team and (p.player_id, "points") in draws]
         others = np.maximum(rng.normal(rest.get(team, 0.0) * pace, REST_SD), 0.0)
         raw = (np.sum(listed, axis=0) if listed else 0.0) + others
-        expected = rest.get(team, 0.0) + sum(
-            p.means["points"] for p in players if p.team == team and "points" in p.means)
+        expected = team_target(players, team, rest.get(team, 0.0))
         own_sd = np.sqrt(max(TEAM_SD ** 2 - (expected * PACE_SD) ** 2, 1.0))
         scores[team] = np.maximum(expected * pace + rng.normal(0.0, own_sd, runs), 40.0)
         shares[team] = scores[team] / np.maximum(raw, 1.0)    # splits the score in draw proportion

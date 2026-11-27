@@ -281,6 +281,25 @@ def test_appending_the_same_rows_again_adds_nothing_to_the_ledger_or_the_chain(t
     assert pick_chain.verify(pick_chain.chain_path_for(path)).entries == 4
 
 
+def test_the_journal_can_be_reused_when_the_directory_cannot_be_removed(tmp_path, monkeypatch):
+    path = tmp_path / "ledger.csv"
+    journal = path.with_name(path.name + ".pending")
+    journal.mkdir()
+    (journal / "ledger.csv").write_text("Interrupted before ready", encoding="utf-8")
+    original = Path.rmdir
+
+    def deny_removal(directory):
+        if directory == journal:
+            raise PermissionError("sync client protects this directory")
+        original(directory)
+
+    monkeypatch.setattr(Path, "rmdir", deny_removal)
+    assert nba_paper.append_rows(four(), path) == 4
+    assert nba_paper.append_rows(four(), path) == 0
+    assert list(journal.iterdir()) == []
+    assert pick_chain.audit(nba_paper.load_ledger(path), pick_chain.chain_path_for(path)).clean
+
+
 def test_a_failure_before_the_journal_is_ready_changes_neither_file(tmp_path, monkeypatch):
     path = tmp_path / "ledger.csv"
 

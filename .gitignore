@@ -6,6 +6,7 @@ data/kalshi_history/
 data/nba/
 data/nba_prop_lines.csv
 data/nba_book_lines.csv
+data/nba_game_lines.csv
 data/nba_paper_log.csv
 data/nba_paper_log.csv.pending/
 data/nba_alt_log.csv

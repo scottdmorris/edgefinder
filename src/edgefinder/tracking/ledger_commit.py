@@ -32,9 +32,10 @@ def pending(ledger: Path) -> bool:
 
 
 def _clear(directory: Path) -> None:
+    # OneDrive can protect the empty directory even when its files are writable.
+    # Reuse it for the next transaction after clearing the prepared files.
     for name in ("ready.json", "ledger.csv", "chain.jsonl", "ready.json.marker.tmp"):
         (directory / name).unlink(missing_ok=True)
-    directory.rmdir()
 
 
 def recover(ledger: Path, chain: Path) -> bool:
@@ -66,7 +67,7 @@ def recover(ledger: Path, chain: Path) -> bool:
 
 def commit(ledger: Path, chain: Path, prepare: Callable[[Path, Path], None]) -> None:
     directory = _directory(ledger)
-    directory.mkdir()
+    directory.mkdir(exist_ok=True)
     staged = directory / "ledger.csv", directory / "chain.jsonl"
     prepare(*staged)
     for path in staged:
