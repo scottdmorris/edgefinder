@@ -58,6 +58,19 @@ export type Gap = {
 }
 
 // A leg the player has reached in nearly all of his recent games, with what it costs.
+export type EvLine = {
+  player: string; photo: string | null; game_short: string; stat: string; bet: string
+  book: string; book_name: string; odds: number; fair_odds: number; fair_pct: number
+  edge_pct: number; books: number; fetched_at: string | null
+}
+
+export type EvLines = {
+  date: string; min_edge_pct: number; min_books: number; flagged: number; books: number
+  lines: EvLine[]
+  record: { logged: number; graded: number; record: string; units: number; roi_pct: number
+    clv_novig_n: number; avg_clv_novig_pct: number | null }
+}
+
 export type Steady = {
   leg_id: number
   player: string
@@ -551,4 +564,5 @@ export const api = {
   simulate: (market: Market, game: string) => get<Simulation>('/api/simulate', { ...market, game }),
   gameBreakdown: (market: Market, game: string) => get<GameBreakdownData>('/api/game-breakdown', { ...market, game }),
   perfect: (market: Market) => get<PerfectProps>('/api/perfect', market),
+  ev: (date?: string) => get<EvLines>('/api/ev', { date }),
 }

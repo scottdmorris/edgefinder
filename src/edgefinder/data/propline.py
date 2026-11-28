@@ -8,6 +8,12 @@ call per run. The lines are kept in their own file. FanDuel's rebounds, assists 
 threes lines are also priced into the ledger (book "fanduel" with their own stat); points
 stay with The Odds API, so the published FanDuel points record is unchanged.
 
+Since 2026-11-25 the request names no bookmakers, so it returns every book PropLine carries
+(checked that day: about 30 with main player lines, among them Pinnacle, Novig, ProphetX,
+BetRivers, Fanatics, Hard Rock, Kalshi, Polymarket and the pick'em apps) in the same one
+request, and every book's main lines are archived for the +EV screen (tracking/ev_screen).
+Readers that predate that keep seeing FanDuel and DraftKings only (load_snapshots' default).
+
 Checked against the live API on 2026-11-22: its FanDuel points lines matched The Odds
 API's exactly on all 14 players of a game pulled at the same moment.
 
@@ -30,7 +36,7 @@ LINES_PATH = DATA / "nba_propline_lines.csv"
 BASE = "https://api.prop-line.com/v1"
 SPORT_KEY = "basketball_nba"
 FANDUEL = "fanduel"
-BOOKS = (FANDUEL, "draftkings")
+BOOKS = (FANDUEL, "draftkings")    # the books everything before the +EV screen reads
 MARKETS = {"player_points": "points", "player_rebounds": "rebounds",
            "player_assists": "assists", "player_threes": "threes"}
 GAME_MARKETS = ("h2h", "spreads", "totals")
@@ -57,15 +63,14 @@ def get_api_key() -> str | None:
 
 
 def fetch_slate(get=requests.get) -> tuple[list[dict], int | None]:
-    """Every listed NBA game with both books' main lines for the four stats. One request.
+    """Every listed NBA game with every book's main lines for the four stats. One request.
     Returns the games and the requests left today (None if PropLine did not say)."""
     key = get_api_key()
     if not key:
         raise PropLineError("No PropLine key configured")
     try:
         response = get(f"{BASE}/sports/{SPORT_KEY}/odds", headers={"X-API-Key": key},
-                       params={"markets": ",".join([*MARKETS, *GAME_MARKETS]),
-                               "bookmakers": ",".join(BOOKS)},
+                       params={"markets": ",".join([*MARKETS, *GAME_MARKETS])},
                        timeout=REQUEST_TIMEOUT)
     except requests.RequestException as exc:
         raise PropLineError(f"PropLine request failed ({type(exc).__name__})") from None
@@ -78,13 +83,14 @@ def fetch_slate(get=requests.get) -> tuple[list[dict], int | None]:
     return games, int(remaining) if remaining and remaining.isdigit() else None
 
 
-def parse_lines(game: dict) -> list[dict]:
+def parse_lines(game: dict, books: tuple[str, ...] | None = BOOKS) -> list[dict]:
     """One row per book, stat, player and line, pairing Over with Under. Main lines only:
-    the "X+" milestone ladders and books outside BOOKS are skipped."""
+    the "X+" milestone ladders are skipped, and so are books outside `books` (None keeps
+    every book). Prediction markets list several "main" numbers per player; each is a row."""
     rows: dict[tuple, dict] = {}
     for listing in game.get("bookmakers", []):
         book = listing.get("key")
-        if book not in BOOKS:
+        if not book or (books is not None and book not in books):
             continue
         for market in listing.get("markets", []):
             stat = MARKETS.get(market.get("key"))
@@ -139,11 +145,15 @@ def milestone_fanduel_lines(game: dict) -> dict[str, list[dict]]:
     return by_stat
 
 
-def load_snapshots(path: Path | None = None) -> pd.DataFrame:
+def load_snapshots(path: Path | None = None,
+                   books: tuple[str, ...] | None = BOOKS) -> pd.DataFrame:
+    """The archive, limited to `books` (None for every book). The default keeps the closing
+    prices the ledger settles against exactly as they were before every book was archived."""
     path = path or LINES_PATH
     if not path.exists():
         return pd.DataFrame(columns=COLUMNS)
-    return pd.read_csv(path)
+    table = pd.read_csv(path)
+    return table if books is None else table[table["book"].isin(books)].reset_index(drop=True)
 
 
 def _when(text: str) -> dt.datetime:
@@ -160,9 +170,9 @@ def match_game(event: dict, games: list[dict]) -> dict | None:
     return None
 
 
-def archive(games: list[dict], due: list[tuple[dict, str]], fetched_at: str,
-            path: Path | None = None) -> int:
-    """Append the lines of each due (event, phase) that PropLine lists. Returns rows written."""
+def snapshot_rows(games: list[dict], due: list[tuple[dict, str]], fetched_at: str) -> list[dict]:
+    """Every book's main lines for each due (event, phase) that PropLine lists pregame, in
+    the archive's shape."""
     rows = []
     for event, phase in due:
         game = match_game(event, games)
@@ -171,7 +181,15 @@ def archive(games: list[dict], due: list[tuple[dict, str]], fetched_at: str,
         rows += [{"fetched_at": fetched_at, "phase": phase, "event_id": event["event_id"],
                   "propline_event_id": game.get("id"), "commence_time": event["commence_time"],
                   "home": event["home"], "away": event["away"]} | line
-                 for line in parse_lines(game)]
+                 for line in parse_lines(game, books=None)]
+    return rows
+
+
+def archive(games: list[dict], due: list[tuple[dict, str]], fetched_at: str,
+            path: Path | None = None) -> int:
+    """Append every book's lines for each due (event, phase) that PropLine lists. Returns
+    rows written."""
+    rows = snapshot_rows(games, due, fetched_at)
     if not rows:
         return 0
     path = path or LINES_PATH

@@ -1,5 +1,5 @@
-"""PropLine as a second source of FanDuel and DraftKings lines for all four stats: one request
-a run, main lines only, archived in their own file. Nothing here touches the real API."""
+"""PropLine as a second source of lines for all four stats: one request a run, main lines
+only, every book archived in its own file. Nothing here touches the real API."""
 
 import pandas as pd
 import pytest
@@ -61,13 +61,25 @@ def test_main_lines_from_both_books_are_paired_and_everything_else_is_skipped():
     assert rows[("draftkings", "threes", "Miller")]["under_odds"] is None
 
 
+def test_every_book_is_parsed_when_asked():
+    rows = {(r["book"], r["stat"], r["player"]) for r in propline.parse_lines(GAME, books=None)}
+    assert ("bovada", "points", "Miller") in rows and len(rows) == 4
+
+
+def test_snapshots_default_to_fanduel_and_draftkings_so_old_readers_are_unchanged(tmp_path):
+    path = tmp_path / "lines.csv"
+    propline.archive([GAME], [(EVENT, "early")], "t1", path)
+    assert set(propline.load_snapshots(path)["book"]) == {"fanduel", "draftkings"}
+    assert "bovada" in set(propline.load_snapshots(path, books=None)["book"])
+
+
 def test_one_request_carries_the_key_in_a_header_and_reports_what_is_left(key):
     calls = []
     games, left = propline.fetch_slate(get=lambda url, **kw: calls.append((url, kw)) or Response([GAME]))
     assert games == [GAME] and left == 990 and len(calls) == 1
     url, kw = calls[0]
     assert "secret-key" not in url and kw["headers"] == {"X-API-Key": "secret-key"}
-    assert kw["params"]["bookmakers"] == "fanduel,draftkings"
+    assert "bookmakers" not in kw["params"]          # every book, in the same one request
     assert kw["params"]["markets"].split(",") == [*propline.MARKETS, *propline.GAME_MARKETS]
     assert propline.fetch_slate(get=lambda *a, **k: Response([], remaining=None))[1] is None
 
@@ -100,11 +112,11 @@ def test_games_match_on_teams_and_a_nearby_tip():
 def test_only_due_games_that_have_not_tipped_are_archived(tmp_path):
     path = tmp_path / "lines.csv"
     other = EVENT | {"event_id": "oa2", "home": "Boston Celtics"}
-    assert propline.archive([GAME], [(EVENT, "early"), (other, "early")], "t1", path) == 3
+    assert propline.archive([GAME], [(EVENT, "early"), (other, "early")], "t1", path) == 4
     assert propline.archive([GAME | {"live": True}], [(EVENT, "late")], "t2", path) == 0
-    assert propline.archive([GAME], [(EVENT, "late")], "t3", path) == 3
+    assert propline.archive([GAME], [(EVENT, "late")], "t3", path) == 4
     saved = pd.read_csv(path)
-    assert list(saved.columns) == propline.COLUMNS and len(saved) == 6
+    assert list(saved.columns) == propline.COLUMNS and len(saved) == 8
     assert set(saved["phase"]) == {"early", "late"} and set(saved["event_id"]) == {"oa1"}
     assert set(saved["propline_event_id"]) == {731168}
     assert propline.archive([], [(EVENT, "early")], "t4", tmp_path / "none.csv") == 0
@@ -125,7 +137,7 @@ def test_the_snapshot_job_saves_due_games_and_survives_a_propline_failure(monkey
     monkeypatch.setenv("PROPLINE_API_KEY", "k")
     monkeypatch.setattr(propline, "fetch_slate", lambda: ([GAME], 900))
     script.archive_propline([task], None)
-    assert len(pd.read_csv(propline.LINES_PATH)) == 3
+    assert len(pd.read_csv(propline.LINES_PATH)) == 4
     def broken():
         raise propline.PropLineError("PropLine returned HTTP 500")
     monkeypatch.setattr(propline, "fetch_slate", broken)
